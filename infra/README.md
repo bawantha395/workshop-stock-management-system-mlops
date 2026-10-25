@@ -1,12 +1,12 @@
 # AWS infrastructure
 
 Use [the pipeline setup guide](../docs/PIPELINE_SETUP.md) for deployment. Create
-the GitHub OIDC trust once in CloudShell; GitHub Actions then owns backend
+the pipeline trust once in CloudShell; GitHub Actions then owns backend
 creation and reviewed Terraform plan/apply operations in Sydney.
 
 | Path | Responsibility |
 | --- | --- |
-| `ci/identity.json` | One-time OIDC trust, separate CI roles and workload permissions boundary. |
+| `ci/identity.json` | One-time OIDC or restricted CI user trust, separate CI roles and workload boundary. |
 | `ci/state.json` | Pipeline-owned private, encrypted, versioned Terraform state bucket. |
 | `ci/capacity-*.json` | Explicit demo/production capacity selections used by the setup helper. |
 | `bootstrap/main.tf` | Optional manual state bootstrap; do not mix with the pipeline-owned backend. |
@@ -15,7 +15,7 @@ creation and reviewed Terraform plan/apply operations in Sydney.
 | `aws/network.tf` | VPC, subnets, routing and network controls. |
 | `aws/compute.tf` | EKS, ECR, deployment access and Pod Identity. |
 | `aws/automation.tf` | Private CodeBuild platform bootstrap, source/output storage and delivery roles. |
-| `aws/github-oidc.tf` | Immutable GitHub identity claims and workload boundary input. |
+| `aws/github-oidc.tf` | Authentication-mode inputs, immutable GitHub claims and workload boundary input. |
 | `aws/data.tf` | Databases, cache, object storage, queues, encryption and secrets. |
 | `aws/web-auth.tf` | Frontend delivery, certificates and Cognito authentication. |
 | `aws/ml-observability.tf` | ML platform resources, monitoring and budget configuration. |

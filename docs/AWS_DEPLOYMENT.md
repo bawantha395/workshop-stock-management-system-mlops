@@ -7,10 +7,12 @@ GitHub Actions manages state-backend creation, Terraform plan/apply, release
 preparation and orchestration. CodeBuild runs controller bootstrap inside the
 private VPC. Argo CD reconciles the separate Kustomize manifests.
 
-The only initial AWS operator task is creating the GitHub OIDC trust and
-scoped pipeline roles through the supplied CloudFormation helper. GitHub
+The initial AWS operator task is creating scoped pipeline roles and the
+restricted CI user through the supplied CloudFormation helper in access-key
+mode. This account's Free-plan SCP blocks IAM OIDC providers. GitHub
 environment protections, plan review and release review are documented in the
-setup guide. AWS credentials and Terraform state are not uploaded to GitHub.
+setup guide. The CI user's key belongs in Actions secrets; Terraform state and
+private plan files remain in S3. OIDC remains optional for eligible accounts.
 
 [MANUAL_AWS_DEPLOYMENT.md](MANUAL_AWS_DEPLOYMENT.md) preserves the optional
 operator reference. Do not combine its separate Terraform state-bucket bootstrap

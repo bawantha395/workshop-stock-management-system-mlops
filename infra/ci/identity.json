@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "One-time GitHub OIDC trust, separate backend/plan/apply roles and a maximum workload permissions boundary.",
+  "Description": "One-time pipeline trust: GitHub OIDC or restricted IAM CI user, separate delivery roles and workload permissions boundary.",
   "Parameters": {
     "ProjectName": {
       "Type": "String",
@@ -53,15 +53,30 @@
       "Type": "String",
       "AllowedPattern": "[a-z0-9.-]+",
       "Description": "Owned API hostname; only its DNS records may be changed."
+    },
+    "AuthMode": {
+      "Type": "String",
+      "AllowedValues": [
+        "oidc",
+        "access-key"
+      ],
+      "Default": "oidc"
     }
   },
   "Conditions": {
     "CreateOidcProvider": {
-      "Fn::Equals": [
+      "Fn::And": [
         {
-          "Ref": "ExistingOidcProviderArn"
+          "Condition": "UseOidcAuth"
         },
-        ""
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ExistingOidcProviderArn"
+            },
+            ""
+          ]
+        }
       ]
     },
     "ImmutableSubject": {
@@ -70,6 +85,22 @@
           "Ref": "OidcSubjectStyle"
         },
         "immutable"
+      ]
+    },
+    "UseOidcAuth": {
+      "Fn::Equals": [
+        {
+          "Ref": "AuthMode"
+        },
+        "oidc"
+      ]
+    },
+    "UseAccessKeyAuth": {
+      "Fn::Equals": [
+        {
+          "Ref": "AuthMode"
+        },
+        "access-key"
       ]
     }
   },
@@ -92,70 +123,92 @@
         },
         "MaxSessionDuration": 7200,
         "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
+          "Fn::If": [
+            "UseOidcAuth",
             {
-              "Effect": "Allow",
-              "Principal": {
-                "Federated": {
-                  "Fn::If": [
-                    "CreateOidcProvider",
-                    {
-                      "Ref": "GitHubProvider"
-                    },
-                    {
-                      "Ref": "ExistingOidcProviderArn"
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": {
+                      "Fn::If": [
+                        "CreateOidcProvider",
+                        {
+                          "Ref": "GitHubProvider"
+                        },
+                        {
+                          "Ref": "ExistingOidcProviderArn"
+                        }
+                      ]
                     }
-                  ]
-                }
-              },
-              "Action": "sts:AssumeRoleWithWebIdentity",
-              "Condition": {
-                "StringEquals": {
-                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": {
-                    "Fn::If": [
-                      "ImmutableSubject",
-                      {
-                        "Fn::Sub": [
-                          "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-bootstrap",
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                      "token.actions.githubusercontent.com:sub": {
+                        "Fn::If": [
+                          "ImmutableSubject",
                           {
-                            "Owner": {
-                              "Fn::Select": [
-                                0,
-                                {
-                                  "Fn::Split": [
-                                    "/",
+                            "Fn::Sub": [
+                              "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-bootstrap",
+                              {
+                                "Owner": {
+                                  "Fn::Select": [
+                                    0,
                                     {
-                                      "Ref": "GitHubRepository"
+                                      "Fn::Split": [
+                                        "/",
+                                        {
+                                          "Ref": "GitHubRepository"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "Repository": {
+                                  "Fn::Select": [
+                                    1,
+                                    {
+                                      "Fn::Split": [
+                                        "/",
+                                        {
+                                          "Ref": "GitHubRepository"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
-                              ]
-                            },
-                            "Repository": {
-                              "Fn::Select": [
-                                1,
-                                {
-                                  "Fn::Split": [
-                                    "/",
-                                    {
-                                      "Ref": "GitHubRepository"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
+                              }
+                            ]
+                          },
+                          {
+                            "Fn::Sub": "repo:${GitHubRepository}:environment:aws-bootstrap"
                           }
                         ]
-                      },
-                      {
-                        "Fn::Sub": "repo:${GitHubRepository}:environment:aws-bootstrap"
                       }
-                    ]
+                    }
                   }
                 }
-              }
+              ]
+            },
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": {
+                      "Fn::GetAtt": [
+                        "PipelineUser",
+                        "Arn"
+                      ]
+                    }
+                  },
+                  "Action": "sts:AssumeRole"
+                }
+              ]
             }
           ]
         },
@@ -268,70 +321,92 @@
         },
         "MaxSessionDuration": 7200,
         "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
+          "Fn::If": [
+            "UseOidcAuth",
             {
-              "Effect": "Allow",
-              "Principal": {
-                "Federated": {
-                  "Fn::If": [
-                    "CreateOidcProvider",
-                    {
-                      "Ref": "GitHubProvider"
-                    },
-                    {
-                      "Ref": "ExistingOidcProviderArn"
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": {
+                      "Fn::If": [
+                        "CreateOidcProvider",
+                        {
+                          "Ref": "GitHubProvider"
+                        },
+                        {
+                          "Ref": "ExistingOidcProviderArn"
+                        }
+                      ]
                     }
-                  ]
-                }
-              },
-              "Action": "sts:AssumeRoleWithWebIdentity",
-              "Condition": {
-                "StringEquals": {
-                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": {
-                    "Fn::If": [
-                      "ImmutableSubject",
-                      {
-                        "Fn::Sub": [
-                          "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-infrastructure-plan",
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                      "token.actions.githubusercontent.com:sub": {
+                        "Fn::If": [
+                          "ImmutableSubject",
                           {
-                            "Owner": {
-                              "Fn::Select": [
-                                0,
-                                {
-                                  "Fn::Split": [
-                                    "/",
+                            "Fn::Sub": [
+                              "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-infrastructure-plan",
+                              {
+                                "Owner": {
+                                  "Fn::Select": [
+                                    0,
                                     {
-                                      "Ref": "GitHubRepository"
+                                      "Fn::Split": [
+                                        "/",
+                                        {
+                                          "Ref": "GitHubRepository"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "Repository": {
+                                  "Fn::Select": [
+                                    1,
+                                    {
+                                      "Fn::Split": [
+                                        "/",
+                                        {
+                                          "Ref": "GitHubRepository"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
-                              ]
-                            },
-                            "Repository": {
-                              "Fn::Select": [
-                                1,
-                                {
-                                  "Fn::Split": [
-                                    "/",
-                                    {
-                                      "Ref": "GitHubRepository"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
+                              }
+                            ]
+                          },
+                          {
+                            "Fn::Sub": "repo:${GitHubRepository}:environment:aws-infrastructure-plan"
                           }
                         ]
-                      },
-                      {
-                        "Fn::Sub": "repo:${GitHubRepository}:environment:aws-infrastructure-plan"
                       }
-                    ]
+                    }
                   }
                 }
-              }
+              ]
+            },
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": {
+                      "Fn::GetAtt": [
+                        "PipelineUser",
+                        "Arn"
+                      ]
+                    }
+                  },
+                  "Action": "sts:AssumeRole"
+                }
+              ]
             }
           ]
         },
@@ -580,70 +655,92 @@
         },
         "MaxSessionDuration": 7200,
         "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
+          "Fn::If": [
+            "UseOidcAuth",
             {
-              "Effect": "Allow",
-              "Principal": {
-                "Federated": {
-                  "Fn::If": [
-                    "CreateOidcProvider",
-                    {
-                      "Ref": "GitHubProvider"
-                    },
-                    {
-                      "Ref": "ExistingOidcProviderArn"
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": {
+                      "Fn::If": [
+                        "CreateOidcProvider",
+                        {
+                          "Ref": "GitHubProvider"
+                        },
+                        {
+                          "Ref": "ExistingOidcProviderArn"
+                        }
+                      ]
                     }
-                  ]
-                }
-              },
-              "Action": "sts:AssumeRoleWithWebIdentity",
-              "Condition": {
-                "StringEquals": {
-                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": {
-                    "Fn::If": [
-                      "ImmutableSubject",
-                      {
-                        "Fn::Sub": [
-                          "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-infrastructure-apply",
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                      "token.actions.githubusercontent.com:sub": {
+                        "Fn::If": [
+                          "ImmutableSubject",
                           {
-                            "Owner": {
-                              "Fn::Select": [
-                                0,
-                                {
-                                  "Fn::Split": [
-                                    "/",
+                            "Fn::Sub": [
+                              "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-infrastructure-apply",
+                              {
+                                "Owner": {
+                                  "Fn::Select": [
+                                    0,
                                     {
-                                      "Ref": "GitHubRepository"
+                                      "Fn::Split": [
+                                        "/",
+                                        {
+                                          "Ref": "GitHubRepository"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "Repository": {
+                                  "Fn::Select": [
+                                    1,
+                                    {
+                                      "Fn::Split": [
+                                        "/",
+                                        {
+                                          "Ref": "GitHubRepository"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
-                              ]
-                            },
-                            "Repository": {
-                              "Fn::Select": [
-                                1,
-                                {
-                                  "Fn::Split": [
-                                    "/",
-                                    {
-                                      "Ref": "GitHubRepository"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
+                              }
+                            ]
+                          },
+                          {
+                            "Fn::Sub": "repo:${GitHubRepository}:environment:aws-infrastructure-apply"
                           }
                         ]
-                      },
-                      {
-                        "Fn::Sub": "repo:${GitHubRepository}:environment:aws-infrastructure-apply"
                       }
-                    ]
+                    }
                   }
                 }
-              }
+              ]
+            },
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "AWS": {
+                      "Fn::GetAtt": [
+                        "PipelineUser",
+                        "Arn"
+                      ]
+                    }
+                  },
+                  "Action": "sts:AssumeRole"
+                }
+              ]
             }
           ]
         },
@@ -1342,6 +1439,63 @@
           ]
         }
       }
+    },
+    "PipelineUser": {
+      "Type": "AWS::IAM::User",
+      "Condition": "UseAccessKeyAuth",
+      "Properties": {
+        "UserName": {
+          "Fn::Sub": "${ProjectName}-github-ci"
+        },
+        "Policies": [
+          {
+            "PolicyName": "assume-only-project-delivery-roles",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "sts:AssumeRole"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-ci-bootstrap"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-ci-plan"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-ci-apply"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-github-platform"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-github-release"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-github-training"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "Purpose",
+            "Value": "GitHub pipeline role assumption only"
+          }
+        ]
+      }
     }
   },
   "Outputs": {
@@ -1353,13 +1507,19 @@
     "OidcProviderArn": {
       "Value": {
         "Fn::If": [
-          "CreateOidcProvider",
+          "UseOidcAuth",
           {
-            "Ref": "GitHubProvider"
+            "Fn::If": [
+              "CreateOidcProvider",
+              {
+                "Ref": "GitHubProvider"
+              },
+              {
+                "Ref": "ExistingOidcProviderArn"
+              }
+            ]
           },
-          {
-            "Ref": "ExistingOidcProviderArn"
-          }
+          ""
         ]
       }
     },
@@ -1390,6 +1550,25 @@
     "WorkloadBoundaryArn": {
       "Value": {
         "Ref": "WorkloadBoundary"
+      }
+    },
+    "PipelineUserArn": {
+      "Value": {
+        "Fn::If": [
+          "UseAccessKeyAuth",
+          {
+            "Fn::GetAtt": [
+              "PipelineUser",
+              "Arn"
+            ]
+          },
+          ""
+        ]
+      }
+    },
+    "AuthMode": {
+      "Value": {
+        "Ref": "AuthMode"
       }
     }
   }

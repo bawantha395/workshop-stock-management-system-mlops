@@ -7,7 +7,7 @@ metadata:
     argocd.argoproj.io/sync-wave: '-10'
 spec:
   sourceRepos:
-  - https://github.com/bawantha395/workshop-stock-management--system-mlops.git
+  - https://github.com/bawantha395/workshop-stock-management-system-mlops.git
   destinations:
   - server: https://kubernetes.default.svc
     namespace: stocklane

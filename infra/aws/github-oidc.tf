@@ -1,3 +1,23 @@
+variable "github_auth_mode" {
+  type    = string
+  default = "oidc"
+  validation {
+    condition     = contains(["oidc", "access-key"], var.github_auth_mode)
+    error_message = "github_auth_mode must be oidc or access-key."
+  }
+  validation {
+    condition     = var.github_auth_mode != "access-key" || var.github_ci_user_arn != null
+    error_message = "Access-key mode requires the bootstrap-owned CI user ARN."
+  }
+}
+variable "github_ci_user_arn" {
+  type    = string
+  default = null
+  validation {
+    condition     = var.github_ci_user_arn == null || can(regex("^arn:aws:iam::[0-9]{12}:user/[A-Za-z0-9+=,.@_/-]+$", var.github_ci_user_arn))
+    error_message = "github_ci_user_arn must be an IAM user ARN."
+  }
+}
 variable "workload_permissions_boundary_arn" {
   type        = string
   default     = null

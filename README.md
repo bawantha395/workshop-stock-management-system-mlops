@@ -16,10 +16,13 @@ or the earlier DevOps assistant.
 ## Deploy on AWS
 
 **Deployment now runs through GitHub Actions.** Start with
-**[the pipeline setup guide](docs/PIPELINE_SETUP.md)**. A one-time AWS OIDC trust
+**[the pipeline setup guide](docs/PIPELINE_SETUP.md)**. A one-time AWS trust
 setup enables backend creation, saved Terraform plans, explicit reviewed applies,
 release PR preparation, private CodeBuild platform bootstrap and frontend publication.
-Workflows use temporary AWS credentials and the Sydney Region (`ap-southeast-2`).
+Workflows assume scoped roles in Sydney (`ap-southeast-2`). This Free-plan
+project account blocks IAM OIDC provider operations, so its setup uses a
+restricted CI user's key in GitHub Actions secrets to obtain temporary role
+sessions. OIDC remains an option in accounts that permit it.
 
 **AWS is the deployment target.** Mechanics use the HTTPS web application on
 their phones or computers. They do not install a model or run an application
@@ -38,7 +41,7 @@ The production profile includes:
 
 Review the **[Kustomize architecture](docs/KUSTOMIZE.md)** and follow
 **[AWS deployment steps](docs/AWS_DEPLOYMENT.md)**. The first account setup
-uses **AWS CloudShell once** to establish OIDC trust. Backend creation,
+uses **AWS CloudShell once** to create the restricted CI user and pipeline roles. Backend creation,
 Terraform plans/applies, image builds, private EKS bootstrap and frontend
 publication then run through pipelines. The guide uses your Sydney account,
 repository and owned API hostname/Route 53 zone. No cloud resources have been
@@ -105,7 +108,7 @@ services/vision/           FastAPI image matching, drafts and capture inbox
 edge/                      Fixed-camera capture agent
 mlops/                     Training, evaluation, serving contract and promotion
 models/                    Model preparation instructions; generated weights ignored
-infra/ci/                  One-time OIDC trust, pipeline state backend and capacity profiles
+infra/ci/                  Pipeline IAM trust, state backend and capacity profiles
 infra/bootstrap/           Optional manual Terraform state bootstrap
 infra/aws/                 AWS resources and IAM roles
 deploy/docker/             Runtime and training images
@@ -125,7 +128,8 @@ Follow [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md). The source is prepared;
 **no AWS resources or remote GitHub workflows have been run from this build**.
 The pipeline guide includes this account's Sydney Region, repository and DNS
 settings. Configure the six main-only GitHub environments, run the one-time
-trust helper, and copy its generated GitHub settings. Use GitHub OIDC.
+trust helper with `--auth-mode access-key`, and copy its generated GitHub
+settings. The CI user can only assume the named project roles.
 
 The EKS/RDS/cache/NAT/ALB stack has recurring charges. Use your credits for
 bounded deployment sessions, review the Terraform plan and configure a budget before
@@ -169,7 +173,7 @@ own acceptance tests before live business use.
 ## Put it in your GitHub repository
 
 The existing repository is
-[`bawantha395/workshop-stock-management--system-mlops`](https://github.com/bawantha395/workshop-stock-management--system-mlops).
+[`bawantha395/workshop-stock-management-system-mlops`](https://github.com/bawantha395/workshop-stock-management-system-mlops).
 Follow the fresh-upload procedure in [START_HERE.md](START_HERE.md) to replace
 the source on a review branch while preserving repository history. The ZIP
 extracts to `workshop-stock-ai/`; that folder name does not change the GitHub

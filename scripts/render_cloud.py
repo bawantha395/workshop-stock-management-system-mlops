@@ -144,7 +144,7 @@ def render_platform(c, images, env, namespace):
     for name in ['grafana-secret-patch.yaml', 'alertmanager-secret-patch.yaml']:
         if {'path': name} not in k['patches']:k['patches'].append({'path': name})
     write_yaml(folder / 'kustomization.yaml', k)
-    repository = 'https://github.com/' + c.get('github_repository', 'bawantha395/workshop-stock-management--system-mlops') + '.git'
+    repository = 'https://github.com/' + c.get('github_repository', 'bawantha395/workshop-stock-management-system-mlops') + '.git'
     apps = KUBERNETES / 'argocd/applications/overlays' / env
     for name in ['platform', 'monitoring-operator', 'monitoring', 'workshop']:
         obj = load_yaml(apps / (name + '-patch.yaml')); obj['spec']['source']['repoURL'] = repository

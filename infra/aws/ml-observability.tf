@@ -22,7 +22,7 @@ resource "aws_sagemaker_model_package_group" "vision" {
 resource "aws_iam_role" "github_training" {
   permissions_boundary = var.workload_permissions_boundary_arn
   name                 = "${var.name}-github-training"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{
+  assume_role_policy = var.github_auth_mode == "access-key" ? jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { AWS = var.github_ci_user_arn }, Action = "sts:AssumeRole" }] }) : jsonencode({ Version = "2012-10-17", Statement = [{
     Effect    = "Allow", Action = "sts:AssumeRoleWithWebIdentity", Principal = { Federated = var.github_oidc_provider_arn == "" ? aws_iam_openid_connect_provider.github[0].arn : var.github_oidc_provider_arn },
     Condition = { StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com", "token.actions.githubusercontent.com:sub" = local.github_training_subject } }
   }] })

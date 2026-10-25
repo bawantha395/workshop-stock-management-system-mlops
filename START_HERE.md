@@ -1,5 +1,9 @@
 # Start here
 
+If you already uploaded the project and hit the IAM OIDC provider denial,
+follow [docs/FREE_PLAN_FIX.md](docs/FREE_PLAN_FIX.md) to resume with the
+restricted CI user authentication option.
+
 **Use [docs/PIPELINE_SETUP.md](docs/PIPELINE_SETUP.md) to automate AWS deployment.**
 It replaces the earlier manual CloudShell deployment sequence. Keep the Free
 plan and Sydney. Upload the complete source update first, pass all eight CI
@@ -43,14 +47,14 @@ pushes the update. It does not change your existing working folder.
 
 ```bash
 cd ~
-git clone https://github.com/bawantha395/workshop-stock-management--system-mlops.git workshop-stock-ai-upload
+git clone https://github.com/bawantha395/workshop-stock-management-system-mlops.git workshop-stock-ai-upload
 cd workshop-stock-ai-upload
 git switch -c update/aws-pipeline
 git rm -r -- .
 rsync -av "$HOME/Downloads/workshop-stock-ai/" ./
 git add -A
 git status --short
-git commit -m "Automate AWS delivery with GitHub OIDC and reviewed Terraform plans"
+git commit -m "Support Free-plan pipeline authentication with scoped role sessions"
 git push -u origin update/aws-pipeline
 ```
 
@@ -75,8 +79,10 @@ Follow [docs/PIPELINE_SETUP.md](docs/PIPELINE_SETUP.md). Complete these one-time
 steps, then run deployments from GitHub Actions:
 
 1. Create the six GitHub environments with a main-only branch rule.
-2. Use CloudShell once to prepare, review and execute the AWS OIDC trust stack.
-3. Copy the generated repository variables and `TFVARS_JSON` secret into GitHub.
+2. Use CloudShell once to prepare, review and execute the pipeline trust stack
+   with `--auth-mode access-key`, as the guide describes.
+3. Copy the generated repository variables, `TFVARS_JSON`, and restricted CI
+   user's access-key pair into GitHub Actions secrets.
 4. Run **Bootstrap Terraform backend**, then **Plan AWS infrastructure**.
 5. Review the plan and run **Apply reviewed Terraform plan** with its ID and SHA256.
 6. Review and merge the generated release PR. Successful CI then starts the
@@ -88,14 +94,15 @@ The known project details are:
 | --- | --- |
 | AWS account | `721274598579` |
 | AWS Region | `ap-southeast-2` (Sydney) |
-| GitHub repository | `bawantha395/workshop-stock-management--system-mlops` |
+| GitHub repository | `bawantha395/workshop-stock-management-system-mlops` |
 | Owned domain | `bawantha-rathnayake.tech` |
 | Intended API hostname | `api.stocklane.bawantha-rathnayake.tech` |
 | Route 53 hosted zone | `Z035879924YQHJ4M5G2A3` |
 
 The helper resolves the operator IAM role and current CloudShell IP, and asks
-for your budget-alert email locally. GitHub uses temporary OIDC credentials;
-AWS access keys are not needed. Keep the Free plan. The smaller demo capacity
+for your budget-alert email locally. This account's Free-plan SCP blocks IAM
+OIDC providers. Its CI user can only assume the project delivery roles; its key
+is kept in Actions secrets. Keep the Free plan. The smaller demo capacity
 still consumes credits, so review the plan and cost before applying it.
 
 ## Deployment status and limits

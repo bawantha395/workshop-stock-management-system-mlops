@@ -26,7 +26,7 @@ import pipeline_terraform as delivery
 
 @pytest.fixture
 def config(monkeypatch):
-    values = {"AWS_ACCOUNT_ID": "123456789012", "AWS_REGION": "ap-southeast-2",
+    values = {"AWS_ACCOUNT_ID": "123456789012", "AWS_REGION": "ap-southeast-2", "AWS_AUTH_MODE": "oidc",
               "PROJECT_NAME": "stocklane-dev", "TF_ENVIRONMENT": "dev",
               "GITHUB_REPOSITORY": "example/workshop", "GITHUB_REPOSITORY_OWNER_ID": "123",
               "GITHUB_REPOSITORY_ID": "456"}
@@ -292,8 +292,13 @@ def resolve(value, params):
         return re.sub(r"\$\{([^}]+)\}", lambda match: str(mapping[match.group(1)]), text)
     if "Fn::If" in value:
         condition, yes, no = value["Fn::If"]
-        truth = params["OidcSubjectStyle"] == "immutable" if condition == "ImmutableSubject" else not params["ExistingOidcProviderArn"]
+        mode = params.get("AuthMode", "oidc")
+        truth = {"ImmutableSubject": params["OidcSubjectStyle"] == "immutable",
+                 "UseOidcAuth": mode == "oidc", "UseAccessKeyAuth": mode == "access-key",
+                 "CreateOidcProvider": mode == "oidc" and not params["ExistingOidcProviderArn"]}[condition]
         return resolve(yes if truth else no, params)
+    if "Fn::GetAtt" in value:
+        return params[".".join(value["Fn::GetAtt"])]
     if "Fn::Select" in value:
         index, values = value["Fn::Select"]
         return resolve(values, params)[int(index)]
@@ -424,3 +429,128 @@ def test_provisioned_roles_cannot_escape_workload_boundary():
     for source in (ROOT / "infra/aws").glob("*.tf"):
         for block in re.findall(r'resource "aws_iam_role" "[^"]+" \{\n([^\n]+)', source.read_text()):
             assert "permissions_boundary" in block
+
+
+def test_access_key_inputs_do_not_reference_an_oidc_provider(config, monkeypatch):
+    monkeypatch.setenv("AWS_AUTH_MODE", "access-key")
+    result = common.terraform_inputs(common.settings(), json.dumps(inputs()))
+    assert result["github_oidc_provider_arn"] == ""
+    assert result["github_ci_user_arn"] == "arn:aws:iam::123456789012:user/stocklane-dev-github-ci"
+    assert result["github_auth_mode"] == "access-key"
+    data = inputs(); data["github_ci_user_arn"] = "arn:aws:iam::999999999999:user/other"
+    with pytest.raises(ValueError, match="conflicts"):
+        common.terraform_inputs(common.settings(), json.dumps(data))
+
+
+def test_oidc_permission_denial_is_actionable_and_does_not_retry():
+    iam = boto3.client("iam", region_name="ap-southeast-2", aws_access_key_id="test", aws_secret_access_key="test")
+    with Stubber(iam) as stub:
+        stub.add_client_error("list_open_id_connect_providers", service_error_code="AccessDenied", http_status_code=403)
+        with pytest.raises(RuntimeError, match="--auth-mode access-key"):
+            bootstrap_pipeline.discover_oidc_provider(iam)
+        stub.assert_no_pending_responses()
+
+
+def test_access_key_handoff_is_private_and_refuses_duplicate_keys(tmp_path, capsys):
+    class Identity:
+        def __init__(self): self.keys=[]; self.calls=0
+        def list_access_keys(self, **kwargs): return {"AccessKeyMetadata": self.keys}
+        def create_access_key(self, **kwargs):
+            self.calls+=1
+            return {"AccessKey": {"AccessKeyId": "test-key-identifier", "SecretAccessKey": "private-test-value"}}
+    iam=Identity(); output=tmp_path/"credentials.json"
+    bootstrap_pipeline.create_ci_access_key(iam,"stocklane-dev-github-ci",output)
+    assert output.stat().st_mode & 0o777 == 0o600
+    assert json.loads(output.read_text())["repository_secrets"]["AWS_SECRET_ACCESS_KEY"] == "private-test-value"
+    assert "private-test-value" not in capsys.readouterr().out
+    with pytest.raises(RuntimeError,match="already exists"):
+        bootstrap_pipeline.create_ci_access_key(iam,"stocklane-dev-github-ci",output)
+    output.unlink(); iam.keys=[{"AccessKeyId":"existing-key"}]
+    with pytest.raises(RuntimeError,match="already has an access key"):
+        bootstrap_pipeline.create_ci_access_key(iam,"stocklane-dev-github-ci",output)
+    assert iam.calls==1
+
+
+def test_failed_key_handoff_revokes_the_unusable_key(tmp_path,monkeypatch):
+    calls=[]
+    class Identity:
+        def list_access_keys(self,**kwargs):return {"AccessKeyMetadata":[]}
+        def create_access_key(self,**kwargs):return {"AccessKey":{"AccessKeyId":"test-key","SecretAccessKey":"private-test-value"}}
+        def delete_access_key(self,**kwargs):calls.append(kwargs)
+    def fail(*args):raise OSError("disk write failed")
+    monkeypatch.setattr(bootstrap_pipeline,"write_private",fail)
+    with pytest.raises(OSError,match="disk write failed"):
+        bootstrap_pipeline.create_ci_access_key(Identity(),"project-ci",tmp_path/"credentials.json")
+    assert calls==[{"UserName":"project-ci","AccessKeyId":"test-key"}]
+
+
+def test_access_key_workflow_authentication_assumes_roles_without_oidc():
+    found=0
+    for path in (ROOT/".github/workflows").glob("*.yml"):
+        workflow=yaml.load(path.read_text(),Loader=yaml.BaseLoader)
+        for job in workflow["jobs"].values():
+            for step in job.get("steps",[]):
+                if step.get("name")!="Assume delivery role with restricted CI user":continue
+                found+=1
+                assert step["if"]=="vars.AWS_AUTH_MODE == 'access-key'"
+                assert step["with"]["force-skip-oidc"]=="true"
+                assert step["with"]["role-skip-session-tagging"]=="true"
+                assert "role-to-assume" in step["with"]
+                assert step["with"]["aws-secret-access-key"]=="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+    assert found==7
+
+
+def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tmp_path,monkeypatch):
+    from argparse import Namespace
+    from botocore.exceptions import ClientError
+    events=[]; captured={}
+    for name in ["identity.json","capacity-demo.json"]:
+        p=tmp_path/"infra/ci"/name;p.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy(ROOT/"infra/ci"/name,p)
+    class Sts:
+        def get_caller_identity(self):return {"Account":"123456789012","Arn":"arn:aws:sts::123456789012:assumed-role/AccountFullAccessRole/session"}
+    class Iam:
+        def get_role(self,**kwargs):return {"Role":{"Arn":"arn:aws:iam::123456789012:role/managed/AccountFullAccessRole"}}
+        def list_access_keys(self,**kwargs):return {"AccessKeyMetadata":[]}
+        def create_access_key(self,**kwargs):
+            events.append("create-key")
+            return {"AccessKey":{"AccessKeyId":"test-key-identifier","SecretAccessKey":"private-test-value"}}
+    class Dns:
+        def get_hosted_zone(self,**kwargs):return {"HostedZone":{"Name":"example.com.","Config":{"PrivateZone":False}}}
+    class Cfn:
+        def describe_stacks(self,**kwargs):raise ClientError({"Error":{"Code":"ValidationError"}},"DescribeStacks")
+        def create_change_set(self,**kwargs):captured.update(kwargs);return {"Id":"reviewed-change-set"}
+        def describe_change_set(self,**kwargs):return {"Changes":[]}
+        def execute_change_set(self,**kwargs):events.append("execute")
+        def get_waiter(self,name):
+            class Waiter:
+                def wait(self,**kwargs):events.append(name)
+            return Waiter()
+    clients={"sts":Sts(),"iam":Iam(),"route53":Dns(),"cloudformation":Cfn()}
+    class Session:
+        def client(self,name):return clients[name]
+    monkeypatch.setattr(bootstrap_pipeline.boto3,"Session",lambda **kwargs:Session())
+    monkeypatch.setattr(bootstrap_pipeline,"ROOT",tmp_path)
+    monkeypatch.setattr(bootstrap_pipeline,"github_repository",lambda name:{"full_name":name,"default_branch":"main","created_at":"2026-10-25T00:00:00Z","owner":{"id":123},"id":456})
+    monkeypatch.setattr(bootstrap_pipeline,"check_environments",lambda repository:None)
+    args=Namespace(auth_mode="access-key",create_access_key=True,execute=True,region="ap-southeast-2",project_name="stocklane-dev",expected_account="123456789012",hosted_zone_id="Z123EXAMPLE",api_domain="api.example.com",repository="example/workshop",oidc_style="auto",operator_cidr="203.0.113.10/32",budget_email="owner@example.com",capacity_profile="demo",environment="dev")
+    bootstrap_pipeline.bootstrap(args)
+    params={p["ParameterKey"]:p["ParameterValue"] for p in captured["Parameters"]}
+    assert params["AuthMode"]=="access-key" and params["ExistingOidcProviderArn"]==""
+    assert len(captured["TemplateBody"].encode())<51200
+    assert "private-test-value" not in captured["TemplateBody"]
+    template=json.loads(captured["TemplateBody"])
+    user=template["Resources"]["PipelineUser"]["Properties"]
+    assert "LoginProfile" not in user
+    statement=user["Policies"][0]["PolicyDocument"]["Statement"][0]
+    assert statement["Action"]==["sts:AssumeRole"] and len(statement["Resource"])==6
+    assert not any(v["Type"]=="AWS::IAM::AccessKey" for v in template["Resources"].values())
+    for role in ["BootstrapRole","PlanRole","ApplyRole"]:
+        branches=template["Resources"][role]["Properties"]["AssumeRolePolicyDocument"]["Fn::If"]
+        trust=branches[2]["Statement"][0]
+        assert trust["Action"]=="sts:AssumeRole"
+        assert trust["Principal"]=={"AWS":{"Fn::GetAtt":["PipelineUser","Arn"]}}
+    assert events.index("create-key")>events.index("stack_create_complete")
+    setup=json.loads((tmp_path/"deploy/generated/github-setup.json").read_text())
+    assert setup["repository_variables"]["AWS_AUTH_MODE"]=="access-key"
+    assert "private-test-value" not in json.dumps(setup)

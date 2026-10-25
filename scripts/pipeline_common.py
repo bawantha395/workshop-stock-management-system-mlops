@@ -18,6 +18,7 @@ def settings():
     project = os.environ.get("PROJECT_NAME", "")
     environment = os.environ.get("TF_ENVIRONMENT", "dev")
     region = os.environ.get("AWS_REGION", REGION)
+    auth_mode = os.environ.get("AWS_AUTH_MODE", "oidc")
     if not re.fullmatch(r"[0-9]{12}", account):
         raise ValueError("Set the AWS_ACCOUNT_ID repository variable")
     if not re.fullmatch(r"[a-z][a-z0-9-]{2,19}", project):
@@ -26,10 +27,12 @@ def settings():
         raise ValueError("This account's pipeline is restricted to Sydney: ap-southeast-2")
     if environment not in ENVIRONMENTS:
         raise ValueError("Invalid TF_ENVIRONMENT")
+    if auth_mode not in {"oidc", "access-key"}:
+        raise ValueError("AWS_AUTH_MODE must be oidc or access-key")
     bucket = os.environ.get("TF_STATE_BUCKET") or f"{project}-tfstate-{account}-{region}"
     if len(bucket) > 63 or not re.fullmatch(r"[a-z0-9][a-z0-9.-]+[a-z0-9]", bucket):
         raise ValueError("Invalid TF_STATE_BUCKET")
-    return {"account": account, "project": project, "environment": environment,
+    return {"account": account, "project": project, "environment": environment, "auth_mode": auth_mode,
             "region": region, "bucket": bucket, "key": f"state/{environment}/terraform.tfstate",
             "automation_bucket": f"{project}-automation-{account}"}
 
@@ -93,7 +96,9 @@ def terraform_inputs(c, raw):
         "region": c["region"], "name": c["project"], "environment": c["environment"],
         "github_repository": repository, "github_owner_id": owner_id,
         "github_repository_id": repository_id,
-        "github_oidc_provider_arn": f"arn:aws:iam::{c['account']}:oidc-provider/token.actions.githubusercontent.com",
+        "github_auth_mode": c["auth_mode"],
+        "github_ci_user_arn": f"arn:aws:iam::{c['account']}:user/{c['project']}-github-ci" if c["auth_mode"] == "access-key" else None,
+        "github_oidc_provider_arn": f"arn:aws:iam::{c['account']}:oidc-provider/token.actions.githubusercontent.com" if c["auth_mode"] == "oidc" else "",
         "workload_permissions_boundary_arn": f"arn:aws:iam::{c['account']}:policy/{c['project']}-workload-boundary",
     }
     for key, value in authoritative.items():

@@ -1,7 +1,8 @@
-"""One-time, operator-authenticated GitHub OIDC bootstrap.
+"""One-time, operator-authenticated GitHub pipeline bootstrap.
 Default: prepare a reviewable CloudFormation change set only.
---execute: execute that exact change set and wait for completion.
-No access keys are generated or stored.
+--execute: execute the change set prepared by this invocation and wait.
+Access-key mode creates a key only with --create-access-key; its secret is
+written privately outside CloudFormation outputs and Terraform state.
 """
 import argparse
 import ipaddress
@@ -17,6 +18,40 @@ import boto3
 from botocore.exceptions import ClientError
 
 from pipeline_common import REGION, ROOT, write_private
+
+
+def discover_oidc_provider(iam):
+    try:
+        items = iam.list_open_id_connect_providers()["OpenIDConnectProviderList"]
+        for item in items:
+            arn = item["Arn"]
+            if arn.endswith(":oidc-provider/token.actions.githubusercontent.com"):
+                if "sts.amazonaws.com" not in iam.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)["ClientIDList"]:
+                    raise RuntimeError("Existing GitHub OIDC provider lacks the sts.amazonaws.com audience")
+                return arn
+        return ""
+    except ClientError as error:
+        if error.response["Error"]["Code"] in {"AccessDenied", "AccessDeniedException"}:
+            raise RuntimeError("AWS denied IAM OIDC provider access. The Free project plan blocks iam:*Provider*. Use the documented --auth-mode access-key option when IAM users and role assumption are permitted; do not retry OIDC creation or change the SCP.") from None
+        raise
+
+
+def create_ci_access_key(iam, username, output):
+    output = Path(output)
+    if output.exists():
+        raise RuntimeError("The private access-key handoff file already exists; reuse its GitHub settings or rotate the key explicitly")
+    if iam.list_access_keys(UserName=username)["AccessKeyMetadata"]:
+        raise RuntimeError("The CI user already has an access key. Reuse its GitHub secret or rotate it explicitly; no new key was created")
+    key = iam.create_access_key(UserName=username)["AccessKey"]
+    try:
+        write_private(output, {"iam_user": username, "repository_secrets": {
+            "AWS_ACCESS_KEY_ID": key["AccessKeyId"], "AWS_SECRET_ACCESS_KEY": key["SecretAccessKey"]}})
+    except BaseException:
+        # Do not leave a live key with a lost secret if local handoff fails.
+        iam.delete_access_key(UserName=username, AccessKeyId=key["AccessKeyId"])
+        raise
+    print("CI access key saved privately to", output)
+    print("Copy repository_secrets into GitHub Actions secrets. Key values are never printed by this helper.")
 
 
 def github_get(path):
@@ -49,6 +84,8 @@ def check_environments(repository):
 
 
 def bootstrap(args):
+    if args.create_access_key and (args.auth_mode != "access-key" or not args.execute):
+        raise ValueError("--create-access-key requires --auth-mode access-key and --execute")
     if args.region != REGION:
         raise ValueError("Use the account's allowed Sydney Region, ap-southeast-2")
     if not re.fullmatch(r"[a-z][a-z0-9-]{2,19}", args.project_name):
@@ -77,16 +114,10 @@ def bootstrap(args):
     style = args.oidc_style
     if style == "auto":
         style = "immutable" if repo["created_at"] >= "2026-07-15T00:00:00Z" else "legacy"
-    provider = ""
-    for item in iam.list_open_id_connect_providers()["OpenIDConnectProviderList"]:
-        if item["Arn"].endswith(":oidc-provider/token.actions.githubusercontent.com"):
-            provider = item["Arn"]
-            if "sts.amazonaws.com" not in iam.get_open_id_connect_provider(OpenIDConnectProviderArn=provider)["ClientIDList"]:
-                raise RuntimeError("Existing GitHub OIDC provider lacks the sts.amazonaws.com audience")
-            break
+    provider = discover_oidc_provider(iam) if args.auth_mode == "oidc" else ""
     bucket = f"{args.project_name}-tfstate-{account}-{args.region}"
     stack = args.project_name + "-github-trust"
-    params = {"ProjectName": args.project_name, "Environment": args.environment,
+    params = {"ProjectName": args.project_name, "Environment": args.environment, "AuthMode": args.auth_mode,
         "GitHubRepository": args.repository, "GitHubOwnerId": str(repo["owner"]["id"]),
         "GitHubRepositoryId": str(repo["id"]), "OidcSubjectStyle": style,
         "ExistingOidcProviderArn": provider, "StateBucketName": bucket,
@@ -105,11 +136,13 @@ def bootstrap(args):
     if action == "UPDATE":
         current = cfn.describe_stacks(StackName=stack)["Stacks"][0]
         old = {p["ParameterKey"]: p["ParameterValue"] for p in current["Parameters"]}
+        if old.get("AuthMode", "oidc") != args.auth_mode:
+            raise RuntimeError("The existing trust stack uses a different authentication mode; review an explicit migration before changing it")
         if old.get("ExistingOidcProviderArn") == "":
             params["ExistingOidcProviderArn"] = ""
     change = cfn.create_change_set(StackName=stack,
         ChangeSetName="github-trust-" + str(int(time.time())), ChangeSetType=action,
-        TemplateBody=(ROOT / "infra/ci/identity.json").read_text(),
+        TemplateBody=json.dumps(json.loads((ROOT / "infra/ci/identity.json").read_text()), separators=(",", ":")),
         Capabilities=["CAPABILITY_NAMED_IAM"],
         Parameters=[{"ParameterKey": k, "ParameterValue": v} for k, v in params.items()],
         Tags=[{"Key": "Project", "Value": args.project_name}])
@@ -146,10 +179,11 @@ def bootstrap(args):
     capacity = json.loads((ROOT / "infra/ci" / ("capacity-" + args.capacity_profile + ".json")).read_text())
     inputs = {**capacity, "administrator_arn": operator_arn, "operator_cidrs": [cidr],
         "api_domain": args.api_domain, "route53_zone_id": args.hosted_zone_id,
-        "budget_email": email, "monthly_budget_usd": 25, "github_oidc_subject_style": style}
+        "budget_email": email, "monthly_budget_usd": 25, "github_oidc_subject_style": style,
+        "github_auth_mode": args.auth_mode}
     variables = {"AWS_ACCOUNT_ID": account, "AWS_REGION": args.region,
         "PROJECT_NAME": args.project_name, "TF_ENVIRONMENT": args.environment,
-        "TF_STATE_BUCKET": bucket, "OIDC_SUBJECT_STYLE": style}
+        "TF_STATE_BUCKET": bucket, "OIDC_SUBJECT_STYLE": style, "AWS_AUTH_MODE": args.auth_mode}
     output = ROOT / "deploy/generated/github-setup.json"
     write_private(output, {"repository_variables": variables,
         "repository_secret": {"name": "TFVARS_JSON", "value": inputs},
@@ -158,6 +192,8 @@ def bootstrap(args):
     print("GitHub settings saved privately to", output)
     print("Copy repository_variables into GitHub Actions variables, and repository_secret.value into the TFVARS_JSON secret.")
     print("Restrict every listed environment to the main branch before running AWS workflows.")
+    if args.create_access_key:
+        create_ci_access_key(iam, args.project_name + "-github-ci", ROOT / "deploy/generated/github-credentials.json")
 
 
 if __name__ == "__main__":
@@ -173,6 +209,8 @@ if __name__ == "__main__":
     parser.add_argument("--operator-cidr")
     parser.add_argument("--budget-email")
     parser.add_argument("--oidc-style", choices=["auto", "immutable", "legacy"], default="auto")
+    parser.add_argument("--auth-mode", choices=["oidc", "access-key"], default="oidc")
+    parser.add_argument("--create-access-key", action="store_true")
     parser.add_argument("--execute", action="store_true")
     bootstrap(parser.parse_args())
 

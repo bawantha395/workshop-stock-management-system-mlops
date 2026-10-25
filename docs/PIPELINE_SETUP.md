@@ -5,7 +5,32 @@ Sydney (`ap-southeast-2`). No Paid plan, advanced-feature activation or SCP
 changes are part of this setup.
 
 The code is prepared for your repository:
-`bawantha395/workshop-stock-management--system-mlops`.
+`bawantha395/workshop-stock-management-system-mlops`.
+
+## Authentication for this Free-plan project account
+
+AWS's [published Free-plan SCP](https://docs.aws.amazon.com/accounts/latest/reference/scps-and-rcps-for-projects.html)
+denies `iam:*Provider*`. This includes listing, reading and creating IAM OIDC
+providers. Account `721274598579` returned that explicit denial during setup.
+The earlier OIDC-only instructions therefore cannot complete in this account.
+
+Use `--auth-mode access-key` in the procedure below. CloudShell creates a
+programmatic CI user whose only permission is `sts:AssumeRole` for six exact
+project delivery roles. It has no console login or direct platform permissions.
+GitHub stores that user's access key as encrypted Actions secrets and uses it
+to obtain temporary role sessions. The workflows explicitly skip OIDC in this
+mode; Terraform creates no OIDC provider. No SCP or account plan is changed.
+
+This option requires the account to permit IAM user/key creation and role
+assumption. The published provider restriction does not prohibit those actions,
+but additional account controls can still deny them. If so, stop and review the
+reported denial with the account owner/AWS Support. Passing local checks is not
+proof that a real account will authorize deployment.
+
+An access key is a persistent credential: rotate it and remove it when no longer
+needed. Main-only environment rules and repository review protect its use in
+GitHub; AWS cannot verify GitHub environment claims in access-key mode. OIDC
+remains available for accounts where provider operations are permitted.
 
 ## What runs automatically
 
@@ -26,7 +51,7 @@ Argo CD using Kustomize.
 
 ```mermaid
 flowchart TD
-    O["One-time AWS trust"] --> I["GitHub OIDC"]
+    O["One-time AWS trust"] --> I["CI user assumes scoped roles"]
     I --> P["Terraform plan"]
     I --> A["Reviewed apply"]
     P --> S["Private S3 plans and state"]
@@ -87,17 +112,18 @@ The helper uses CloudShell's preinstalled Python/Boto3. Terraform installation
 and application dependency installation are not needed for this helper.
 
 ```bash
-cd ~/workshop-stock-management--system-mlops
+cd ~/workshop-stock-management-system-mlops
 git pull --ff-only
 
 export AWS_REGION=ap-southeast-2
 export AWS_DEFAULT_REGION=ap-southeast-2
 
 python3 scripts/bootstrap_pipeline.py \
-  --repository bawantha395/workshop-stock-management--system-mlops \
+  --repository bawantha395/workshop-stock-management-system-mlops \
   --project-name stocklane-dev \
   --environment dev \
   --capacity-profile demo \
+  --auth-mode access-key \
   --region ap-southeast-2 \
   --expected-account 721274598579 \
   --hosted-zone-id Z035879924YQHJ4M5G2A3 \
@@ -109,18 +135,19 @@ output, not committed.
 
 By default the helper creates a **reviewable CloudFormation change set only**.
 Inspect its resource changes and the permissions in `infra/ci/identity.json`.
-It contains three IAM roles, a workload permissions boundary and, if needed,
-a shared GitHub OIDC provider.
+It contains three IAM roles, a workload permissions boundary and the restricted
+CI user. Access-key mode does not call the denied provider APIs.
 It does not create EKS, databases or a state bucket.
 
-After review, repeat the same command with `--execute` appended to create the
-trust resources and wait for completion. This is the one-time operator
+After review, repeat the same command with `--execute --create-access-key`
+appended to create the trust resources, wait for completion and generate the
+CI user's first key. This is the one-time operator
 authorization for GitHub infrastructure automation.
 
 The helper preserves the real operator IAM path, including
 `arn:aws:iam::721274598579:role/managed/AccountFullAccessRole`, detects the
 current CloudShell public IP, verifies your public DNS zone, and obtains the
-GitHub repository/owner IDs for immutable OIDC subjects.
+GitHub repository/owner IDs for the configured repository.
 
 The provisioning role is powerful: it can manage the listed platform services
 in Sydney. Its IAM role writes, application buckets and DNS writes are scoped
@@ -130,7 +157,10 @@ Use these roles only with reviewed main source and the protected environments.
 The bootstrap stack does not grant `AdministratorAccess` or modify SCPs.
 Terraform-created roles must carry the workload boundary. The apply role cannot
 remove or edit that boundary, and workload roles cannot administer IAM or access
-the CI state bucket through their identity permissions.
+the CI state bucket through their identity permissions. Keys are created only
+after trust-stack creation succeeds, and are excluded from CloudFormation
+outputs and Terraform state. On later helper runs, omit `--create-access-key`;
+the helper refuses to create another key if a key or its handoff file exists.
 
 ## 4. Copy the generated GitHub settings
 
@@ -154,17 +184,41 @@ entry under `repository_variables`. Typical values for this account are:
 | `PROJECT_NAME` | `stocklane-dev` |
 | `TF_ENVIRONMENT` | `dev` |
 | `TF_STATE_BUCKET` | `stocklane-dev-tfstate-721274598579-ap-southeast-2` |
+| `AWS_AUTH_MODE` | `access-key` |
 | `OIDC_SUBJECT_STYLE` | `immutable` for this newly created repository; use the helper's actual output |
 
 Under **Secrets**, create **`TFVARS_JSON`**. Paste only the JSON object under
 `repository_secret.value`, including its braces.
 
-The object contains account configuration and a budget email, not AWS
-credentials. Workflows derive role ARNs from the account/project, and supply
-the exact GitHub owner/repository IDs automatically.
+The object contains account configuration and a budget email. Workflows derive
+role ARNs from the account/project, and supply the exact GitHub owner/repository
+IDs automatically.
 
-No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, session tokens or manually
-copied database passwords are required in GitHub.
+The first executed access-key setup also writes this ignored file with mode
+`0600`:
+
+```bash
+cat deploy/generated/github-credentials.json
+```
+
+Copy the two values under `repository_secrets` into repository Actions secrets:
+
+| Secret | Value |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` | The restricted CI user's generated access key ID |
+| `AWS_SECRET_ACCESS_KEY` | Its generated secret access key |
+
+The helper does not print these values itself. Keep them out of commits, issue
+comments and workflow logs. No session token is required for the IAM user.
+After the first successful backend run confirms the GitHub secrets work, remove
+the private local handoff file with `rm deploy/generated/github-credentials.json`.
+GitHub holds the secret thereafter; IAM cannot display it again.
+
+For rotation, create a second key for this same CI user through IAM, replace
+both GitHub secrets, verify a backend run, then deactivate and delete the old
+key. The CI user cannot rotate its own key; use the operator session. OIDC mode
+requires neither of these two secrets and is selected with `AWS_AUTH_MODE=oidc`
+only in accounts where IAM OIDC provider operations are allowed.
 
 ## 5. Bootstrap the backend through GitHub
 

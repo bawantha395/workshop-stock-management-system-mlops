@@ -1,6 +1,7 @@
 output "deployment" {
   value = {
     region                     = var.region
+    github_auth_mode           = var.github_auth_mode
     automation_bucket          = aws_s3_bucket.automation.id
     platform_bootstrap_project = aws_codebuild_project.platform_bootstrap.name
     github_platform_role_arn   = aws_iam_role.github_platform.arn

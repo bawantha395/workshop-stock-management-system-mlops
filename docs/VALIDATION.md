@@ -102,3 +102,40 @@ download and complete rerun passed. No scan failure was ignored. No pipeline
 dispatch, CloudFormation execution, Terraform plan/apply or AWS deployment was
 performed from this build. All eight GitHub CI jobs must pass on the uploaded
 revision before the first deployment. Follow [PIPELINE_SETUP.md](PIPELINE_SETUP.md).
+
+## Free-plan pipeline authentication correction
+
+The uploaded main revision `b1fe3f8` passed all eight GitHub CI jobs in run
+`40215273192`, including full Terraform provider validation. During the user's
+first bootstrap, the account then explicitly denied
+`iam:ListOpenIDConnectProviders` through SCP `p-iao1sqv6`. This is consistent
+with AWS's [published Free-plan policy](https://docs.aws.amazon.com/accounts/latest/reference/scps-and-rcps-for-projects.html),
+whose `DenyIAMRestrictedActions` includes `iam:*Provider*`. The OIDC-only
+account setup supplied earlier cannot complete under that restriction.
+
+The update adds explicit `access-key` authentication mode. The bootstrap creates
+a CI IAM user permitted only to assume six exact project roles. The user's key
+is generated after stack completion and written to an ignored `0600` handoff
+file; it never enters CloudFormation outputs or Terraform state. GitHub Actions
+assumes the delivery roles and explicitly skips OIDC and session tagging.
+Terraform creates no OIDC provider in this mode. Account plan and organization
+policies are not changed.
+
+Checks for this correction:
+
+- **60 targeted tests passed**, with two training tests deselected. New cases
+  verify zero provider API calls in key mode, actionable OIDC denial, protected
+  key handoff, refusal of duplicate keys, key revocation after failed handoff,
+  account-bound Terraform inputs and role assumption in all seven AWS workflows.
+- **actionlint 1.7.7 with ShellCheck 0.11.0 passed**. The CI requirements now
+  pin ShellCheck explicitly, avoiding a weaker local lint check when it is absent.
+- **cfn-lint 1.58.0 passed** for both templates. Policy-size and compact inline
+  CloudFormation-template size checks passed.
+- Terraform formatting, all 11 HCL source parses and Python compilation passed.
+- Trivy's configured vulnerability/secret gate passed again with zero fixable
+  HIGH/CRITICAL vulnerabilities and zero HIGH/CRITICAL secrets.
+
+The new revision still needs all eight CI jobs to pass after upload. Its live
+IAM user/key creation, role assumption and infrastructure deployment have not
+been executed here. An additional account policy can still deny an otherwise
+supported API; use its explicit error instead of bypassing organization controls.

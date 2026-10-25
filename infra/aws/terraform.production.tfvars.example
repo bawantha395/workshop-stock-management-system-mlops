@@ -1,8 +1,8 @@
 region = "ap-southeast-2"
 name = "stocklane-prod"
-github_repository = "bawantha395/workshop-stock-management--system-mlops"
+github_repository = "bawantha395/workshop-stock-management-system-mlops"
 github_owner_id = "138287779"
-github_repository_id = "1433222676"
+github_repository_id = "1433424967"
 github_oidc_subject_style = "immutable"
 administrator_arn = "arn:aws:iam::123456789012:role/YOUR_OPERATOR_ROLE"
 operator_cidrs = ["203.0.113.10/32"]

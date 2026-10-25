@@ -121,14 +121,14 @@ resource "aws_acm_certificate_validation" "api" {
   validation_record_fqdns = [for x in aws_route53_record.certificate : x.fqdn]
 }
 resource "aws_iam_openid_connect_provider" "github" {
-  count          = var.github_oidc_provider_arn == "" ? 1 : 0
+  count          = var.github_auth_mode == "oidc" && var.github_oidc_provider_arn == "" ? 1 : 0
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 }
 resource "aws_iam_role" "github_release" {
   permissions_boundary = var.workload_permissions_boundary_arn
   name                 = "${var.name}-github-release"
-  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{
+  assume_role_policy = var.github_auth_mode == "access-key" ? jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { AWS = var.github_ci_user_arn }, Action = "sts:AssumeRole" }] }) : jsonencode({ Version = "2012-10-17", Statement = [{
     Effect    = "Allow", Action = "sts:AssumeRoleWithWebIdentity", Principal = { Federated = var.github_oidc_provider_arn == "" ? aws_iam_openid_connect_provider.github[0].arn : var.github_oidc_provider_arn },
     Condition = { StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com", "token.actions.githubusercontent.com:sub" = local.github_release_subject } }
   }] })
