@@ -59,6 +59,15 @@ variable "database_multi_az" {
   type    = bool
   default = true
 }
+variable "database_backup_retention_days" {
+  type        = number
+  default     = null
+  description = "Automated backup retention: defaults to one day for dev/test/UAT and 14 for production. Account plan restrictions still apply."
+  validation {
+    condition     = var.database_backup_retention_days == null ? true : (var.database_backup_retention_days >= 1 && var.database_backup_retention_days <= 35 && floor(var.database_backup_retention_days) == var.database_backup_retention_days)
+    error_message = "Use a whole number of days from 1 to 35; automated backups must stay enabled."
+  }
+}
 variable "deletion_protection" {
   type    = bool
   default = true

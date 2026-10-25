@@ -139,3 +139,34 @@ The new revision still needs all eight CI jobs to pass after upload. Its live
 IAM user/key creation, role assumption and infrastructure deployment have not
 been executed here. An additional account policy can still deny an otherwise
 supported API; use its explicit error instead of bypassing organization controls.
+
+## First-apply corrections, 26 October 2026
+
+The user supplied output from apply run `40221578717`: ElastiCache completed,
+while EKS node-group creation, RDS backup retention, budget tagging and the SNS
+topic policy failed. This is evidence of a partially completed deployment, not a
+successful platform rollout. The earlier statements about no AWS execution
+refer to this build environment; the user is now deploying through GitHub.
+
+The correction grants `iam:GetRole` for the exact EKS node-group service-linked
+role and budget tag access for the single project budget. It uses explicit SNS
+topic-policy actions and defaults non-production RDS automated backups to one
+day. Existing GitHub inputs without a retention override continue to work.
+Production keeps its 14-day default; an explicit retention override is checked
+as a whole number from 1 to 35.
+
+- **74 targeted tests passed**, with two unchanged training tests deselected.
+  New cases evaluate the actual retention and SNS policy expressions with
+  Terraform CLI, check role/budget resource boundaries, reject disabled or
+  invalid backup retention, and verify that rerunning the trust-stack update
+  without the key-creation flag does not generate another key.
+- **CloudFormation lint, IAM policy-size checks, Terraform formatting, parsing
+  of all 11 HCL files and `git diff --check` passed.**
+- Full provider validation, the security gate and all eight CI jobs must pass
+  on the new uploaded commit. No dependency versions or application code were
+  changed for this correction. Local provider validation remains subject to
+  the socket restriction recorded above.
+
+AWS has not accepted this corrected configuration in the user's account yet.
+Keep the existing remote state and generate a fresh plan after the operator
+updates the trust-stack policies. Follow [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md).

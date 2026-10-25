@@ -500,7 +500,8 @@ def test_access_key_workflow_authentication_assumes_roles_without_oidc():
     assert found==7
 
 
-def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tmp_path,monkeypatch):
+@pytest.mark.parametrize("existing", [False, True])
+def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tmp_path,monkeypatch,existing):
     from argparse import Namespace
     from botocore.exceptions import ClientError
     events=[]; captured={}
@@ -518,7 +519,11 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     class Dns:
         def get_hosted_zone(self,**kwargs):return {"HostedZone":{"Name":"example.com.","Config":{"PrivateZone":False}}}
     class Cfn:
-        def describe_stacks(self,**kwargs):raise ClientError({"Error":{"Code":"ValidationError"}},"DescribeStacks")
+        def describe_stacks(self,**kwargs):
+            if not existing:raise ClientError({"Error":{"Code":"ValidationError"}},"DescribeStacks")
+            return {"Stacks":[{"StackStatus":"CREATE_COMPLETE","Parameters":[
+                {"ParameterKey":"AuthMode","ParameterValue":"access-key"},
+                {"ParameterKey":"ExistingOidcProviderArn","ParameterValue":""}]}]}
         def create_change_set(self,**kwargs):captured.update(kwargs);return {"Id":"reviewed-change-set"}
         def describe_change_set(self,**kwargs):return {"Changes":[]}
         def execute_change_set(self,**kwargs):events.append("execute")
@@ -533,7 +538,7 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     monkeypatch.setattr(bootstrap_pipeline,"ROOT",tmp_path)
     monkeypatch.setattr(bootstrap_pipeline,"github_repository",lambda name:{"full_name":name,"default_branch":"main","created_at":"2026-10-25T00:00:00Z","owner":{"id":123},"id":456})
     monkeypatch.setattr(bootstrap_pipeline,"check_environments",lambda repository:None)
-    args=Namespace(auth_mode="access-key",create_access_key=True,execute=True,region="ap-southeast-2",project_name="stocklane-dev",expected_account="123456789012",hosted_zone_id="Z123EXAMPLE",api_domain="api.example.com",repository="example/workshop",oidc_style="auto",operator_cidr="203.0.113.10/32",budget_email="owner@example.com",capacity_profile="demo",environment="dev")
+    args=Namespace(auth_mode="access-key",create_access_key=not existing,execute=True,region="ap-southeast-2",project_name="stocklane-dev",expected_account="123456789012",hosted_zone_id="Z123EXAMPLE",api_domain="api.example.com",repository="example/workshop",oidc_style="auto",operator_cidr="203.0.113.10/32",budget_email="owner@example.com",capacity_profile="demo",environment="dev")
     bootstrap_pipeline.bootstrap(args)
     params={p["ParameterKey"]:p["ParameterValue"] for p in captured["Parameters"]}
     assert params["AuthMode"]=="access-key" and params["ExistingOidcProviderArn"]==""
@@ -550,7 +555,110 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
         trust=branches[2]["Statement"][0]
         assert trust["Action"]=="sts:AssumeRole"
         assert trust["Principal"]=={"AWS":{"Fn::GetAtt":["PipelineUser","Arn"]}}
-    assert events.index("create-key")>events.index("stack_create_complete")
+    assert captured["ChangeSetType"] == ("UPDATE" if existing else "CREATE")
+    if existing:
+        assert "stack_update_complete" in events and "create-key" not in events
+        assert not (tmp_path/"deploy/generated/github-credentials.json").exists()
+    else:
+        assert events.index("create-key")>events.index("stack_create_complete")
     setup=json.loads((tmp_path/"deploy/generated/github-setup.json").read_text())
     assert setup["repository_variables"]["AWS_AUTH_MODE"]=="access-key"
     assert "private-test-value" not in json.dumps(setup)
+
+
+@pytest.mark.parametrize("role_name", ["PlanRole", "ApplyRole"])
+def test_ci_discovery_covers_the_service_role_and_budget_without_global_access(role_name):
+    from fnmatch import fnmatchcase
+    template = json.loads((ROOT / "infra/ci/identity.json").read_text())
+    statements = resolve(template["Resources"][role_name]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"],
+                         {"AWS::Partition": "aws", "AWS::AccountId": "123456789012", "AWS::Region": "ap-southeast-2",
+                          "ProjectName": "stocklane-dev", "Environment": "dev", "StateBucketName": "state-bucket",
+                          "HostedZoneId": "Z123EXAMPLE", "ApiDomain": "api.example.com", "WorkloadBoundary": "boundary"})
+    def permitted(action, resource):
+        for statement in statements:
+            if statement["Effect"] != "Allow" or "Condition" in statement:
+                continue
+            actions = statement["Action"]
+            resources = statement["Resource"]
+            if isinstance(actions, str): actions = [actions]
+            if isinstance(resources, str): resources = [resources]
+            if any(fnmatchcase(action.lower(), a.lower()) for a in actions) and any(fnmatchcase(resource, r) for r in resources):
+                return True
+        return False
+    service_role = "arn:aws:iam::123456789012:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+    budget = "arn:aws:budgets::123456789012:budget/stocklane-dev-monthly"
+    assert permitted("iam:GetRole", service_role)
+    assert not permitted("iam:GetRole", service_role.replace("123456789012", "999999999999"))
+    assert not permitted("iam:GetRole", "arn:aws:iam::123456789012:role/unrelated-admin")
+    assert not permitted("iam:UpdateRole", service_role)
+    assert permitted("budgets:ListTagsForResource", budget)
+    assert not permitted("budgets:ListTagsForResource", budget.replace("stocklane-dev", "other"))
+    for action in ["budgets:TagResource", "budgets:UntagResource"]:
+        assert permitted(action, budget) == (role_name == "ApplyRole")
+        assert not permitted(action, budget.replace("stocklane-dev", "other"))
+
+
+def retention_configuration():
+    variables = (ROOT / "infra/aws/variables.tf").read_text()
+    definition = 'variable "database_backup_retention_days"' + variables.split('variable "database_backup_retention_days"', 1)[1].split('\nvariable ', 1)[0]
+    source = (ROOT / "infra/aws/data.tf").read_text()
+    expression = re.search(r'^\s*backup_retention_period\s*=\s*(.+)$', source, re.MULTILINE).group(1)
+    return definition + '\nvariable "environment" { type = string }\noutput "retention" { value = ' + expression + ' }\n', expression
+
+
+@pytest.mark.parametrize("environment,override,expected", [
+    ("dev", None, 1), ("test", None, 1), ("uat", None, 1), ("production", None, 14),
+    ("production", 1, 1), ("dev", 7, 7),
+])
+def test_rds_retention_keeps_backups_and_supports_existing_github_settings(tmp_path, environment, override, expected):
+    configuration, expression = retention_configuration()
+    (tmp_path / "main.tf").write_text(configuration)
+    command = [shutil.which("terraform"), "console", "-no-color", "-var=environment=" + environment]
+    if override is not None: command.append("-var=database_backup_retention_days=" + str(override))
+    result = subprocess.run(command, input=expression + "\n", text=True, capture_output=True, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert int(result.stdout.strip()) == expected
+
+
+@pytest.mark.parametrize("retention", [0, -1, 36, 1.5])
+def test_invalid_retention_cannot_disable_backups_or_exceed_rds_limits(tmp_path, retention):
+    configuration, _ = retention_configuration()
+    (tmp_path / "main.tf").write_text(configuration)
+    result = subprocess.run([shutil.which("terraform"), "plan", "-input=false", "-no-color",
+                             "-var=environment=dev", "-var=database_backup_retention_days=" + str(retention)],
+                            text=True, capture_output=True, cwd=tmp_path)
+    assert result.returncode != 0
+    assert "automated backups must stay enabled" in result.stderr
+
+
+def test_sns_policy_uses_supported_topic_actions_and_preserves_source_and_tls_guards(tmp_path):
+    source = (ROOT / "infra/aws/ml-observability.tf").read_text()
+    # Evaluate the real policy expression without requiring AWS credentials or
+    # provider plugins. Only resource attribute values are replaced by fixtures.
+    actions = re.search(r'\nlocals \{\n.*?\n\}', source, re.DOTALL).group(0)
+    resource = source.split('resource "aws_sns_topic_policy" "operations" {', 1)[1].split('\nresource ', 1)[0]
+    expression = resource.split('policy = ', 1)[1].rsplit('\n}', 1)[0].strip()
+    expression = expression.replace("data.aws_partition.current.partition", "local.partition").replace("aws_sns_topic.operations.arn", "local.topic_arn")
+    (tmp_path / "main.tf").write_text(actions + '\nvariable "name" { default = "stocklane-dev" }\nvariable "region" { default = "ap-southeast-2" }\n'
+        + 'locals {\npartition = "aws"\nsuffix = "123456789012"\ntopic_arn = "arn:aws:sns:ap-southeast-2:123456789012:stocklane-dev-operations"\noperations_policy = '
+        + expression + '\n}\n')
+    result = subprocess.run([shutil.which("terraform"), "console", "-no-color"],
+                            input="local.operations_policy\n", text=True, capture_output=True, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    policy = json.loads(json.loads(result.stdout))
+    # AWS's SNS topic-policy allowlist; identity-based policies allow more APIs.
+    allowed = {"sns:AddPermission", "sns:DeleteTopic", "sns:GetDataProtectionPolicy", "sns:GetTopicAttributes",
+               "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource", "sns:Publish", "sns:PutDataProtectionPolicy",
+               "sns:RemovePermission", "sns:SetTopicAttributes", "sns:Subscribe"}
+    statements = {s["Sid"]: s for s in policy["Statement"]}
+    for statement in statements.values():
+        actions = statement["Action"]
+        assert set([actions] if isinstance(actions, str) else actions) <= allowed
+    tls = statements["TLSOnly"]
+    assert tls["Effect"] == "Deny" and tls["Condition"]["Bool"]["aws:SecureTransport"] == "false"
+    assert set(tls["Action"]) == set(statements["Owner"]["Action"])
+    cloudwatch = statements["CloudWatchAlarms"]
+    assert cloudwatch["Principal"] == {"Service": "cloudwatch.amazonaws.com"}
+    assert cloudwatch["Action"] == "sns:Publish"
+    assert cloudwatch["Condition"]["StringEquals"]["aws:SourceAccount"] == "123456789012"
+    assert cloudwatch["Condition"]["ArnLike"]["aws:SourceArn"].endswith(":alarm:stocklane-dev-*")

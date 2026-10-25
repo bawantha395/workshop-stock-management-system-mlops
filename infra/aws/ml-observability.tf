@@ -96,12 +96,22 @@ resource "aws_sns_topic" "operations" {
   name              = "${var.name}-operations"
   kms_master_key_id = aws_kms_key.alerts.arn
 }
+locals {
+  # SNS topic policies accept a subset of SNS API actions. Expanding sns:*
+  # includes operations outside that subset and SNS rejects the entire policy.
+  sns_topic_policy_actions = [
+    "sns:AddPermission", "sns:DeleteTopic", "sns:GetDataProtectionPolicy",
+    "sns:GetTopicAttributes", "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource",
+    "sns:Publish", "sns:PutDataProtectionPolicy", "sns:RemovePermission",
+    "sns:SetTopicAttributes", "sns:Subscribe"
+  ]
+}
 resource "aws_sns_topic_policy" "operations" {
   arn = aws_sns_topic.operations.arn
-  policy = jsonencode({ Version = "2012-10-17", Statement = [
-    { Sid = "Owner", Effect = "Allow", Principal = { AWS = "arn:${data.aws_partition.current.partition}:iam::${local.suffix}:root" }, Action = "SNS:*", Resource = aws_sns_topic.operations.arn },
+  policy = jsonencode({ Version = "2012-10-17", Id = "${var.name}-operations", Statement = [
+    { Sid = "Owner", Effect = "Allow", Principal = { AWS = "arn:${data.aws_partition.current.partition}:iam::${local.suffix}:root" }, Action = local.sns_topic_policy_actions, Resource = aws_sns_topic.operations.arn },
     { Sid = "CloudWatchAlarms", Effect = "Allow", Principal = { Service = "cloudwatch.amazonaws.com" }, Action = "sns:Publish", Resource = aws_sns_topic.operations.arn, Condition = { StringEquals = { "aws:SourceAccount" = local.suffix }, ArnLike = { "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:cloudwatch:${var.region}:${local.suffix}:alarm:${var.name}-*" } } },
-    { Sid = "TLSOnly", Effect = "Deny", Principal = "*", Action = "SNS:*", Resource = aws_sns_topic.operations.arn, Condition = { Bool = { "aws:SecureTransport" = "false" } } }
+    { Sid = "TLSOnly", Effect = "Deny", Principal = "*", Action = local.sns_topic_policy_actions, Resource = aws_sns_topic.operations.arn, Condition = { Bool = { "aws:SecureTransport" = "false" } } }
   ] })
 }
 resource "aws_sns_topic_subscription" "owner" {

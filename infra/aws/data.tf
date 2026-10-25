@@ -74,7 +74,7 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids          = [aws_security_group.data.id]
   publicly_accessible             = false
   multi_az                        = var.database_multi_az
-  backup_retention_period         = 14
+  backup_retention_period         = coalesce(var.database_backup_retention_days, var.environment == "production" ? 14 : 1)
   deletion_protection             = var.deletion_protection
   skip_final_snapshot             = false
   final_snapshot_identifier       = "${var.name}-final-snapshot"

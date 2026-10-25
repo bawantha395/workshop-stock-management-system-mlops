@@ -530,6 +530,26 @@
                   }
                 },
                 {
+                  "Sid": "ReadEksNodegroupServiceLinkedRole",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+                  }
+                },
+                {
+                  "Sid": "ReadProjectBudgetTags",
+                  "Effect": "Allow",
+                  "Action": [
+                    "budgets:ListTagsForResource"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/${ProjectName}-monthly"
+                  }
+                },
+                {
                   "Sid": "GlobalTerraformDiscovery",
                   "Effect": "Allow",
                   "Action": [
@@ -864,6 +884,26 @@
                   }
                 },
                 {
+                  "Sid": "ReadEksNodegroupServiceLinkedRole",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+                  }
+                },
+                {
+                  "Sid": "ReadProjectBudgetTags",
+                  "Effect": "Allow",
+                  "Action": [
+                    "budgets:ListTagsForResource"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/${ProjectName}-monthly"
+                  }
+                },
+                {
                   "Sid": "GlobalTerraformDiscovery",
                   "Effect": "Allow",
                   "Action": [
@@ -1162,7 +1202,9 @@
                   "Sid": "ManageProjectBudget",
                   "Effect": "Allow",
                   "Action": [
-                    "budgets:ModifyBudget"
+                    "budgets:ModifyBudget",
+                    "budgets:TagResource",
+                    "budgets:UntagResource"
                   ],
                   "Resource": {
                     "Fn::Sub": "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/${ProjectName}-monthly"

@@ -344,6 +344,10 @@ not post stock without a human.
 
 ## Scope and current limits
 
+For the first-apply EKS service-role, RDS retention, budget-tagging and SNS
+policy errors, use [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md). It preserves the
+existing Terraform state and credentials while updating the pipeline policies.
+
 - This implements one active AWS environment per repository configuration.
   Four Kustomize profiles remain available. It does not implement a complete
   multi-account dev/test/UAT/production promotion system.
