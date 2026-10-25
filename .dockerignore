@@ -1,0 +1,14 @@
+.git
+.env*
+.data
+.venv
+**/node_modules
+**/dist
+**/target
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+infra/.terraform
+models
+artifacts
+.preview-runtime
