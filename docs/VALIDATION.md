@@ -223,3 +223,21 @@ changing source alone cannot replace it. Follow [FIRST_APPLY_FIX.md](FIRST_APPLY
 to update that one configuration secret and generate a new plan. AWS access
 keys remain the same. No role creation, IAM access check, micro RDS creation or
 successful corrected apply has been executed from this build environment.
+
+### User-selected micro instances
+
+The user subsequently requested `t3.micro` for the node group (replacing the
+earlier nano request) and `db.t4g.micro` for RDS. The current demo profile uses
+those types, retaining two workers, Single-AZ RDS, 20 GiB `gp2`, disabled storage
+autoscaling and one-day backups. The earlier `db.t3.micro` selection above
+describes the preceding revision.
+
+**86 targeted tests passed**, with two training tests deselected, after the
+updated database class was reflected in the existing profile tests. A real
+Kustomize build of the dev application/monitoring overlays confirms 2,144 MiB
+of requests for inventory, workshop, vision, Prometheus, Grafana and
+Alertmanager alone. This exceeds two `t3.micro` workers' combined 2,048 MiB
+raw memory before platform controllers, EKS add-ons and node overhead. The full
+rollout cannot fit these requested worker settings. The recovery guide now
+recommends an infrastructure-only apply with `prepare_release=false` until
+capacity is addressed. No scheduling or readiness success on AWS is claimed.

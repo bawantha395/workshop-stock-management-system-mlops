@@ -571,7 +571,7 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     setup=json.loads((tmp_path/"deploy/generated/github-setup.json").read_text())
     assert setup["repository_variables"]["AWS_AUTH_MODE"]=="access-key"
     assert "private-test-value" not in json.dumps(setup)
-    assert setup["repository_secret"]["value"]["database_instance_class"] == "db.t3.micro"
+    assert setup["repository_secret"]["value"]["database_instance_class"] == "db.t4g.micro"
     assert setup["repository_secret"]["value"]["database_max_allocated_storage"] == 0
 
 
@@ -644,7 +644,7 @@ def test_preflight_denial_stops_before_backend_initialization(config, monkeypatc
 def test_demo_capacity_reaches_terraform_with_micro_rds_and_fixed_storage(config):
     data = {**inputs(), **json.loads((ROOT / "infra/ci/capacity-demo.json").read_text())}
     rendered = common.terraform_inputs(config, json.dumps(data))
-    assert rendered["database_instance_class"] == "db.t3.micro"
+    assert rendered["database_instance_class"] == "db.t4g.micro"
     assert rendered["database_multi_az"] is False
     assert rendered["database_storage_type"] == "gp2"
     assert rendered["database_max_allocated_storage"] == 0

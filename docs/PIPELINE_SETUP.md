@@ -255,14 +255,19 @@ profile is:
 | --- | --- |
 | Availability Zones | 2 |
 | NAT gateways | 1 |
-| EKS workers | 2 × `t3.large`; maximum 2 |
+| EKS workers | 2 × `t3.micro`; maximum 2 |
 | Application replicas | 1 each |
-| RDS | Single-AZ `db.t3.micro`; 20 GiB `gp2`; no storage autoscaling; one-day backups |
+| RDS | Single-AZ `db.t4g.micro`; 20 GiB `gp2`; no storage autoscaling; one-day backups |
 | Redis | 2 × `cache.t4g.micro`, with failover |
 | Platform bootstrap | On-demand, non-privileged CodeBuild Small; maximum 45 build minutes |
 
-This keeps the requested AWS architecture with lower demo capacity. It is not
-the production availability profile. `infra/ci/capacity-production.json`
+The requested micro workers have 1 GiB RAM each. The three applications,
+Prometheus, Grafana and Alertmanager alone request 2,144 MiB, exceeding the
+two nodes' combined raw 2,048 MiB before Kubernetes and controller overhead.
+The complete platform cannot fit this profile; use it for infrastructure
+experiments and allocate additional capacity before a full rollout.
+
+This is a prototype capacity profile. `infra/ci/capacity-production.json`
 retains three AZs/NATs/workers, replicated application capacity and Multi-AZ
 RDS.
 
@@ -278,7 +283,10 @@ Open **Actions → Apply reviewed Terraform plan → Run workflow → main**.
 
 - Paste the Plan ID and Plan SHA256 from the plan summary.
 - Keep `allow_deletions` false for the first deployment.
-- Leave `prepare_release` true to start release preparation after a successful apply.
+- For the requested two-worker `t3.micro` infrastructure experiment, set
+  `prepare_release` false. The full stack's requests exceed these workers'
+  memory. Set it true to prepare a release after sufficient worker capacity
+  is configured and its infrastructure plan is reviewed.
 
 The workflow checks the account, Region, environment, source SHA, plan age
 (maximum six hours), S3 object version, plan checksum, provider lock and current

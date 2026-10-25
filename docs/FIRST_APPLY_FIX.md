@@ -1,4 +1,4 @@
-# Resume AWS with the minimum demo database
+# Resume AWS with the requested micro instances
 
 Repository: `bawantha395/workshop-stock-management-system-mlops`.
 AWS account: `721274598579`. Region: Sydney, `ap-southeast-2`.
@@ -11,16 +11,22 @@ previous `db.t4g.small` class. Keep the existing resources and remote state.
 
 | Setting | Demo value |
 | --- | --- |
-| Database class | `db.t3.micro` |
+| EKS workers | 2 × `t3.micro` |
+| Database class | `db.t4g.micro` |
 | Database availability | Single-AZ |
 | Database storage | 20 GiB `gp2` |
 | Storage autoscaling | Disabled, maximum allocated storage `0` |
 | Automated backups | One day |
 
-AWS's [PostgreSQL getting-started guide](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_GettingStarted.CreatingConnecting.PostgreSQL.html)
-uses `db.t3.micro` for its Free tier example. Account eligibility and available
-regional capacity still need confirmation during deployment. This is the demo
-profile; the production capacity profile keeps its existing settings.
+AWS lists `db.t4g.micro` for PostgreSQL in its [RDS Free Tier documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html).
+Account eligibility and available regional capacity still need confirmation
+during deployment. The production capacity profile keeps its existing settings.
+
+Each `t3.micro` worker has 1 GiB RAM. The application and monitoring requests
+alone total 2,144 MiB before Kubernetes and platform controllers, exceeding
+the two workers' combined 2,048 MiB raw memory. The full rollout cannot fit
+this profile. These are the requested infrastructure experiment settings;
+additional worker capacity is required for the complete platform.
 
 The updated CloudShell bootstrap verifies the account-wide
 `AWSServiceRoleForAmazonEKSNodegroup`. It creates that AWS-managed role only
@@ -87,7 +93,8 @@ SCPs or treat denied reads as missing roles. No new access key is requested.
 ## 3. Replace only the TFVARS_JSON secret
 
 This time the existing GitHub secret must change: it still contains the old
-RDS class. Source defaults cannot override an explicit value in that secret.
+node and database classes. Source defaults cannot override explicit values
+in that secret.
 
 Print the new configuration object in your own CloudShell session:
 
@@ -101,7 +108,8 @@ Copy the complete printed object into GitHub **Settings → Secrets and variable
 Verify these entries are present:
 
 ```json
-"database_instance_class": "db.t3.micro",
+"node_instance_type": "t3.micro",
+"database_instance_class": "db.t4g.micro",
 "database_multi_az": false,
 "database_storage_type": "gp2",
 "database_max_allocated_storage": 0,
@@ -119,11 +127,14 @@ variables. The printed configuration is not a replacement for those keys.
 2. Check for **Verified EKS service-linked role with current workflow
    credentials**. If this check fails, use its specific missing-role or denied
    permission error before another apply.
-3. Review the plan log and summary. RDS should request `db.t3.micro`, 20 GiB,
+3. Review the plan log and summary. RDS should request `db.t4g.micro`, 20 GiB,
    `gp2`, one-day backups and Single-AZ. Existing completed resources should be
    retained. Inspect unexpected deletions or replacements before proceeding.
 4. Run **Apply reviewed Terraform plan** on `main`, supplying this new plan's
-   ID and SHA256, `allow_deletions=false` and `prepare_release=true`.
+   ID and SHA256 and `allow_deletions=false`. For this infrastructure experiment,
+   use `prepare_release=false`; the full application/platform rollout requires
+   additional worker capacity. Request release preparation after resolving
+   that capacity limit.
 
 Do not reuse a plan from before either the partial apply or secret update.
 The existing state bucket/key stays in use. After a successful apply, follow
