@@ -59,6 +59,23 @@ variable "database_multi_az" {
   type    = bool
   default = true
 }
+variable "database_storage_type" {
+  type    = string
+  default = "gp3"
+  validation {
+    condition     = contains(["gp2", "gp3"], var.database_storage_type)
+    error_message = "Use gp2 or gp3 storage."
+  }
+}
+variable "database_max_allocated_storage" {
+  type        = number
+  default     = 40
+  description = "Storage autoscaling limit in GiB; zero disables autoscaling for the 20 GiB demo database."
+  validation {
+    condition     = var.database_max_allocated_storage == 0 || (var.database_max_allocated_storage >= 20 && floor(var.database_max_allocated_storage) == var.database_max_allocated_storage)
+    error_message = "Use zero to disable autoscaling, or a whole number of GiB of at least 20."
+  }
+}
 variable "database_backup_retention_days" {
   type        = number
   default     = null

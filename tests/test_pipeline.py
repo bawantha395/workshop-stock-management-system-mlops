@@ -501,7 +501,8 @@ def test_access_key_workflow_authentication_assumes_roles_without_oidc():
 
 
 @pytest.mark.parametrize("existing", [False, True])
-def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tmp_path,monkeypatch,existing):
+@pytest.mark.parametrize("execute", [False, True])
+def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tmp_path,monkeypatch,existing,execute):
     from argparse import Namespace
     from botocore.exceptions import ClientError
     events=[]; captured={}
@@ -511,7 +512,11 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     class Sts:
         def get_caller_identity(self):return {"Account":"123456789012","Arn":"arn:aws:sts::123456789012:assumed-role/AccountFullAccessRole/session"}
     class Iam:
-        def get_role(self,**kwargs):return {"Role":{"Arn":"arn:aws:iam::123456789012:role/managed/AccountFullAccessRole"}}
+        def get_role(self,**kwargs):
+            if kwargs["RoleName"] == common.EKS_NODEGROUP_ROLE:
+                events.append("check-eks-role")
+                return {"Role":{"Arn":"arn:aws:iam::123456789012:role/aws-service-role/eks-nodegroup.amazonaws.com/" + common.EKS_NODEGROUP_ROLE}}
+            return {"Role":{"Arn":"arn:aws:iam::123456789012:role/managed/AccountFullAccessRole"}}
         def list_access_keys(self,**kwargs):return {"AccessKeyMetadata":[]}
         def create_access_key(self,**kwargs):
             events.append("create-key")
@@ -538,7 +543,7 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     monkeypatch.setattr(bootstrap_pipeline,"ROOT",tmp_path)
     monkeypatch.setattr(bootstrap_pipeline,"github_repository",lambda name:{"full_name":name,"default_branch":"main","created_at":"2026-10-25T00:00:00Z","owner":{"id":123},"id":456})
     monkeypatch.setattr(bootstrap_pipeline,"check_environments",lambda repository:None)
-    args=Namespace(auth_mode="access-key",create_access_key=not existing,execute=True,region="ap-southeast-2",project_name="stocklane-dev",expected_account="123456789012",hosted_zone_id="Z123EXAMPLE",api_domain="api.example.com",repository="example/workshop",oidc_style="auto",operator_cidr="203.0.113.10/32",budget_email="owner@example.com",capacity_profile="demo",environment="dev")
+    args=Namespace(auth_mode="access-key",create_access_key=execute and not existing,execute=execute,region="ap-southeast-2",project_name="stocklane-dev",expected_account="123456789012",hosted_zone_id="Z123EXAMPLE",api_domain="api.example.com",repository="example/workshop",oidc_style="auto",operator_cidr="203.0.113.10/32",budget_email="owner@example.com",capacity_profile="demo",environment="dev")
     bootstrap_pipeline.bootstrap(args)
     params={p["ParameterKey"]:p["ParameterValue"] for p in captured["Parameters"]}
     assert params["AuthMode"]=="access-key" and params["ExistingOidcProviderArn"]==""
@@ -556,7 +561,9 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
         assert trust["Action"]=="sts:AssumeRole"
         assert trust["Principal"]=={"AWS":{"Fn::GetAtt":["PipelineUser","Arn"]}}
     assert captured["ChangeSetType"] == ("UPDATE" if existing else "CREATE")
-    if existing:
+    if not execute:
+        assert "execute" not in events and "check-eks-role" not in events and "create-key" not in events
+    elif existing:
         assert "stack_update_complete" in events and "create-key" not in events
         assert not (tmp_path/"deploy/generated/github-credentials.json").exists()
     else:
@@ -564,6 +571,84 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     setup=json.loads((tmp_path/"deploy/generated/github-setup.json").read_text())
     assert setup["repository_variables"]["AWS_AUTH_MODE"]=="access-key"
     assert "private-test-value" not in json.dumps(setup)
+    assert setup["repository_secret"]["value"]["database_instance_class"] == "db.t3.micro"
+    assert setup["repository_secret"]["value"]["database_max_allocated_storage"] == 0
+
+
+@pytest.mark.parametrize("exists", [False, True])
+def test_eks_service_role_bootstrap_reuses_existing_or_creates_only_after_not_found(exists):
+    from botocore.exceptions import ClientError
+    events = []
+    role = "arn:aws:iam::123456789012:role/aws-service-role/eks-nodegroup.amazonaws.com/" + common.EKS_NODEGROUP_ROLE
+    class Iam:
+        ready = exists
+        def get_role(self, **kwargs):
+            assert kwargs == {"RoleName": common.EKS_NODEGROUP_ROLE}
+            if not self.ready:raise ClientError({"Error":{"Code":"NoSuchEntity"}}, "GetRole")
+            return {"Role":{"Arn":role}}
+        def create_service_linked_role(self, **kwargs):
+            assert kwargs == {"AWSServiceName":"eks-nodegroup.amazonaws.com"}
+            events.append("create");self.ready=True
+        def get_waiter(self, name):
+            assert name == "role_exists"
+            class Waiter:
+                def wait(self, **kwargs):events.append("wait")
+            return Waiter()
+    bootstrap_pipeline.ensure_eks_nodegroup_role(Iam(), "123456789012")
+    assert events == ([] if exists else ["create", "wait"])
+
+
+@pytest.mark.parametrize("code", ["AccessDenied", "ServiceFailure"])
+def test_eks_role_bootstrap_does_not_treat_permission_or_service_errors_as_absence(code):
+    class Iam:
+        def get_role(self, **kwargs):
+            from botocore.exceptions import ClientError
+            raise ClientError({"Error":{"Code":code}}, "GetRole")
+        def create_service_linked_role(self, **kwargs):pytest.fail("Must not create after a denied or failed read")
+    from botocore.exceptions import ClientError
+    with pytest.raises(ClientError):bootstrap_pipeline.ensure_eks_nodegroup_role(Iam(), "123456789012")
+
+
+@pytest.mark.parametrize("code,message", [("NoSuchEntity", "is missing"), ("AccessDenied", "cannot read")])
+def test_workflow_preflight_reports_missing_role_and_denied_read_distinctly(config, monkeypatch, code, message):
+    class Iam:
+        def get_role(self, **kwargs):
+            from botocore.exceptions import ClientError
+            raise ClientError({"Error":{"Code":code}}, "GetRole")
+    monkeypatch.setattr(common, "client", lambda service, c: Iam())
+    with pytest.raises(RuntimeError, match=message):common.check_eks_nodegroup_role(config)
+
+
+def test_workflow_preflight_checks_role_arn_with_current_credentials(config, monkeypatch):
+    class Iam:
+        account = config["account"]
+        def get_role(self, **kwargs):
+            return {"Role":{"Arn":f"arn:aws:iam::{self.account}:role/aws-service-role/eks-nodegroup.amazonaws.com/{common.EKS_NODEGROUP_ROLE}"}}
+    iam = Iam()
+    monkeypatch.setattr(common, "client", lambda service, c: iam)
+    common.check_eks_nodegroup_role(config)
+    iam.account = "999999999999"
+    with pytest.raises(RuntimeError, match="Unexpected"):common.check_eks_nodegroup_role(config)
+
+
+def test_preflight_denial_stops_before_backend_initialization(config, monkeypatch):
+    calls = []
+    monkeypatch.setattr(delivery, "check_account", lambda c: None)
+    def denied(c):raise RuntimeError("cannot read EKS role")
+    monkeypatch.setattr(delivery, "check_eks_nodegroup_role", denied)
+    monkeypatch.setattr(delivery, "backend_ready", lambda c: calls.append("backend"))
+    with pytest.raises(RuntimeError, match="cannot read"):delivery.prepare(config)
+    assert calls == []
+
+
+def test_demo_capacity_reaches_terraform_with_micro_rds_and_fixed_storage(config):
+    data = {**inputs(), **json.loads((ROOT / "infra/ci/capacity-demo.json").read_text())}
+    rendered = common.terraform_inputs(config, json.dumps(data))
+    assert rendered["database_instance_class"] == "db.t3.micro"
+    assert rendered["database_multi_az"] is False
+    assert rendered["database_storage_type"] == "gp2"
+    assert rendered["database_max_allocated_storage"] == 0
+    assert rendered["database_backup_retention_days"] == 1
 
 
 @pytest.mark.parametrize("role_name", ["PlanRole", "ApplyRole"])
@@ -596,6 +681,31 @@ def test_ci_discovery_covers_the_service_role_and_budget_without_global_access(r
     for action in ["budgets:TagResource", "budgets:UntagResource"]:
         assert permitted(action, budget) == (role_name == "ApplyRole")
         assert not permitted(action, budget.replace("stocklane-dev", "other"))
+
+
+def test_plan_can_refresh_cognito_resources_without_group_mutation_permissions():
+    from fnmatch import fnmatchcase
+    template = json.loads((ROOT / "infra/ci/identity.json").read_text())
+    statements = template["Resources"]["PlanRole"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"]
+    statements = resolve([s for s in statements if any(a.startswith("cognito-idp:") for a in s["Action"])],
+                         {"AWS::Partition": "aws", "AWS::Region": "ap-southeast-2", "AWS::AccountId": "123456789012"})
+    def allowed(action, resource, region="ap-southeast-2"):
+        for statement in statements:
+            if statement["Effect"] != "Allow": continue
+            if statement.get("Condition", {}).get("StringEquals", {}).get("aws:RequestedRegion", region) != region: continue
+            if any(fnmatchcase(action.lower(), a.lower()) for a in statement["Action"]) and fnmatchcase(resource, statement["Resource"]):
+                return True
+        return False
+    pool = "arn:aws:cognito-idp:ap-southeast-2:123456789012:userpool/ap-southeast-2_Example"
+    # Read APIs used to refresh every Cognito resource in web-auth.tf.
+    for action in ["DescribeUserPool", "DescribeUserPoolClient", "DescribeUserPoolDomain",
+                   "DescribeResourceServer", "GetUserPoolMfaConfig", "GetGroup", "ListTagsForResource"]:
+        assert allowed("cognito-idp:" + action, pool), action
+    for action in ["CreateGroup", "UpdateGroup", "DeleteGroup", "AdminAddUserToGroup", "AdminGetUser"]:
+        assert not allowed("cognito-idp:" + action, pool), action
+    assert not allowed("cognito-idp:GetGroup", pool.replace("123456789012", "999999999999"))
+    assert not allowed("cognito-idp:GetGroup", pool.replace("ap-southeast-2", "us-east-1"))
+    assert not allowed("cognito-idp:GetGroup", pool, region="us-east-1")
 
 
 def retention_configuration():

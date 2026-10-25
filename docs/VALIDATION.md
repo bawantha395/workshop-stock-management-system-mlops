@@ -170,3 +170,56 @@ as a whole number from 1 to 35.
 AWS has not accepted this corrected configuration in the user's account yet.
 Keep the existing remote state and generate a fresh plan after the operator
 updates the trust-stack policies. Follow [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md).
+
+### Cognito plan refresh follow-up
+
+The supplied full log for plan run `40224267297` shows signed provider
+initialization and successful Terraform validation. Its only AWS errors are
+two `cognito-idp:GetGroup` denials while refreshing the existing `OWNER` and
+`MECHANIC` groups. Both come from `stocklane-dev-ci-plan`; no SCP denial is
+reported. The log confirms that the pending RDS instance now requests one-day
+automated backups. Its displayed 13-create/0-change/0-delete summary is not a
+successful saved plan.
+
+The template now grants the plan role `GetGroup` for user pools in its own
+account and Region. A regression case covers the Cognito refresh APIs used by
+the configured resources and rejects group mutations, user administration,
+cross-account group reads and cross-Region group reads. Updating the source
+template alone does not update the deployed IAM role: the operator must rerun
+the existing trust-stack update before requesting a new plan.
+
+For this follow-up, **75 targeted tests passed**, with the same two training
+tests deselected. CloudFormation lint, policy-size checks and `git diff --check`
+also passed. The supplied log verifies provider validation of the prior
+uploaded Terraform configuration; this follow-up changes the IAM template,
+tests and recovery documentation only. The new deployed policy and a successful
+new plan have not been verified in AWS from this build environment.
+
+## Minimum demo RDS and EKS prerequisite follow-up
+
+The user's next apply completed the SNS topic policy and monthly budget. EKS
+again reported failure validating its node-group service-linked role, and RDS
+rejected the selected instance class under the account's Free plan. The EKS
+message does not by itself prove that the role is absent or explain why the
+earlier exact-ARN permission did not satisfy server-side validation.
+
+The demo profile now uses Single-AZ `db.t3.micro`, 20 GiB `gp2`, no storage
+autoscaling and one-day backups. Other demo capacity and the production profile
+retain their settings. The operator bootstrap verifies or creates the required
+AWS-managed node-group service-linked role. Plan/apply perform a read-only role
+check with their actual workflow credentials before Terraform initialization.
+The check reports denied reads and missing roles separately, and verifies the
+expected account/path. No additional IAM wildcard permission was added.
+
+**86 targeted tests passed**, with two training tests deselected. New cases
+cover role reuse/creation, denied/service-error handling, review-only bootstrap
+without service-role mutations, account-bound role verification, a preflight
+failure stopping initialization, and the micro profile reaching the Terraform
+input renderer. CloudFormation lint, policy-size checks, Terraform formatting,
+all 11 HCL parses and compilation of the three changed Python helpers passed.
+
+The RDS class is an explicit value in the existing GitHub `TFVARS_JSON` secret;
+changing source alone cannot replace it. Follow [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md)
+to update that one configuration secret and generate a new plan. AWS access
+keys remain the same. No role creation, IAM access check, micro RDS creation or
+successful corrected apply has been executed from this build environment.

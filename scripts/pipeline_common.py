@@ -7,10 +7,33 @@ import re
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 ROOT = Path(__file__).resolve().parents[1]
 REGION = "ap-southeast-2"
 ENVIRONMENTS = {"dev", "test", "uat", "production"}
+EKS_NODEGROUP_ROLE = "AWSServiceRoleForAmazonEKSNodegroup"
+
+
+def verify_eks_nodegroup_role(iam, account):
+    expected = f"arn:aws:iam::{account}:role/aws-service-role/eks-nodegroup.amazonaws.com/{EKS_NODEGROUP_ROLE}"
+    actual = iam.get_role(RoleName=EKS_NODEGROUP_ROLE)["Role"]["Arn"]
+    if actual != expected:
+        raise RuntimeError("Unexpected EKS node-group service-linked role ARN")
+    return actual
+
+
+def check_eks_nodegroup_role(c):
+    try:
+        arn = verify_eks_nodegroup_role(client("iam", c), c["account"])
+    except ClientError as error:
+        code = error.response["Error"]["Code"]
+        if code == "NoSuchEntity":
+            raise RuntimeError("EKS node-group service-linked role is missing. Run the updated CloudShell bootstrap with --execute, then request a new plan.") from error
+        if code in {"AccessDenied", "AccessDeniedException"}:
+            raise RuntimeError("The current workflow role cannot read the EKS node-group service-linked role. Verify ReadEksNodegroupServiceLinkedRole in the deployed trust-stack policy and inspect any account-level deny before applying.") from error
+        raise
+    print("Verified EKS service-linked role with current workflow credentials:", arn)
 
 
 def settings():

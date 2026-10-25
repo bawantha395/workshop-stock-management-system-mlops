@@ -144,6 +144,11 @@ appended to create the trust resources, wait for completion and generate the
 CI user's first key. This is the one-time operator
 authorization for GitHub infrastructure automation.
 
+With `--execute`, the helper also verifies or creates the AWS-managed EKS
+node-group service-linked role. It reuses an existing role, creates only after
+`NoSuchEntity`, and does not treat an access denial as absence. Plan/apply test
+their own read access to that exact role before Terraform initialization.
+
 The helper preserves the real operator IAM path, including
 `arn:aws:iam::721274598579:role/managed/AccountFullAccessRole`, detects the
 current CloudShell public IP, verifies your public DNS zone, and obtains the
@@ -252,7 +257,7 @@ profile is:
 | NAT gateways | 1 |
 | EKS workers | 2 × `t3.large`; maximum 2 |
 | Application replicas | 1 each |
-| RDS | Single-AZ `db.t4g.small` |
+| RDS | Single-AZ `db.t3.micro`; 20 GiB `gp2`; no storage autoscaling; one-day backups |
 | Redis | 2 × `cache.t4g.micro`, with failover |
 | Platform bootstrap | On-demand, non-privileged CodeBuild Small; maximum 45 build minutes |
 
@@ -344,9 +349,10 @@ not post stock without a human.
 
 ## Scope and current limits
 
-For the first-apply EKS service-role, RDS retention, budget-tagging and SNS
+For the first-apply EKS service-role, RDS class/retention, budget-tagging and SNS
 policy errors, use [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md). It preserves the
-existing Terraform state and credentials while updating the pipeline policies.
+existing state and AWS credentials. The micro RDS profile requires replacing
+`TFVARS_JSON` with the newly generated configuration object.
 
 - This implements one active AWS environment per repository configuration.
   Four Kustomize profiles remain available. It does not implement a complete

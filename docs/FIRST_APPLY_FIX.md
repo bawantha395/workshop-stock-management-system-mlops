@@ -1,50 +1,57 @@
-# Resume the partially completed AWS apply
+# Resume AWS with the minimum demo database
 
-For `bawantha395/workshop-stock-management-system-mlops`, AWS account
-`721274598579`, Sydney `ap-southeast-2`, environment `stocklane-dev`.
+Repository: `bawantha395/workshop-stock-management-system-mlops`.
+AWS account: `721274598579`. Region: Sydney, `ap-southeast-2`.
 
-The apply completed some resources, including ElastiCache, then reported four
-errors. A failed Terraform apply does not roll back resources that succeeded.
-Keep the existing remote state bucket and key. Completed resources can continue
-using credits while deployment is paused.
+SNS and the monthly budget completed in the latest apply. EKS node-group
+creation still reported a service-linked-role read error; RDS rejected the
+previous `db.t4g.small` class. Keep the existing resources and remote state.
 
-## What changed
+## Current corrections
 
-| Failure | Correction |
+| Setting | Demo value |
 | --- | --- |
-| EKS could not validate `AWSServiceRoleForAmazonEKSNodegroup` | The plan/apply roles can read that exact service-linked role ARN. Existing permission to create the EKS service-linked role stays service-scoped. |
-| RDS rejected 14 days of backups on this Free plan | Dev/test/UAT default to one day of automated backups. Production retains its 14-day default. `database_backup_retention_days` supports an explicit account-compatible override from 1 to 35 whole days. |
-| AWS Budgets denied `budgets:TagResource` | Apply can tag/untag the one project monthly budget. Plan/apply can read that budget's tags for refresh. |
-| SNS rejected the topic policy's action scope | Owner and TLS-deny statements enumerate SNS's supported topic-policy actions. CloudWatch's source-account/source-alarm constraints and topic encryption remain. |
+| Database class | `db.t3.micro` |
+| Database availability | Single-AZ |
+| Database storage | 20 GiB `gp2` |
+| Storage autoscaling | Disabled, maximum allocated storage `0` |
+| Automated backups | One day |
 
-AWS documents the [SNS topic-policy action list](https://docs.aws.amazon.com/sns/latest/dg/sns-access-policy-language-api-permissions-reference.html),
-[budget tagging permissions](https://docs.aws.amazon.com/service-authorization/latest/reference/list_budgets.html),
-[EKS node-group service-linked role](https://docs.aws.amazon.com/eks/latest/userguide/using-service-linked-roles-eks-nodegroups.html)
-and [RDS backup retention settings](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.BackupRetention.html).
-The supplied error confirms that this account rejected 14 days; the one-day
-setting is a conservative correction and still needs acceptance by this account.
-It is not a claim that AWS publishes a universal one-day Free-plan maximum.
+AWS's [PostgreSQL getting-started guide](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_GettingStarted.CreatingConnecting.PostgreSQL.html)
+uses `db.t3.micro` for its Free tier example. Account eligibility and available
+regional capacity still need confirmation during deployment. This is the demo
+profile; the production capacity profile keeps its existing settings.
 
-## 1. Upload the corrected files to the existing repository
+The updated CloudShell bootstrap verifies the account-wide
+`AWSServiceRoleForAmazonEKSNodegroup`. It creates that AWS-managed role only
+when IAM reports `NoSuchEntity`. Existing roles are reused; denied reads do not
+trigger a creation attempt. The role is a shared account prerequisite, not a
+Terraform-managed role that should be destroyed with one application.
 
-Copy this project's contents into your existing Git checkout, keeping its Git
-history, then commit and push to `main`. The functional changes are in:
+The plan and apply workflows now test their own `iam:GetRole` access before
+Terraform initialization. They distinguish a missing role from a denied read.
+The repeated EKS message alone does not establish which condition caused the
+server-side validation error. The new check supplies direct evidence instead
+of widening IAM permissions without evidence.
 
-- `infra/ci/identity.json`
+## 1. Update the existing repository
+
+Copy the updated project contents into your existing checkout, then commit and
+push to `main`. Keep the existing repository and history. The additional runtime
+changes for this follow-up are:
+
+- `infra/ci/capacity-demo.json`
 - `infra/aws/variables.tf`
 - `infra/aws/data.tf`
-- `infra/aws/ml-observability.tf`
+- `scripts/bootstrap_pipeline.py`
+- `scripts/pipeline_common.py`
+- `scripts/pipeline_terraform.py`
 
-The archive also includes regression tests and this recovery guide. Wait for
-**Validate platform** to pass on the new commit. A push may automatically start
-a Terraform plan; generate another after the permission update below completes.
+The archive also retains the earlier IAM, Cognito, SNS and backup corrections,
+and includes the tests and updated guides. Wait for **Validate platform** to
+pass on the new commit.
 
-## 2. Update the existing pipeline-role policies once in CloudShell
-
-The CI apply role deliberately cannot modify its own permissions. Run this
-through your existing operator session in CloudShell. The helper updates the
-existing `stocklane-dev-github-trust` CloudFormation stack. It creates no new
-access key because `--create-access-key` is omitted.
+## 2. Run the updated bootstrap in CloudShell
 
 ```bash
 export AWS_REGION=ap-southeast-2
@@ -66,25 +73,58 @@ python3 scripts/bootstrap_pipeline.py \
   --execute
 ```
 
-Expect changes to `PlanRole` and `ApplyRole`, followed by **AWS trust is ready**.
-Keep the GitHub secrets and variables already configured. The helper writes its
-local setup handoff again, but does not change GitHub settings. The existing
-`TFVARS_JSON` with environment `dev` already selects one-day backups when no
-explicit retention override is present.
+An unchanged trust-stack template is expected when the IAM correction has
+already been applied. The helper still checks the service-linked role when
+`--execute` is supplied. Expect:
 
-## 3. Generate a fresh plan and apply it
+```text
+EKS node-group service-linked role is ready: arn:aws:iam::721274598579:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup
+```
 
-1. Open **Actions → Plan AWS infrastructure → Run workflow**, branch `main`.
-2. Review the new summary. Terraform refreshes the existing state and should
-   retain completed resources. If it proposes unexpected deletions or
-   replacements, inspect them before proceeding.
-3. Open **Apply reviewed Terraform plan**, branch `main`, and enter this new
-   plan's ID and SHA256. Set `allow_deletions` to `false` and
-   `prepare_release` to `true`.
-4. After apply succeeds, follow the automatically dispatched **Prepare AWS
-   release** workflow and review its deployment PR as described in
-   [PIPELINE_SETUP.md](PIPELINE_SETUP.md).
+If IAM denies this step, retain that specific error. The helper does not change
+SCPs or treat denied reads as missing roles. No new access key is requested.
 
-The old saved plan is stale after a partial apply. Do not use its ID/checksum,
-delete the state, destroy the stack or start from an empty state. The existing
-Terraform backend does not need to be bootstrapped again for this fix.
+## 3. Replace only the TFVARS_JSON secret
+
+This time the existing GitHub secret must change: it still contains the old
+RDS class. Source defaults cannot override an explicit value in that secret.
+
+Print the new configuration object in your own CloudShell session:
+
+```bash
+python3 -c 'import json; print(json.dumps(json.load(open("deploy/generated/github-setup.json"))["repository_secret"]["value"], indent=2))'
+```
+
+Copy the complete printed object into GitHub **Settings → Secrets and variables
+→ Actions → Repository secrets → TFVARS_JSON → Update**.
+
+Verify these entries are present:
+
+```json
+"database_instance_class": "db.t3.micro",
+"database_multi_az": false,
+"database_storage_type": "gp2",
+"database_max_allocated_storage": 0,
+"database_backup_retention_days": 1
+```
+
+Keep the existing `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and repository
+variables. The printed configuration is not a replacement for those keys.
+
+## 4. Request a new plan, then apply that plan
+
+1. Run **Plan AWS infrastructure** on `main` after the bootstrap and secret
+   update. A plan automatically started by the earlier push may use old inputs;
+   request a fresh one now.
+2. Check for **Verified EKS service-linked role with current workflow
+   credentials**. If this check fails, use its specific missing-role or denied
+   permission error before another apply.
+3. Review the plan log and summary. RDS should request `db.t3.micro`, 20 GiB,
+   `gp2`, one-day backups and Single-AZ. Existing completed resources should be
+   retained. Inspect unexpected deletions or replacements before proceeding.
+4. Run **Apply reviewed Terraform plan** on `main`, supplying this new plan's
+   ID and SHA256, `allow_deletions=false` and `prepare_release=true`.
+
+Do not reuse a plan from before either the partial apply or secret update.
+The existing state bucket/key stays in use. After a successful apply, follow
+**Prepare AWS release** and its deployment PR using [PIPELINE_SETUP.md](PIPELINE_SETUP.md).

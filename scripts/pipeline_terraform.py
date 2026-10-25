@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from botocore.exceptions import ClientError
-from pipeline_common import ROOT, check_account, client, settings, terraform_inputs, write_private
+from pipeline_common import ROOT, check_account, check_eks_nodegroup_role, client, settings, terraform_inputs, write_private
 
 WORK = ROOT / "artifacts" / "terraform"
 MAX_PLAN_AGE = 6 * 60 * 60
@@ -80,6 +80,7 @@ def bootstrap(c):
 
 def prepare(c, readonly_lock=False):
     check_account(c)
+    check_eks_nodegroup_role(c)
     backend_ready(c)
     WORK.mkdir(parents=True, exist_ok=True)
     data = terraform_inputs(c, os.environ["TFVARS_JSON"])

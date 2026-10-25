@@ -62,8 +62,8 @@ resource "aws_db_instance" "main" {
   engine_version                  = "17"
   instance_class                  = var.database_instance_class
   allocated_storage               = 20
-  max_allocated_storage           = 40
-  storage_type                    = "gp3"
+  max_allocated_storage           = var.database_max_allocated_storage
+  storage_type                    = var.database_storage_type
   db_name                         = "stocklane"
   username                        = "stocklane_admin"
   manage_master_user_password     = true

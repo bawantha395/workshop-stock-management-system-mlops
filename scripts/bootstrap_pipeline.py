@@ -17,7 +17,20 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 
-from pipeline_common import REGION, ROOT, write_private
+from pipeline_common import EKS_NODEGROUP_ROLE, REGION, ROOT, verify_eks_nodegroup_role, write_private
+
+
+def ensure_eks_nodegroup_role(iam, account):
+    try:
+        arn = verify_eks_nodegroup_role(iam, account)
+    except ClientError as error:
+        if error.response["Error"]["Code"] != "NoSuchEntity":
+            raise
+        iam.create_service_linked_role(AWSServiceName="eks-nodegroup.amazonaws.com")
+        iam.get_waiter("role_exists").wait(RoleName=EKS_NODEGROUP_ROLE,
+                                          WaiterConfig={"Delay": 2, "MaxAttempts": 15})
+        arn = verify_eks_nodegroup_role(iam, account)
+    print("EKS node-group service-linked role is ready:", arn)
 
 
 def discover_oidc_provider(iam):
@@ -167,6 +180,10 @@ def bootstrap(args):
             print("AWS trust is ready")
         else:
             print("No IAM resources were provisioned. Review the change set and execute it in CloudFormation.")
+    if args.execute:
+        # Account-wide AWS-managed prerequisite, reused across EKS clusters.
+        # Do not rely on EKS's automatic creation during a restricted CI session.
+        ensure_eks_nodegroup_role(iam, account)
     if args.operator_cidr:
         cidr = args.operator_cidr
     else:
