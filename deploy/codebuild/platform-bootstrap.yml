@@ -1,0 +1,14 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: "3.12"
+    commands:
+      - pip install -r scripts/requirements.txt
+      - python scripts/install_kustomize.py --directory /tmp/stocklane-tools
+      - python scripts/install_kubectl.py --directory /tmp/stocklane-tools
+      - export PATH="/tmp/stocklane-tools:$PATH"
+  build:
+    commands:
+      - python scripts/run_platform_bootstrap.py --config deploy/generated/aws.outputs.json
+

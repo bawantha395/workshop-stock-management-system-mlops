@@ -1,0 +1,1396 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "One-time GitHub OIDC trust, separate backend/plan/apply roles and a maximum workload permissions boundary.",
+  "Parameters": {
+    "ProjectName": {
+      "Type": "String",
+      "AllowedPattern": "[a-z][a-z0-9-]{2,19}",
+      "Description": "Terraform name prefix, for example stocklane-dev."
+    },
+    "Environment": {
+      "Type": "String",
+      "AllowedValues": [
+        "dev",
+        "test",
+        "uat",
+        "production"
+      ],
+      "Default": "dev"
+    },
+    "GitHubRepository": {
+      "Type": "String",
+      "AllowedPattern": "[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"
+    },
+    "GitHubOwnerId": {
+      "Type": "String",
+      "AllowedPattern": "[1-9][0-9]*"
+    },
+    "GitHubRepositoryId": {
+      "Type": "String",
+      "AllowedPattern": "[1-9][0-9]*"
+    },
+    "OidcSubjectStyle": {
+      "Type": "String",
+      "AllowedValues": [
+        "immutable",
+        "legacy"
+      ],
+      "Default": "immutable"
+    },
+    "ExistingOidcProviderArn": {
+      "Type": "String",
+      "Default": ""
+    },
+    "StateBucketName": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]"
+    },
+    "HostedZoneId": {
+      "Type": "String",
+      "AllowedPattern": "Z[A-Z0-9]+"
+    },
+    "ApiDomain": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9.-]+",
+      "Description": "Owned API hostname; only its DNS records may be changed."
+    }
+  },
+  "Conditions": {
+    "CreateOidcProvider": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingOidcProviderArn"
+        },
+        ""
+      ]
+    },
+    "ImmutableSubject": {
+      "Fn::Equals": [
+        {
+          "Ref": "OidcSubjectStyle"
+        },
+        "immutable"
+      ]
+    }
+  },
+  "Resources": {
+    "GitHubProvider": {
+      "Type": "AWS::IAM::OIDCProvider",
+      "Condition": "CreateOidcProvider",
+      "Properties": {
+        "Url": "https://token.actions.githubusercontent.com",
+        "ClientIdList": [
+          "sts.amazonaws.com"
+        ]
+      }
+    },
+    "BootstrapRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-ci-bootstrap"
+        },
+        "MaxSessionDuration": 7200,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::If": [
+                    "CreateOidcProvider",
+                    {
+                      "Ref": "GitHubProvider"
+                    },
+                    {
+                      "Ref": "ExistingOidcProviderArn"
+                    }
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": {
+                    "Fn::If": [
+                      "ImmutableSubject",
+                      {
+                        "Fn::Sub": [
+                          "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-bootstrap",
+                          {
+                            "Owner": {
+                              "Fn::Select": [
+                                0,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "GitHubRepository"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "Repository": {
+                              "Fn::Select": [
+                                1,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "GitHubRepository"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "Fn::Sub": "repo:${GitHubRepository}:environment:aws-bootstrap"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "pipeline-bootstrap",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ManageOnlyBackendStack",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:CreateStack",
+                    "cloudformation:UpdateStack",
+                    "cloudformation:CreateChangeSet",
+                    "cloudformation:DescribeChangeSet",
+                    "cloudformation:ExecuteChangeSet",
+                    "cloudformation:DeleteChangeSet",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:DescribeStackEvents",
+                    "cloudformation:GetTemplate",
+                    "cloudformation:GetTemplateSummary"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-terraform-backend/*"
+                  }
+                },
+                {
+                  "Sid": "BackendBucketConfiguration",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:CreateBucket",
+                    "s3:PutBucketPolicy",
+                    "s3:DeleteBucketPolicy",
+                    "s3:PutBucketVersioning",
+                    "s3:PutEncryptionConfiguration",
+                    "s3:PutBucketPublicAccessBlock",
+                    "s3:PutBucketOwnershipControls",
+                    "s3:PutLifecycleConfiguration",
+                    "s3:PutBucketTagging",
+                    "s3:GetBucket*",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:GetLifecycleConfiguration",
+                    "s3:ListBucket",
+                    "s3:ListBucketVersions"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}"
+                  }
+                },
+                {
+                  "Sid": "ReadCurrentState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate"
+                  }
+                },
+                {
+                  "Sid": "SeedNewEmptyStateOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:if-none-match": "*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadTemplateSchema",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:GetTemplateSummary",
+                    "cloudformation:ValidateTemplate"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "PlanRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-ci-plan"
+        },
+        "MaxSessionDuration": 7200,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::If": [
+                    "CreateOidcProvider",
+                    {
+                      "Ref": "GitHubProvider"
+                    },
+                    {
+                      "Ref": "ExistingOidcProviderArn"
+                    }
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": {
+                    "Fn::If": [
+                      "ImmutableSubject",
+                      {
+                        "Fn::Sub": [
+                          "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-infrastructure-plan",
+                          {
+                            "Owner": {
+                              "Fn::Select": [
+                                0,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "GitHubRepository"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "Repository": {
+                              "Fn::Select": [
+                                1,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "GitHubRepository"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "Fn::Sub": "repo:${GitHubRepository}:environment:aws-infrastructure-plan"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "pipeline-plan",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "StateBucketDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketVersioning",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:GetBucketPublicAccessBlock"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}"
+                  }
+                },
+                {
+                  "Sid": "ReadCurrentState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate"
+                  }
+                },
+                {
+                  "Sid": "LockTerraformState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate.tflock"
+                  }
+                },
+                {
+                  "Sid": "PrivateSavedPlans",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/plans/${Environment}/*"
+                  }
+                },
+                {
+                  "Sid": "RegionalTerraformDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:Describe*",
+                    "eks:Describe*",
+                    "eks:List*",
+                    "rds:Describe*",
+                    "rds:ListTagsForResource",
+                    "elasticache:Describe*",
+                    "elasticache:ListTagsForResource",
+                    "ecr:Describe*",
+                    "ecr:List*",
+                    "ecr:GetRepositoryPolicy",
+                    "ecr:GetLifecyclePolicy",
+                    "logs:Describe*",
+                    "logs:List*",
+                    "logs:GetDataProtectionPolicy",
+                    "sagemaker:Describe*",
+                    "sagemaker:List*",
+                    "sqs:GetQueueAttributes",
+                    "sqs:GetQueueUrl",
+                    "sqs:ListQueues",
+                    "sqs:ListQueueTags",
+                    "kms:Describe*",
+                    "kms:GetKeyPolicy",
+                    "kms:GetKeyRotationStatus",
+                    "kms:List*",
+                    "sns:GetTopicAttributes",
+                    "sns:GetSubscriptionAttributes",
+                    "sns:List*",
+                    "cognito-idp:Describe*",
+                    "cognito-idp:List*",
+                    "cognito-idp:GetUserPoolMfaConfig",
+                    "acm:Describe*",
+                    "acm:List*",
+                    "codebuild:BatchGetProjects",
+                    "codebuild:List*",
+                    "servicequotas:GetServiceQuota",
+                    "cloudwatch:DescribeAlarms",
+                    "cloudwatch:ListTagsForResource"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "IamDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListRolePolicies",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRoleTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+                  }
+                },
+                {
+                  "Sid": "GlobalTerraformDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:ListRoles",
+                    "iam:ListPolicies",
+                    "iam:GetPolicy",
+                    "iam:GetPolicyVersion",
+                    "iam:GetOpenIDConnectProvider",
+                    "iam:ListOpenIDConnectProviders",
+                    "cloudfront:Get*",
+                    "cloudfront:List*",
+                    "budgets:ViewBudget",
+                    "route53:GetChange"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadOwnedHostedZone",
+                  "Effect": "Allow",
+                  "Action": [
+                    "route53:GetHostedZone",
+                    "route53:ListResourceRecordSets"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
+                  }
+                },
+                {
+                  "Sid": "ReadProjectBucketConfiguration",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucket*",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:GetLifecycleConfiguration",
+                    "s3:GetAccelerateConfiguration",
+                    "s3:GetReplicationConfiguration",
+                    "s3:GetBucketObjectLockConfiguration",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-media-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-models-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-web-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "RefreshProjectSecretVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetResourcePolicy",
+                    "secretsmanager:ListSecretVersionIds"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*"
+                  }
+                },
+                {
+                  "Sid": "DecryptProjectSecrets",
+                  "Effect": "Allow",
+                  "Action": [
+                    "kms:Decrypt"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:ResourceTag/Project": {
+                        "Ref": "ProjectName"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "WriteNewSavedPlansOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/plans/${Environment}/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:if-none-match": "*"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "ApplyRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${ProjectName}-ci-apply"
+        },
+        "MaxSessionDuration": 7200,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::If": [
+                    "CreateOidcProvider",
+                    {
+                      "Ref": "GitHubProvider"
+                    },
+                    {
+                      "Ref": "ExistingOidcProviderArn"
+                    }
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": {
+                    "Fn::If": [
+                      "ImmutableSubject",
+                      {
+                        "Fn::Sub": [
+                          "repo:${Owner}@${GitHubOwnerId}/${Repository}@${GitHubRepositoryId}:environment:aws-infrastructure-apply",
+                          {
+                            "Owner": {
+                              "Fn::Select": [
+                                0,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "GitHubRepository"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "Repository": {
+                              "Fn::Select": [
+                                1,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "GitHubRepository"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "Fn::Sub": "repo:${GitHubRepository}:environment:aws-infrastructure-apply"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "pipeline-apply",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "StateBucketDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketVersioning",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:GetBucketPublicAccessBlock"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}"
+                  }
+                },
+                {
+                  "Sid": "ReadCurrentState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate"
+                  }
+                },
+                {
+                  "Sid": "LockTerraformState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate.tflock"
+                  }
+                },
+                {
+                  "Sid": "PrivateSavedPlans",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/plans/${Environment}/*"
+                  }
+                },
+                {
+                  "Sid": "RegionalTerraformDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:Describe*",
+                    "eks:Describe*",
+                    "eks:List*",
+                    "rds:Describe*",
+                    "rds:ListTagsForResource",
+                    "elasticache:Describe*",
+                    "elasticache:ListTagsForResource",
+                    "ecr:Describe*",
+                    "ecr:List*",
+                    "ecr:GetRepositoryPolicy",
+                    "ecr:GetLifecyclePolicy",
+                    "logs:Describe*",
+                    "logs:List*",
+                    "logs:GetDataProtectionPolicy",
+                    "sagemaker:Describe*",
+                    "sagemaker:List*",
+                    "sqs:GetQueueAttributes",
+                    "sqs:GetQueueUrl",
+                    "sqs:ListQueues",
+                    "sqs:ListQueueTags",
+                    "kms:Describe*",
+                    "kms:GetKeyPolicy",
+                    "kms:GetKeyRotationStatus",
+                    "kms:List*",
+                    "sns:GetTopicAttributes",
+                    "sns:GetSubscriptionAttributes",
+                    "sns:List*",
+                    "cognito-idp:Describe*",
+                    "cognito-idp:List*",
+                    "cognito-idp:GetUserPoolMfaConfig",
+                    "acm:Describe*",
+                    "acm:List*",
+                    "codebuild:BatchGetProjects",
+                    "codebuild:List*",
+                    "servicequotas:GetServiceQuota",
+                    "cloudwatch:DescribeAlarms",
+                    "cloudwatch:ListTagsForResource"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "IamDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetRolePolicy",
+                    "iam:ListRolePolicies",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRoleTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+                  }
+                },
+                {
+                  "Sid": "GlobalTerraformDiscovery",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:ListRoles",
+                    "iam:ListPolicies",
+                    "iam:GetPolicy",
+                    "iam:GetPolicyVersion",
+                    "iam:GetOpenIDConnectProvider",
+                    "iam:ListOpenIDConnectProviders",
+                    "cloudfront:Get*",
+                    "cloudfront:List*",
+                    "budgets:ViewBudget",
+                    "route53:GetChange"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ReadOwnedHostedZone",
+                  "Effect": "Allow",
+                  "Action": [
+                    "route53:GetHostedZone",
+                    "route53:ListResourceRecordSets"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
+                  }
+                },
+                {
+                  "Sid": "ReadProjectBucketConfiguration",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucket*",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:GetLifecycleConfiguration",
+                    "s3:GetAccelerateConfiguration",
+                    "s3:GetReplicationConfiguration",
+                    "s3:GetBucketObjectLockConfiguration",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-media-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-models-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-web-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "RefreshProjectSecretVersions",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetResourcePolicy",
+                    "secretsmanager:ListSecretVersionIds"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*"
+                  }
+                },
+                {
+                  "Sid": "WriteTerraformState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate"
+                  }
+                },
+                {
+                  "Sid": "ProvisionRegionalPlatformServices",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:*",
+                    "eks:*",
+                    "rds:*",
+                    "elasticache:*",
+                    "ecr:*",
+                    "logs:*",
+                    "sqs:*",
+                    "kms:*",
+                    "sns:*",
+                    "cognito-idp:*",
+                    "acm:*",
+                    "codebuild:*",
+                    "cloudwatch:*"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageProjectModelGroup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "sagemaker:CreateModelPackageGroup",
+                    "sagemaker:DeleteModelPackageGroup",
+                    "sagemaker:DescribeModelPackageGroup",
+                    "sagemaker:AddTags",
+                    "sagemaker:DeleteTags",
+                    "sagemaker:ListTags"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:model-package-group/${ProjectName}-*"
+                  }
+                },
+                {
+                  "Sid": "ManageProjectRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:DeleteRole",
+                    "iam:UpdateRole",
+                    "iam:UpdateAssumeRolePolicy",
+                    "iam:TagRole",
+                    "iam:UntagRole",
+                    "iam:PutRolePolicy",
+                    "iam:DeleteRolePolicy"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+                  }
+                },
+                {
+                  "Sid": "AttachReviewedAwsPolicies",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:AttachRolePolicy",
+                    "iam:DetachRolePolicy"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+                  },
+                  "Condition": {
+                    "ArnEquals": {
+                      "iam:PolicyARN": [
+                        {
+                          "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSClusterPolicy"
+                        },
+                        {
+                          "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+                        },
+                        {
+                          "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
+                        },
+                        {
+                          "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonEKS_CNI_Policy"
+                        },
+                        {
+                          "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "PassProjectServiceRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:PassRole"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": [
+                        "eks.amazonaws.com",
+                        "ec2.amazonaws.com",
+                        "pods.eks.amazonaws.com",
+                        "sagemaker.amazonaws.com",
+                        "codebuild.amazonaws.com"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "RequiredServiceLinkedRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:CreateServiceLinkedRole"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:AWSServiceName": [
+                        "eks.amazonaws.com",
+                        "eks-nodegroup.amazonaws.com",
+                        "elasticloadbalancing.amazonaws.com",
+                        "rds.amazonaws.com",
+                        "elasticache.amazonaws.com"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageProjectSecrets",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:*"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageProjectBuckets",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:*"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-media-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-media-${AWS::AccountId}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-models-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-models-${AWS::AccountId}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-web-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-web-${AWS::AccountId}/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}/*"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ManageCertificateAndApiRecords",
+                  "Effect": "Allow",
+                  "Action": [
+                    "route53:ChangeResourceRecordSets"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
+                  },
+                  "Condition": {
+                    "ForAllValues:StringLike": {
+                      "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+                        {
+                          "Ref": "ApiDomain"
+                        },
+                        {
+                          "Fn::Sub": "*.${ApiDomain}"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "ManageFrontendDistribution",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudfront:CreateDistribution",
+                    "cloudfront:UpdateDistribution",
+                    "cloudfront:DeleteDistribution",
+                    "cloudfront:TagResource",
+                    "cloudfront:UntagResource",
+                    "cloudfront:CreateOriginAccessControl",
+                    "cloudfront:UpdateOriginAccessControl",
+                    "cloudfront:DeleteOriginAccessControl"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "ManageProjectBudget",
+                  "Effect": "Allow",
+                  "Action": [
+                    "budgets:ModifyBudget"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/${ProjectName}-monthly"
+                  }
+                },
+                {
+                  "Sid": "PublishDeploymentMetadata",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}/outputs/${Environment}/*"
+                  }
+                },
+                {
+                  "Sid": "ProtectPipelineTrust",
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:CreateRole",
+                    "iam:DeleteRole",
+                    "iam:UpdateRole",
+                    "iam:UpdateAssumeRolePolicy",
+                    "iam:PutRolePolicy",
+                    "iam:DeleteRolePolicy",
+                    "iam:AttachRolePolicy",
+                    "iam:DetachRolePolicy",
+                    "iam:PutRolePermissionsBoundary",
+                    "iam:DeleteRolePermissionsBoundary",
+                    "iam:TagRole",
+                    "iam:UntagRole"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-ci-bootstrap"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-ci-plan"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-ci-apply"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "ProtectStateBucketGovernance",
+                  "Effect": "Deny",
+                  "Action": [
+                    "s3:DeleteBucket",
+                    "s3:PutBucketPolicy",
+                    "s3:DeleteBucketPolicy",
+                    "s3:PutBucketPublicAccessBlock",
+                    "s3:PutBucketVersioning",
+                    "s3:PutEncryptionConfiguration",
+                    "s3:PutLifecycleConfiguration",
+                    "s3:PutBucketOwnershipControls"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}"
+                  }
+                },
+                {
+                  "Sid": "ProtectStateHistory",
+                  "Effect": "Deny",
+                  "Action": [
+                    "s3:DeleteObject",
+                    "s3:DeleteObjectVersion"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/state/${Environment}/terraform.tfstate"
+                  }
+                },
+                {
+                  "Sid": "WriteNewSavedPlansOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::${StateBucketName}/plans/${Environment}/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "s3:if-none-match": "*"
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateOnlyBoundedProjectRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:CreateRole"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+                  },
+                  "Condition": {
+                    "ArnEquals": {
+                      "iam:PermissionsBoundary": {
+                        "Ref": "WorkloadBoundary"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": {
+              "Ref": "ProjectName"
+            }
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "CloudFormation"
+          }
+        ]
+      }
+    },
+    "WorkloadBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": {
+          "Fn::Sub": "${ProjectName}-workload-boundary"
+        },
+        "Description": "Maximum permissions for Terraform-created workload roles; excludes IAM administration and CI state.",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "RegionalWorkloadServices",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:*",
+                "elasticloadbalancing:*",
+                "eks:*",
+                "eks-auth:*",
+                "ecr:*",
+                "logs:*",
+                "sqs:*",
+                "sns:*",
+                "secretsmanager:*",
+                "kms:*",
+                "sagemaker:*",
+                "codebuild:*",
+                "bedrock:InvokeModel",
+                "acm:DescribeCertificate",
+                "acm:ListCertificates",
+                "cognito-idp:DescribeUserPoolClient"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "ProjectObjectStorage",
+              "Effect": "Allow",
+              "Action": [
+                "s3:*"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-media-${AWS::AccountId}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-media-${AWS::AccountId}/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-models-${AWS::AccountId}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-models-${AWS::AccountId}/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-web-${AWS::AccountId}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-web-${AWS::AccountId}/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProjectName}-automation-${AWS::AccountId}/*"
+                }
+              ]
+            },
+            {
+              "Sid": "ReadPublicServerCertificates",
+              "Effect": "Allow",
+              "Action": [
+                "iam:GetServerCertificate",
+                "iam:ListServerCertificates"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "FrontendInvalidation",
+              "Effect": "Allow",
+              "Action": [
+                "cloudfront:CreateInvalidation"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*"
+              }
+            },
+            {
+              "Sid": "PublishOnlyOwnedApiAlias",
+              "Effect": "Allow",
+              "Action": [
+                "route53:ChangeResourceRecordSets"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+                    {
+                      "Ref": "ApiDomain"
+                    }
+                  ],
+                  "route53:ChangeResourceRecordSetsRecordTypes": [
+                    "A"
+                  ],
+                  "route53:ChangeResourceRecordSetsActions": [
+                    "UPSERT"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "PassOnlyBoundedProjectRoles",
+              "Effect": "Allow",
+              "Action": [
+                "iam:PassRole"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": [
+                    "sagemaker.amazonaws.com",
+                    "codebuild.amazonaws.com",
+                    "eks.amazonaws.com",
+                    "ec2.amazonaws.com",
+                    "pods.eks.amazonaws.com"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "LoadBalancerServiceLinkedRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:CreateServiceLinkedRole"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "iam:AWSServiceName": "elasticloadbalancing.amazonaws.com"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "StateBucketName": {
+      "Value": {
+        "Ref": "StateBucketName"
+      }
+    },
+    "OidcProviderArn": {
+      "Value": {
+        "Fn::If": [
+          "CreateOidcProvider",
+          {
+            "Ref": "GitHubProvider"
+          },
+          {
+            "Ref": "ExistingOidcProviderArn"
+          }
+        ]
+      }
+    },
+    "BootstrapRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "BootstrapRole",
+          "Arn"
+        ]
+      }
+    },
+    "PlanRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "PlanRole",
+          "Arn"
+        ]
+      }
+    },
+    "ApplyRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ApplyRole",
+          "Arn"
+        ]
+      }
+    },
+    "WorkloadBoundaryArn": {
+      "Value": {
+        "Ref": "WorkloadBoundary"
+      }
+    }
+  }
+}

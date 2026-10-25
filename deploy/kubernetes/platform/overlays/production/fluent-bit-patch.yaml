@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: amazon-cloudwatch
+spec:
+  template:
+    spec:
+      containers:
+      - name: fluent-bit
+        env:
+        - name: AWS_REGION
+          value: REPLACE_AWS_REGION
+        - name: LOG_GROUP_NAME
+          value: REPLACE_APPLICATION_LOG_GROUP

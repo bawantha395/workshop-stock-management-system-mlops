@@ -1,0 +1,28 @@
+name: Publish reviewed frontend
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_DEFAULT_REGION: ap-southeast-2
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+  TF_ENVIRONMENT: ${{ vars.TF_ENVIRONMENT || 'dev' }}
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: aws-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ format('arn:aws:iam::{0}:role/{1}-github-release', vars.AWS_ACCOUNT_ID, vars.PROJECT_NAME) }}
+          aws-region: ap-southeast-2
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - run: pip install boto3==1.43.118
+      - run: python scripts/publish_frontend.py --environment "$TF_ENVIRONMENT"

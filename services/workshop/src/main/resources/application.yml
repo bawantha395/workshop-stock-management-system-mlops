@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: workshop
+  profiles:
+    default: cloud
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  flyway:
+    default-schema: ${DATABASE_SCHEMA:workshop}
+    schemas: ${DATABASE_SCHEMA:workshop}
+server:
+  port: 8082
+  error:
+    include-message: never
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    redis:
+      enabled: false
+app:
+  auth-mode: ${AUTH_MODE:cognito}
+  internal-token: ${INTERNAL_TOKEN}
+  inventory-control-token: ${INVENTORY_CONTROL_TOKEN:}
+  cognito-issuer: ${COGNITO_ISSUER:}
+  cognito-clients: ${COGNITO_CLIENT_IDS:}
+  inventory-url: ${INVENTORY_URL:http://inventory:8081}
+  stock-queue: ${STOCK_QUEUE_URL:}
+  event-mode: ${EVENT_MODE:sqs}
+  media-bucket: ${MEDIA_BUCKET:}
+  files-root: ${FILES_ROOT:./.data/invoices}

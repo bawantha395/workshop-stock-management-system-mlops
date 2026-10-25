@@ -1,0 +1,10 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: stocklane-platform
+  namespace: argocd
+spec:
+  source:
+    path: deploy/kubernetes/platform/overlays/dev
+  destination:
+    namespace: kube-system

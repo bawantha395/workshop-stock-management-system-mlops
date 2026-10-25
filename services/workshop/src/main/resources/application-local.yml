@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:file:./.data/workshop;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${DATABASE_USER:sa}
+    password: ${DATABASE_PASSWORD:}
+  flyway:
+    default-schema: ${DATABASE_SCHEMA:public}
+    schemas: ${DATABASE_SCHEMA:public}
+app:
+  auth-mode: local
+  internal-token: ${INTERNAL_TOKEN:local-development-service-token-32-characters}
+  inventory-control-token: ${INVENTORY_CONTROL_TOKEN:${INTERNAL_TOKEN:local-development-service-token-32-characters}}
+  inventory-url: ${INVENTORY_URL:http://localhost:8081}
+  event-mode: http

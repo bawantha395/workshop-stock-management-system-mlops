@@ -1,0 +1,123 @@
+name: stocklane
+services:
+  model-init:
+    image: python:3.12-slim
+    profiles: [tools]
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      PYTHONPATH: /tmp/model-prep
+    volumes:
+      - ./models:/models
+      - ./scripts/download_model.py:/prepare.py:ro
+    command: [sh, -c, 'pip install --no-cache-dir --target=/tmp/model-prep onnx==1.23.2 numpy==2.5.4 && python /prepare.py --destination /models/baseline']
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: stocklane
+      POSTGRES_USER: stocklane_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/configure_local.py first}
+      INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD}
+      WORKSHOP_DB_PASSWORD: ${WORKSHOP_DB_PASSWORD}
+      VISION_DB_PASSWORD: ${VISION_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/local/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U stocklane_admin -d stocklane]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7.4-alpine
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: [sh, -c, 'exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no']
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep PONG']
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  inventory:
+    build:
+      context: .
+      dockerfile: deploy/docker/Java.Dockerfile
+      args:
+        SERVICE: inventory
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/stocklane?currentSchema=inventory
+      DATABASE_SCHEMA: inventory
+      DATABASE_USER: inventory
+      DATABASE_PASSWORD: ${INVENTORY_DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      WORKSHOP_URL: http://workshop:8082
+      VISION_URL: http://vision:8083
+    ports: [127.0.0.1:8081:8081]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS http://localhost:8081/actuator/health/readiness || exit 1']
+      interval: 10s
+      start_period: 45s
+      retries: 15
+    restart: unless-stopped
+  workshop:
+    build:
+      context: .
+      dockerfile: deploy/docker/Java.Dockerfile
+      args:
+        SERVICE: workshop
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/stocklane?currentSchema=workshop
+      DATABASE_SCHEMA: workshop
+      DATABASE_USER: workshop
+      DATABASE_PASSWORD: ${WORKSHOP_DB_PASSWORD}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      INVENTORY_URL: http://inventory:8081
+      FILES_ROOT: /data/invoices
+    volumes: [invoices:/data/invoices]
+    ports: [127.0.0.1:8082:8082]
+    depends_on:
+      inventory: {condition: service_healthy}
+    restart: unless-stopped
+  vision:
+    build:
+      context: .
+      dockerfile: deploy/docker/Vision.Dockerfile
+    environment:
+      ENVIRONMENT: local
+      AUTH_MODE: local
+      DATABASE_URL: postgresql+psycopg://vision:${VISION_DB_PASSWORD}@postgres:5432/stocklane
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      INVENTORY_URL: http://inventory:8081
+      FILES_ROOT: /data/images
+      WORKSHOP_URL: http://workshop:8082
+      VISION_URL: http://localhost:8083
+      MODEL_DIR: /models/baseline
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      AWS_REGION: ${AWS_REGION:-eu-west-1}
+    volumes:
+      - images:/data/images
+      - ./models:/models:ro
+    ports: [127.0.0.1:8083:8083]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/Web.Dockerfile
+    ports: [127.0.0.1:4173:8080]
+    depends_on: [inventory, workshop, vision]
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  images:
+  invoices:

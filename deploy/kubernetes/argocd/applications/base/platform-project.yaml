@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: stocklane-platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+spec:
+  sourceRepos:
+  - https://github.com/bawantha395/workshop-stock-management--system-mlops.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: '*'
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'

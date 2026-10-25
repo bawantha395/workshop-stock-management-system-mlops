@@ -1,0 +1,11 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/name: aws-load-balancer-controller
+  name: aws-load-balancer-selfsigned-issuer
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+spec:
+  selfSigned: {}

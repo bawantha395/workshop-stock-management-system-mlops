@@ -1,0 +1,4 @@
+-r requirements.lock
+onnx==1.23.2
+pytest==9.1.1
+ruff==0.17.2

@@ -1,0 +1,4 @@
+file,sku,session,split
+images/mob4l-day1-01.jpg,MOB-5W30-4L,2026-10-25-am,train
+images/mob4l-day2-01.jpg,MOB-5W30-4L,2026-10-26-am,validation
+images/mob4l-day3-01.jpg,MOB-5W30-4L,2026-10-27-am,test
