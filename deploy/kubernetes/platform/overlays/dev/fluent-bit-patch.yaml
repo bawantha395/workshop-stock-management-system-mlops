@@ -10,6 +10,6 @@ spec:
       - name: fluent-bit
         env:
         - name: AWS_REGION
-          value: REPLACE_AWS_REGION
+          value: ap-southeast-2
         - name: LOG_GROUP_NAME
-          value: REPLACE_APPLICATION_LOG_GROUP
+          value: /stocklane/stocklane-dev/containers

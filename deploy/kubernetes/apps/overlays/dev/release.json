@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "environment": "dev",
+  "namespace": "stocklane-dev",
+  "model": {
+    "uri": "s3://stocklane-dev-models-721274598579/releases/baseline/30a174a801e8dcc0cc1b49096255f9868e677b638627019590b8913317c27c2c.tar.gz",
+    "sha256": "30a174a801e8dcc0cc1b49096255f9868e677b638627019590b8913317c27c2c"
+  }
+}

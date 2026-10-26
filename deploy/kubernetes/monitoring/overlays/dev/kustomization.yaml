@@ -7,3 +7,5 @@ patches:
 - path: alertmanager-patch.yaml
 - path: prometheus-pdb-patch.yaml
 - path: alertmanager-pdb-patch.yaml
+- path: grafana-secret-patch.yaml
+- path: alertmanager-secret-patch.yaml

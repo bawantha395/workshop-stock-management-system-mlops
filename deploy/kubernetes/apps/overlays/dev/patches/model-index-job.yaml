@@ -1,0 +1,111 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prepare-model-index
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: fetch-model
+        env:
+        - &id001
+          name: AUTH_MODE
+          value: cognito
+        - &id002
+          name: ENVIRONMENT
+          value: cloud
+        - &id003
+          name: SPRING_PROFILES_ACTIVE
+          value: cloud
+        - &id004
+          name: AWS_REGION
+          value: ap-southeast-2
+        - &id005
+          name: COGNITO_ISSUER
+          value: https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_6cFTxEnwa
+        - &id006
+          name: COGNITO_CLIENT_IDS
+          value: 5gds0d8ucnj3o123834fsdr123,2t6a6tvlvdaprqo6tfboq6e89o
+        - &id007
+          name: APP_WEB_ORIGIN
+          value: https://d2lnni381bgho5.cloudfront.net
+        - &id008
+          name: WEB_ORIGIN
+          value: https://d2lnni381bgho5.cloudfront.net
+        - &id009
+          name: INVENTORY_URL
+          value: http://inventory:8081
+        - &id010
+          name: WORKSHOP_URL
+          value: http://workshop:8082
+        - &id011
+          name: VISION_URL
+          value: http://vision:8083
+        - &id012
+          name: STOCK_QUEUE_URL
+          value: https://sqs.ap-southeast-2.amazonaws.com/721274598579/stocklane-dev-stock
+        - &id013
+          name: CATALOGUE_QUEUE_URL
+          value: https://sqs.ap-southeast-2.amazonaws.com/721274598579/stocklane-dev-catalogue
+        - &id014
+          name: EVENT_MODE
+          value: sqs
+        - &id015
+          name: REDIS_HOST
+          value: master.stocklane-dev.g3lygp.apse2.cache.amazonaws.com
+        - &id016
+          name: REDIS_TLS
+          value: 'true'
+        - &id017
+          name: MEDIA_BUCKET
+          value: stocklane-dev-media-721274598579
+        - &id018
+          name: MODEL_DIR
+          value: /models/current
+        - &id019
+          name: MODEL_URI
+          value: s3://stocklane-dev-models-721274598579/releases/baseline/30a174a801e8dcc0cc1b49096255f9868e677b638627019590b8913317c27c2c.tar.gz
+        - &id020
+          name: MODEL_ARCHIVE_SHA256
+          value: 30a174a801e8dcc0cc1b49096255f9868e677b638627019590b8913317c27c2c
+        - &id021
+          name: FILES_ROOT
+          value: /tmp/files
+        - &id022
+          name: BEDROCK_MODEL_ID
+          value: ''
+        - &id023
+          name: DEPLOYMENT_ENVIRONMENT
+          value: dev
+      containers:
+      - name: vision
+        env:
+        - *id001
+        - *id002
+        - *id003
+        - *id004
+        - *id005
+        - *id006
+        - *id007
+        - *id008
+        - *id009
+        - *id010
+        - *id011
+        - *id012
+        - *id013
+        - *id014
+        - *id015
+        - *id016
+        - *id017
+        - *id018
+        - *id019
+        - *id020
+        - *id021
+        - *id022
+        - *id023
+        - name: DATABASE_SCHEMA
+          value: vision
+        - name: PYTHONPATH
+          value: /app
+        - name: REDIS_URL
+          value: rediss://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/0?ssl_cert_reqs=required&ssl_check_hostname=true

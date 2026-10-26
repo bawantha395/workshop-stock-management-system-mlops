@@ -4,3 +4,7 @@ namespace: stocklane-dev
 resources:
 - ../../base
 - configmap.yaml
+images:
+- name: stocklane/operations
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
+  digest: sha256:7a7dbc0ad201303f45c15a4abc82320355f9a5427f3a7594a10c2e8e6a943788
