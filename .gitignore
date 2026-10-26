@@ -20,6 +20,7 @@ __pycache__/
 *.tfvars
 *.tfvars.json
 *.auto.tfvars
+infra/aws/pipeline-recovery.tf
 terraform.tfvars
 !*.tfvars.example
 !*.tfvars.json.example
