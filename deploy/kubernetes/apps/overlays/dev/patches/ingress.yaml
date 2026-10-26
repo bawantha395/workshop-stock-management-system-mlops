@@ -37,3 +37,10 @@ spec:
             name: vision
             port:
               number: 8083
+      - path: /api/forecast
+        pathType: Prefix
+        backend:
+          service:
+            name: forecast
+            port:
+              number: 8084
