@@ -1241,7 +1241,7 @@
                         "UPSERT"
                       ]
                     }
-                  } 
+                  }
                 },
                 {
                   "Sid": "ManageFrontendDistribution",
@@ -1535,6 +1535,30 @@
               "Condition": {
                 "StringEquals": {
                   "iam:AWSServiceName": "elasticloadbalancing.amazonaws.com"
+                }
+              }
+            },
+            {
+              "Sid": "PublishOwnedAdminAliases",
+              "Effect": "Allow",
+              "Action": [
+                "route53:ChangeResourceRecordSets"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
+                    "argocd-stocklane.bawantha-rathnayake.tech",
+                    "grafana-stocklane.bawantha-rathnayake.tech"
+                  ],
+                  "route53:ChangeResourceRecordSetsRecordTypes": [
+                    "A"
+                  ],
+                  "route53:ChangeResourceRecordSetsActions": [
+                    "UPSERT"
+                  ]
                 }
               }
             }
