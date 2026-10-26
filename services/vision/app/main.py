@@ -20,6 +20,7 @@ from .config import Settings
 from .security import Security
 from .storage import Store
 from .encoder import Encoder
+from .qr import product_qr
 from .bedrock import propose, PROMPT_VERSION
 
 log = logging.getLogger('stocklane.vision')
@@ -141,6 +142,15 @@ def create_app(settings=None):
         except redis.RedisError:cache_ok=False
         return {'modelReady':encoder is not None,'modelVersion':encoder.version if encoder else None,'bedrockConfigured':bool(s.bedrock_model_id),'cacheAvailable':cache_ok,'automaticPosting':False,'mode':s.auth_mode}
 
+    @app.post('/api/vision/qr')
+    async def read_qr(request:Request,file:UploadFile=File(...)):
+        security.staff(request)
+        data=await file.read(s.max_upload_bytes+1)
+        if len(data)>s.max_upload_bytes:raise HTTPException(413,'Image exceeds the upload limit')
+        try:value=await asyncio.to_thread(product_qr,data)
+        except (ValueError,OSError):raise HTTPException(422,'Use a clear photo with a valid Stocklane QR') from None
+        return {'value':value}
+
     @app.post('/api/vision/match')
     async def match(request:Request,file:UploadFile=File(...)):
         security.staff(request,capture=True)
@@ -151,6 +161,7 @@ def create_app(settings=None):
             image=await asyncio.to_thread(store.image,image_id)
             vector=await asyncio.to_thread(embedding,image)
             candidates=await asyncio.to_thread(store.candidates,encoder.version,vector)
+            candidates=[candidate for candidate in candidates if candidate['similarity'] >= s.match_threshold]
             for candidate in candidates:candidate['sameSkuEstimate']=encoder.same_sku_estimate(candidate['similarity'])
         except HTTPException:raise
         except (ValueError,OSError):raise HTTPException(422,'Use a clear JPEG or PNG photo of one item') from None
@@ -183,11 +194,18 @@ def create_app(settings=None):
                 return dict(seen,result=json.loads(seen['result']))
         try:
             image_id=await asyncio.to_thread(store.save_image,data)
-            vector=await asyncio.to_thread(embedding,store.image(image_id))
-            candidates=await asyncio.to_thread(store.candidates,encoder.version,vector)
-            for candidate in candidates:candidate['sameSkuEstimate']=encoder.same_sku_estimate(candidate['similarity'])
+            qr_value=await asyncio.to_thread(product_qr,data)
+            identified=None
+            if qr_value:
+                product=await asyncio.to_thread(verified_product,qr_value.removeprefix('stocklane:v1:'))
+                identified=product['id'];candidates=[]
+            else:
+                vector=await asyncio.to_thread(embedding,store.image(image_id))
+                candidates=await asyncio.to_thread(store.candidates,encoder.version,vector)
+                candidates=[candidate for candidate in candidates if candidate['similarity'] >= s.match_threshold]
+                for candidate in candidates:candidate['sameSkuEstimate']=encoder.same_sku_estimate(candidate['similarity'])
         except (ValueError,OSError):raise HTTPException(422,'Invalid item photo') from None
-        result={'imageId':image_id,'state':'REVIEW' if candidates else 'UNKNOWN','modelVersion':encoder.version,'candidates':candidates,'autoPostEligible':False,'message':'Review this captured movement and confirm its quantity.'}
+        result={'imageId':image_id,'state':'REVIEW' if candidates or identified else 'UNKNOWN','modelVersion':encoder.version,'candidates':candidates,'identifiedProductId':identified,'qrValue':qr_value,'autoPostEligible':False,'message':'QR identified the product. Confirm quantity.' if identified else 'Review this captured movement and confirm its quantity.'}
         row={'id':event_id,'request_hash':fingerprint,'image_id':image_id,'direction':direction,'job_id':job_id or None,'station_id':station_id,'status':'PENDING','result':json.dumps(result),'created_at':datetime.now(timezone.utc).isoformat(),'movement_id':None}
         try:
             with store.engine.begin() as c:c.execute(insert(store.captures).values(**row))
@@ -223,7 +241,7 @@ def create_app(settings=None):
             r=httpx.get(s.inventory_url+'/internal/movements/'+body.movementId,headers={'X-Internal-Token':s.inventory_read_token or s.internal_token},timeout=5,trust_env=False)
             if r.status_code!=200:raise HTTPException(409,'A confirmed inventory movement is required')
             movement=r.json()
-            if movement.get('source_capture_id')!=event_id or movement.get('kind')!=('RECEIPT' if row['direction']=='IN' else 'ISSUE'):
+            if movement.get('source_capture_id')!=event_id or movement.get('kind')!=('RECEIPT' if row['direction']=='IN' else ('ISSUE' if row['job_id'] else 'STOCK_OUT')):
                 raise HTTPException(409,'Movement is not linked to this capture')
             if row['job_id'] and movement.get('job_id')!=row['job_id']:raise HTTPException(409,'Movement belongs to another job')
             c.execute(update(store.captures).where(store.captures.c.id==event_id).values(status='POSTED',movement_id=body.movementId))
@@ -244,7 +262,10 @@ def create_app(settings=None):
         try:
             r=httpx.get(s.inventory_url+'/internal/products/'+product_id,headers={'X-Internal-Token':s.inventory_read_token or s.internal_token},timeout=5,trust_env=False)
             if r.status_code==404:raise HTTPException(404,'Approved product not found')
-            r.raise_for_status();return r.json()
+            r.raise_for_status()
+            product=r.json()
+            if product.get('archived'):raise HTTPException(409,'Product is archived')
+            return product
         except httpx.HTTPError:raise HTTPException(503,'Inventory is unavailable; retry this reference update') from None
 
     @app.post('/api/vision/references')

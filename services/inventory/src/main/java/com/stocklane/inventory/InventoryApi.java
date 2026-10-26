@@ -11,6 +11,9 @@ public class InventoryApi {
  @GetMapping("/api/inventory/products") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object products(){return inventory.products();}
  @GetMapping(value="/api/inventory/catalogue",produces="application/json") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") String catalogue(){return inventory.catalogue();}
  @PostMapping("/api/inventory/products") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object create(@RequestHeader("Idempotency-Key")String key,@RequestBody Inventory.ProductInput p){return inventory.create(key,p);}
+ @GetMapping("/api/inventory/products/archived") @PreAuthorize("hasRole('OWNER')") Object archived(){return inventory.archivedProducts();}
+ @PatchMapping("/api/inventory/products/{id}") @PreAuthorize("hasRole('OWNER')") Object edit(@PathVariable String id,@RequestHeader("Idempotency-Key")String key,@RequestBody Inventory.ProductEdit p){return inventory.edit(key,id,p);}
+ @PostMapping("/api/inventory/products/{id}/archive") @PreAuthorize("hasRole('OWNER')") Object archive(@PathVariable String id,@RequestHeader("Idempotency-Key")String key,@RequestBody Inventory.ArchiveInput p){return inventory.archive(key,id,p);}
  @GetMapping("/api/inventory/movements") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object movements(){return inventory.movements();}
  @PostMapping("/api/inventory/movements") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object move(@RequestHeader("Idempotency-Key")String key,@RequestBody Inventory.MovementInput m){if("OPENING".equals(m.kind()))throw new IllegalArgumentException("Opening stock is recorded during product registration");return inventory.move(key,m);}
  @GetMapping("/api/inventory/jobs/{id}/snapshot") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object snapshot(@PathVariable String id){return inventory.snapshot(id);}

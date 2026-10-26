@@ -1,5 +1,10 @@
 # Start here
 
+**Existing deployed project:** this update introduces the stock-only phase one.
+Read [docs/STOCK_FIRST_PHASE1.md](docs/STOCK_FIRST_PHASE1.md), pass validation,
+prepare a new release, merge its GitOps PR and deploy. Existing AWS trust and
+credentials do not need to be recreated for this source update.
+
 If you already uploaded the project and hit the IAM OIDC provider denial,
 follow [docs/FREE_PLAN_FIX.md](docs/FREE_PLAN_FIX.md) to resume with the
 restricted CI user authentication option.

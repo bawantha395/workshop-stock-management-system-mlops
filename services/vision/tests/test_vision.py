@@ -94,3 +94,20 @@ def test_cached_photo_never_merges_distinct_delivery_events(tmp_path,monkeypatch
             assert client.post('/api/vision/captures',data=metadata,files={'file':('item.jpg',photo(),'image/jpeg')}).status_code==200
         assert len(calls)==1
         assert len(client.get('/api/vision/captures').json())==2
+
+def test_low_similarity_cannot_become_a_photo_match(client,monkeypatch):
+    monkeypatch.setattr(client.app.state.store,'candidates',lambda *args:[{'similarity':0.40,'product':{'id':str(uuid.uuid4())},'imageId':'unused'}])
+    response=upload(client)
+    assert response.status_code==200
+    assert response.json()['candidates']==[]
+    assert response.json()['state']=='UNKNOWN'
+    assert response.json()['autoPostEligible'] is False
+
+
+def test_qr_endpoint_does_not_persist_a_capture_or_change_stock(client):
+    from test_qr import qr_image
+    value='stocklane:v1:'+str(uuid.uuid4())
+    response=client.post('/api/vision/qr',files={'file':('qr.png',qr_image(value),'image/png')})
+    assert response.status_code==200
+    assert response.json()=={'value':value}
+    assert client.get('/api/vision/captures').json()==[]

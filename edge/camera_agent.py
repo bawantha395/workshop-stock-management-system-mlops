@@ -52,7 +52,10 @@ def main(args):
     def worker():
         while not stop.is_set():sender.flush();stop.wait(3)
     t=threading.Thread(target=worker,daemon=True);t.start()
-    camera=cv2.VideoCapture(args.camera)
+    source=str(args.camera)
+    source=int(source) if source.isdigit() else source
+    if isinstance(source,str) and urlparse(source).scheme not in {'rtsp','rtsps','http','https'}:raise ValueError('Use a camera number or RTSP/HTTP stream URL')
+    camera=cv2.VideoCapture(source)
     if not camera.isOpened():raise RuntimeError('Camera is unavailable')
     background=None;prior=None;stable=0;clear=0;armed=True
     print('Keep the tray empty for the first reference frame.',flush=True)
@@ -84,6 +87,6 @@ def main(args):
         stop.set();t.join(timeout=25);camera.release();cv2.destroyAllWindows()
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--camera',type=int,default=0);p.add_argument('--api-url',required=True);p.add_argument('--direction',choices=['IN','OUT'],required=True);p.add_argument('--station',required=True);p.add_argument('--job-id');p.add_argument('--local',action='store_true');p.add_argument('--token-url',default='');p.add_argument('--client-id',default='');p.add_argument('--spool',default='.data/camera-spool.db');p.add_argument('--presence',type=float,default=.06);p.add_argument('--sharpness',type=float,default=60);p.add_argument('--roi',nargs=4,type=int);p.add_argument('--show',action='store_true')
+    p=argparse.ArgumentParser();p.add_argument('--camera',default=os.environ.get('CAMERA_STREAM_URL','0'));p.add_argument('--api-url',required=True);p.add_argument('--direction',choices=['IN','OUT'],required=True);p.add_argument('--station',required=True);p.add_argument('--job-id');p.add_argument('--local',action='store_true');p.add_argument('--token-url',default='');p.add_argument('--client-id',default='');p.add_argument('--spool',default='.data/camera-spool.db');p.add_argument('--presence',type=float,default=.06);p.add_argument('--sharpness',type=float,default=60);p.add_argument('--roi',nargs=4,type=int);p.add_argument('--show',action='store_true')
     try:main(p.parse_args())
     except KeyboardInterrupt:pass

@@ -4,11 +4,12 @@ Start with **[START_HERE.md](START_HERE.md)** for the complete-project ZIP,
 GitHub upload instructions and the first validation step. The
 **[folder guide](docs/REPOSITORY_STRUCTURE.md)** explains where to make each change.
 
-A workshop inventory application built with **React + TypeScript**, two
-**Spring Boot** microservices and a **Python vision service**. Track receipts,
-issue parts to repair jobs, return unused items and create reconciled invoices.
-Use approved reference photos to help identify existing products. New items
-wait for a mechanic's review.
+Phase one focuses on **stock only**: QR labels, mobile photos, stock IN/OUT,
+manufacturer part numbers, owner catalogue maintenance and a camera review inbox.
+React + TypeScript, Spring Boot inventory and Python vision run on the existing
+AWS platform. See **[the stock-first release guide](docs/STOCK_FIRST_PHASE1.md)**.
+Legacy workshop APIs remain for compatibility; the stock UI does not use jobs,
+customers, labour, prices or invoices.
 
 This repository is a new project. It does not depend on the housing-loan app
 or the earlier DevOps assistant.
@@ -54,33 +55,25 @@ Review the actual Terraform plan and regional prices before applying it.
 Optional Docker and developer-test instructions are in
 [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
 
-## Try the complete flow
+## Try the stock flow
 
-1. **Inventory -> Register product.** Create an exact SKU: brand, grade/part
-   number and capacity. Enter a physically counted opening quantity of **50**.
-2. **Capture & receive.** Upload a clear photo. Select the exact approved item,
-   confirm **10** units and optionally save the checked photo as a reference.
-   Shelf stock becomes **60**. A subsequent delivery creates a new receipt,
-   while a retry of the same command returns the original result.
-3. **Repair jobs -> New repair job.** Enter the customer and vehicle.
-4. **Issue parts.** Issue **2** units to that job. Shelf stock becomes **58**.
-5. **Return.** Select the original issue and return **1** unused sealed unit.
-   Shelf stock becomes **59**.
-6. **Review usage & invoice.** Confirm labour and finalise. The final invoice
-   uses **1** net unit plus labour. Download its PDF from the job or Invoices.
-7. **New item.** Capture an unfamiliar item and create a draft. If Bedrock is
-   configured, it proposes visible label fields. Otherwise, a manual draft
-   stays blank for review. Approve a new SKU or link to an existing product.
+1. Register a filter, belt, oil container or another item with its manufacturer,
+   part number, location and physically counted opening quantity.
+2. Download or print the generated QR label.
+3. Scan its QR or take a close-up photo. Select stock IN or OUT, verify the
+   exact variant and confirm quantity. No repair job is required.
+4. Unknown items can use optional Bedrock label suggestions. Review all fields
+   before registration. Save approved photos as recognition references.
+5. Owners can edit catalogue details, archive zero-stock items and restore them.
 
-2L, 4L and 8L bottles are **different SKUs**. Sealed containers use whole units.
-Bulk stock can use litres with confirmed measurements. A photo does not measure
-the remaining contents of an opaque bottle.
+A QR identifies a product type, not an individual unit. Pack sizes and variants
+need separate catalogue entries. Photos do not measure remaining liquid.
 
 ## What is implemented
 
 | Area | Implementation |
 | --- | --- |
-| Web application | Dashboard, inventory search, receipts, capture matching, review queue, jobs, returns, invoices, CSV exports and activity. Sticky top bar and responsive layout. |
+| Web application | Stock IN/OUT, QR labels, catalogue search, photo matching, camera review and activity. Owner edits and archival. |
 | Inventory service | PostgreSQL stock ledger, exact SKU catalogue, row locking, non-negative balances, command idempotency, original-issue returns, job freeze and transactional outbox with retry backoff. |
 | Workshop service | Customer/vehicle job cards, QR job links, idempotent event projections, authoritative invoice reconciliation, frozen-job protection and PDF generation. |
 | Vision service | Real CPU MobileNetV2 image embeddings through OpenCV DNN, reference matching, pgvector storage, versioned caches, manual/Bedrock drafts, camera inbox and approval checks. |
