@@ -28,10 +28,10 @@ spec:
           value: 5gds0d8ucnj3o123834fsdr123,2t6a6tvlvdaprqo6tfboq6e89o
         - &id007
           name: APP_WEB_ORIGIN
-          value: https://d2lnni381bgho5.cloudfront.net
+          value: https://stocklane.bawantha-rathnayake.tech
         - &id008
           name: WEB_ORIGIN
-          value: https://d2lnni381bgho5.cloudfront.net
+          value: https://stocklane.bawantha-rathnayake.tech
         - &id009
           name: INVENTORY_URL
           value: http://inventory:8081
@@ -73,10 +73,16 @@ spec:
           value: /tmp/files
         - &id022
           name: BEDROCK_MODEL_ID
-          value: ''
+          value: amazon.nova-lite-v1:0
         - &id023
           name: DEPLOYMENT_ENVIRONMENT
           value: dev
+        - &id024
+          name: MODEL_BUCKET
+          value: stocklane-dev-models-721274598579
+        - &id025
+          name: BEDROCK_DAILY_REQUEST_LIMIT
+          value: '50'
       containers:
       - name: vision
         env:
@@ -103,6 +109,8 @@ spec:
         - *id021
         - *id022
         - *id023
+        - *id024
+        - *id025
         - name: DATABASE_SCHEMA
           value: vision
         - name: PYTHONPATH

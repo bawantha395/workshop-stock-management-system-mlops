@@ -9,3 +9,4 @@ patches:
 - path: alertmanager-pdb-patch.yaml
 - path: grafana-secret-patch.yaml
 - path: alertmanager-secret-patch.yaml
+- path: grafana-domain-patch.yaml
