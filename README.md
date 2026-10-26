@@ -4,10 +4,12 @@ Start with **[START_HERE.md](START_HERE.md)** for the complete-project ZIP,
 GitHub upload instructions and the first validation step. The
 **[folder guide](docs/REPOSITORY_STRUCTURE.md)** explains where to make each change.
 
-Phase one focuses on **stock only**: QR labels, mobile photos, stock IN/OUT,
-manufacturer part numbers, owner catalogue maintenance and a camera review inbox.
-React + TypeScript, Spring Boot inventory and Python vision run on the existing
-AWS platform. See **[the stock-first release guide](docs/STOCK_FIRST_PHASE1.md)**.
+The stock workspace uses guided **Receive stock** and **Take stock out** tasks:
+live QR scanning, item verification, draft lists and explicit confirmation.
+Find items by manufacturer part number or photo, print QR labels, compare
+physical counts and review connected-camera captures. Owners maintain the catalogue.
+See **[the warehouse UI guide](docs/WAREHOUSE_UX.md)** for deployment and testing.
+
 Legacy workshop APIs remain for compatibility; the stock UI does not use jobs,
 customers, labour, prices or invoices.
 

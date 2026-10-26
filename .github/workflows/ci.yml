@@ -34,6 +34,7 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
       - run: npm audit --omit=dev --audit-level=high
   vision-and-manifests:
     runs-on: ubuntu-latest

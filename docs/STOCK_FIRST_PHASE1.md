@@ -1,5 +1,9 @@
 # Stock-first phase one
 
+**UI update:** daily screens now use the [warehouse task workflow](WAREHOUSE_UX.md).
+Use that guide for current receiving, stock-out, scanning and deployment steps.
+The model and backend scope below remains unchanged.
+
 ## Scope
 
 The web UI now handles stock only, for filters, belts, parts, sealed containers,

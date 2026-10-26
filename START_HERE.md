@@ -1,5 +1,8 @@
 # Start here
 
+**Latest UI:** see [the warehouse task release guide](docs/WAREHOUSE_UX.md).
+Receiving and stock-out now use scan → draft list → review → confirm.
+
 **Existing deployed project:** this update introduces the stock-only phase one.
 Read [docs/STOCK_FIRST_PHASE1.md](docs/STOCK_FIRST_PHASE1.md), pass validation,
 prepare a new release, merge its GitOps PR and deploy. Existing AWS trust and

@@ -8,12 +8,13 @@ export async function headers(){
  else result['X-Demo-User']=localStorage.getItem('stocklane.role')||'owner';
  return result;
 }
+export class ApiError extends Error { constructor(message:string,public status:number){super(message);this.name="ApiError";} }
 export async function api<T=any>(path:string,options:RequestInit={},key?:string):Promise<T>{
  const h=new Headers(await headers());new Headers(options.headers).forEach((v,k)=>h.set(k,v));
  if(options.body&&!(options.body instanceof FormData))h.set('Content-Type','application/json');
  if(key)h.set('Idempotency-Key',key);
  const response=await fetch((config.apiBase||'')+path,{...options,headers:h});
- if(!response.ok){let message='The service is unavailable. Keep this form open and retry.';try{const e=await response.json();message=e.message||e.detail||message;}catch{/* keep safe fallback */}if(response.status===401)message='Sign in to continue.';throw new Error(message);}
+ if(!response.ok){let message='The service is unavailable. Keep this form open and retry.';try{const e=await response.json();message=e.message||e.detail||message;}catch{/* keep safe fallback */}if(response.status===401)message='Sign in to continue.';throw new ApiError(message,response.status);}
  if(response.status===204)return undefined as T;
  return response.json();
 }
