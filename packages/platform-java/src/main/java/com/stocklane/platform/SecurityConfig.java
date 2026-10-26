@@ -28,8 +28,9 @@ import org.springframework.web.cors.*;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
- @Bean CorsConfigurationSource cors(@Value("${app.web-origin:http://localhost:4173}")String origin){var config=new CorsConfiguration();config.setAllowedOrigins(List.of(origin));config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","OPTIONS"));config.setAllowedHeaders(List.of("Authorization","Content-Type","Idempotency-Key","X-Demo-User"));var source=new UrlBasedCorsConfigurationSource();source.registerCorsConfiguration("/api/**",config);return source;}
+ @Bean UrlBasedCorsConfigurationSource corsConfigurationSource(@Value("${app.web-origin:http://localhost:4173}")String origin){var config=new CorsConfiguration();config.setAllowedOrigins(List.of(origin));config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","OPTIONS"));config.setAllowedHeaders(List.of("Authorization","Content-Type","Idempotency-Key","X-Demo-User"));var source=new UrlBasedCorsConfigurationSource();source.registerCorsConfiguration("/api/**",config);return source;}
  @Bean SecurityFilterChain security(HttpSecurity http, Environment env,
+     UrlBasedCorsConfigurationSource corsConfigurationSource,
      @Value("${app.auth-mode:cognito}") String mode,
      @Value("${app.internal-token}") String internal,
      @Value("${app.cognito-issuer:}") String issuer,
@@ -41,7 +42,7 @@ public class SecurityConfig {
    if(internal.length()<32) throw new IllegalStateException("INTERNAL_TOKEN must contain at least 32 characters");
    String service=env.getProperty("spring.application.name","");
    if(!local&&("inventory".equals(service)&&(inventoryRead.length()<32||inventoryControl.length()<32)||"workshop".equals(service)&&inventoryControl.length()<32))throw new IllegalStateException("Configure separate internal read/control capability tokens");
-   http.cors(org.springframework.security.config.Customizer.withDefaults()).csrf(c->c.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+   http.cors(cors -> cors.configurationSource(corsConfigurationSource)).csrf(c->c.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
    http.authorizeHttpRequests(a->a.requestMatchers("/actuator/health/**").permitAll()
       .requestMatchers("/internal/**","/actuator/prometheus").permitAll().anyRequest().authenticated());
    http.addFilterBefore(new OncePerRequestFilter(){
