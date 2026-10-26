@@ -3,7 +3,9 @@ kind: ConfigMap
 metadata:
   name: database-bootstrap-config
 data:
-  AWS_REGION: REPLACE_AWS_REGION
-  DATABASE_HOST: REPLACE_DATABASE_HOST
-  MASTER_SECRET_ARN: REPLACE_MASTER_SECRET_ARN
-  DATABASE_SECRETS: REPLACE_DATABASE_SECRET_ARNS_JSON
+  AWS_REGION: ap-southeast-2
+  DATABASE_HOST: stocklane-dev.c3sqoikicx91.ap-southeast-2.rds.amazonaws.com
+  MASTER_SECRET_ARN: arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:rds!db-a3111951-fdb9-4a6b-ae6a-aaab38756866-yZ0VjG
+  DATABASE_SECRETS: '{"inventory": "arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:stocklane-dev/inventory/database-K9UAIy",
+    "vision": "arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:stocklane-dev/vision/database-EjhVnk", "workshop":
+    "arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:stocklane-dev/workshop/database-sDcE2k"}'

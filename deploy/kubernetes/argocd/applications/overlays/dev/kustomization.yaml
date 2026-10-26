@@ -8,4 +8,6 @@ patches:
 - path: monitoring-patch.yaml
 - path: workshop-patch.yaml
 - path: app-project-patch.yaml
+- path: platform-repository-patch.yaml
+- path: app-repository-patch.yaml
 nameSuffix: -dev

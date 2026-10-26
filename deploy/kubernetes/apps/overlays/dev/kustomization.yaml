@@ -1,20 +1,38 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: stocklane-dev
 resources:
 - ../../base
 - namespace.yaml
-namespace: stocklane-dev
 patches:
 - path: patches/configmap.yaml
 - path: patches/inventory-deployment.yaml
 - path: patches/inventory-hpa.yaml
 - path: patches/inventory-pdb.yaml
+- path: patches/inventory-external-secret.yaml
 - path: patches/workshop-deployment.yaml
 - path: patches/workshop-hpa.yaml
 - path: patches/workshop-pdb.yaml
+- path: patches/workshop-external-secret.yaml
 - path: patches/vision-deployment.yaml
 - path: patches/vision-hpa.yaml
 - path: patches/vision-pdb.yaml
+- path: patches/vision-external-secret.yaml
+- path: patches/ingress.yaml
+- path: patches/model-index-job.yaml
+images:
+- name: stocklane/inventory
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory
+  digest: sha256:30a71baaccd4808fb17e3ff89cbec0ca7e46fd16928408208f199d2f2521905d
+- name: stocklane/workshop
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop
+  digest: sha256:a0fe2d6e33c9aaab10302644ef4877248db04567242757733213304e582b44af
+- name: stocklane/vision
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision
+  digest: sha256:51a5f9f2a7b8af82b923fc98945a0680f65d542e855bd86665127cea22e52cc5
+- name: stocklane/operations
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
+  digest: sha256:7a7dbc0ad201303f45c15a4abc82320355f9a5427f3a7594a10c2e8e6a943788
 labels:
 - pairs:
     stocklane.io/environment: dev

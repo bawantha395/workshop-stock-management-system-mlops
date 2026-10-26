@@ -1,0 +1,55 @@
+{
+  "sourceBucket": "stocklane-dev-models-721274598579",
+  "sourcePrefix": "releases/frontend/538f425a9049-40268268400-2",
+  "targetBucket": "stocklane-dev-web-721274598579",
+  "distributionId": "EBAJUKGUIWMAQ",
+  "region": "ap-southeast-2",
+  "accountId": "721274598579",
+  "release": "538f425a9049-40268268400-2",
+  "files": [
+    {
+      "path": "assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
+      "sha256": "a5d38fe99f930275684999b462c7123faa063d9e44e73b4b241723d884aa0f49"
+    },
+    {
+      "path": "assets/dm-sans-latin-wght-normal-Xz1IZZA0.woff2",
+      "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
+    },
+    {
+      "path": "assets/index-B8AdxwaE.js",
+      "sha256": "5b8cc879c4016b3161ae63f63865a3c212a7fff54aacb1a85ef67a3a3f36254d"
+    },
+    {
+      "path": "assets/index-KJ0yWYUA.css",
+      "sha256": "8bd5061395a2ebb7113b57b3184fedfa370608e0a2d401fdfab28365841466bd"
+    },
+    {
+      "path": "assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2",
+      "sha256": "c268b459a9329e59fecf39a17618efd44c71735532048d60b12aab76a8c14914"
+    },
+    {
+      "path": "assets/manrope-greek-wght-normal-DL7QRZyv.woff2",
+      "sha256": "2fb2e8cbfd52ae46179a8b6024eb162f1f9c6de3d22d6e3a30d8f395de7220be"
+    },
+    {
+      "path": "assets/manrope-latin-ext-wght-normal-Ch3YOpNY.woff2",
+      "sha256": "3911b66d9f2e005a4b989223405d0e5032619c668597ba467cc76a23c8fffcfb"
+    },
+    {
+      "path": "assets/manrope-latin-wght-normal-DHIcAJRg.woff2",
+      "sha256": "a30ddcd349703aff7464c34bef3fffdff405ee50c113440d7c8693c02d210972"
+    },
+    {
+      "path": "assets/manrope-vietnamese-wght-normal-usUDDRr7.woff2",
+      "sha256": "6bbb044ab420e07edb0a3042d2eb314b85e83a0182e945a15ab3b9092668dfd5"
+    },
+    {
+      "path": "config.js",
+      "sha256": "c0d722563166e1f9276711324ec292bdee7bbc3c00bc87b33818ef79cdfb8984"
+    },
+    {
+      "path": "index.html",
+      "sha256": "12f45c83f3bff4b933fbbf2c58507b14fa7eaca08eb766be06bddcfc411759dc"
+    }
+  ]
+}

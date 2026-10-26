@@ -13,6 +13,6 @@ spec:
         - --enable-shield=false
         - --enable-waf=false
         - --enable-wafv2=false
-        - --cluster-name=REPLACE_CLUSTER_NAME
-        - --aws-region=REPLACE_AWS_REGION
-        - --aws-vpc-id=REPLACE_VPC_ID
+        - --cluster-name=stocklane-dev
+        - --aws-region=ap-southeast-2
+        - --aws-vpc-id=vpc-0bcc081a17c7550a5

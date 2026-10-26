@@ -3,4 +3,26 @@ kind: ConfigMap
 metadata:
   name: platform-config
 data:
+  AUTH_MODE: cognito
+  ENVIRONMENT: cloud
+  SPRING_PROFILES_ACTIVE: cloud
+  AWS_REGION: ap-southeast-2
+  COGNITO_ISSUER: https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_6cFTxEnwa
+  COGNITO_CLIENT_IDS: 5gds0d8ucnj3o123834fsdr123,2t6a6tvlvdaprqo6tfboq6e89o
+  APP_WEB_ORIGIN: https://d2lnni381bgho5.cloudfront.net
+  WEB_ORIGIN: https://d2lnni381bgho5.cloudfront.net
+  INVENTORY_URL: http://inventory:8081
+  WORKSHOP_URL: http://workshop:8082
+  VISION_URL: http://vision:8083
+  STOCK_QUEUE_URL: https://sqs.ap-southeast-2.amazonaws.com/721274598579/stocklane-dev-stock
+  CATALOGUE_QUEUE_URL: https://sqs.ap-southeast-2.amazonaws.com/721274598579/stocklane-dev-catalogue
+  EVENT_MODE: sqs
+  REDIS_HOST: master.stocklane-dev.g3lygp.apse2.cache.amazonaws.com
+  REDIS_TLS: 'true'
+  MEDIA_BUCKET: stocklane-dev-media-721274598579
+  MODEL_DIR: /models/current
+  MODEL_URI: s3://stocklane-dev-models-721274598579/releases/baseline/30a174a801e8dcc0cc1b49096255f9868e677b638627019590b8913317c27c2c.tar.gz
+  MODEL_ARCHIVE_SHA256: 30a174a801e8dcc0cc1b49096255f9868e677b638627019590b8913317c27c2c
+  FILES_ROOT: /tmp/files
+  BEDROCK_MODEL_ID: ''
   DEPLOYMENT_ENVIRONMENT: dev

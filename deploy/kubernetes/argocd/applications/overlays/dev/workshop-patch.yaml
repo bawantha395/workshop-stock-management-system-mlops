@@ -6,5 +6,6 @@ metadata:
 spec:
   source:
     path: deploy/kubernetes/apps/overlays/dev
+    repoURL: https://github.com/bawantha395/workshop-stock-management-system-mlops.git
   destination:
     namespace: stocklane-dev

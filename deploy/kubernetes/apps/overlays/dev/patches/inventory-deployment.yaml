@@ -4,3 +4,7 @@ metadata:
   name: inventory
 spec:
   replicas: 1
+  template:
+    metadata:
+      annotations:
+        stocklane.io/config-sha256: c2b40e3c8d0a2e91a67802683386f8782df61aa4390a07f164f351471df17ee8

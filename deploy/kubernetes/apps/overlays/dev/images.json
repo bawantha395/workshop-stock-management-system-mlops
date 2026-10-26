@@ -1,0 +1,7 @@
+{
+  "inventory": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory@sha256:30a71baaccd4808fb17e3ff89cbec0ca7e46fd16928408208f199d2f2521905d",
+  "workshop": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop@sha256:a0fe2d6e33c9aaab10302644ef4877248db04567242757733213304e582b44af",
+  "vision": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision@sha256:51a5f9f2a7b8af82b923fc98945a0680f65d542e855bd86665127cea22e52cc5",
+  "operations": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations@sha256:7a7dbc0ad201303f45c15a4abc82320355f9a5427f3a7594a10c2e8e6a943788",
+  "ml-training": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/ml-training@sha256:02db5a778eb1cff61cadac96f7dd72116451caa6606d1425016328ae05e5d7c1"
+}
