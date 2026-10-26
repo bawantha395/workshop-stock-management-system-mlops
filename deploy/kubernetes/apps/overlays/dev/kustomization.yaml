@@ -19,21 +19,28 @@ patches:
 - path: patches/vision-hpa.yaml
 - path: patches/vision-pdb.yaml
 - path: patches/vision-external-secret.yaml
+- path: patches/forecast-deployment.yaml
+- path: patches/forecast-hpa.yaml
+- path: patches/forecast-pdb.yaml
+- path: patches/forecast-external-secret.yaml
 - path: patches/ingress.yaml
 - path: patches/model-index-job.yaml
 images:
 - name: stocklane/inventory
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory
-  digest: sha256:6686d0d0ad0c2f70516c1cbca5ff695aa8ba15b6be6f03ced679351e0814cd81
+  digest: sha256:502299eef70075810e8772d99cbc0d77951c25fd82bdf6e26a1d81ef08c412dc
 - name: stocklane/workshop
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop
-  digest: sha256:afae011b7e26c1024187c126989b3e4ec540c84ce0ea0e73d5dc6dd1ec7c0ff3
+  digest: sha256:c7dbdd1ede4ffe835d0483c5b3fb0a27b1e5264c01f9caee4612501e0ef56636
 - name: stocklane/vision
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision
-  digest: sha256:54dfec83a00462f38eb21d54a3179c36728bff2fa30f21966c474404e343957a
+  digest: sha256:38716505a258045139235fb8614636254a50d6a97072e67cd162c825071f9435
+- name: stocklane/forecast
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/forecast
+  digest: sha256:e2c75845e388796c2dd53915bc8cb7eff7d47ca47bd90c302f9cfd0e55c5462a
 - name: stocklane/operations
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
-  digest: sha256:0d7b5706742110cf9f250c23fea4d029491223d8db64bbabae74b6becbfd5ff5
+  digest: sha256:eb7325309ff8d06ed9bb91da6a6584c94fd639ac9e58c02846e5f94413fee0bb
 labels:
 - pairs:
     stocklane.io/environment: dev
