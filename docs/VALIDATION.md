@@ -1,5 +1,21 @@
 # Validation record
 
+## PostgreSQL Bootstrap Correction, 26 October 2026
+
+The user-provided Job logs confirm `InsufficientPrivilege: must be able to SET
+ROLE "inventory"` during schema creation on RDS PostgreSQL 17. The script now
+uses temporary SET membership inside each service transaction, restores prior
+membership options, and supports recovery from the partially created user.
+It preserves existing application data and rejects an unexpected schema owner.
+
+The release filter now rebuilds the operations image when the database script
+changes. A new PostgreSQL 17 CI job runs five real database regression tests
+with a non-superuser administrator. These tests are configured but have not run
+here: local PostgreSQL startup could not create its operating-system user.
+The existing 123 targeted checks, workflow lint, and compilation passed. See
+[the recovery procedure](DATABASE_BOOTSTRAP_FIX.md) for the image release and
+failed-Job retry order. The correction has not been deployed to AWS from here.
+
 Checked on 25 October 2026. This is the verification record for the supplied
 source, not evidence that resources are running in AWS or that a production SLO
 has been achieved.

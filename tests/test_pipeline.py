@@ -344,6 +344,7 @@ def test_bootstrap_policies_bind_environment_and_preserve_state_history():
 def test_delivery_filters_avoid_recursive_or_early_releases():
     from workflow_eligibility import eligible
     assert eligible("application", ["services/inventory/App.java"])
+    assert eligible("application", ["scripts/bootstrap_database.py"])
     assert not eligible("application", ["deploy/kubernetes/apps/overlays/dev/release.json"])
     assert not eligible("application", ["services/inventory/App.java", "infra/aws/data.tf"])
     assert not eligible("application", ["apps/web/src/main.tsx"], current=False)

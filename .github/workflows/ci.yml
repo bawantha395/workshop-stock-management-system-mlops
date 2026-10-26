@@ -72,6 +72,29 @@ jobs:
         run: docker compose logs --no-color --tail 100
       - if: always()
         run: docker compose down
+  database-bootstrap:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: stocklane
+          POSTGRES_PASSWORD: postgres
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stocklane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r scripts/requirements.txt 'psycopg[binary]==3.3.6' pytest==9.1.1
+      - name: Check schema ownership using a non-superuser administrator
+        env:
+          TEST_DATABASE_DSN: postgresql://postgres:postgres@127.0.0.1:5432/stocklane
+        run: pytest tests/test_database_bootstrap.py -q
   kustomize:
     runs-on: ubuntu-latest
     steps:
