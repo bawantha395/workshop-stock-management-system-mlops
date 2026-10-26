@@ -6,6 +6,7 @@ resources:
 - namespace.yaml
 patches:
 - path: patches/configmap.yaml
+- path: patches/workshop-inventory-networkpolicy.yaml
 - path: patches/inventory-deployment.yaml
 - path: patches/inventory-hpa.yaml
 - path: patches/inventory-pdb.yaml
@@ -23,16 +24,16 @@ patches:
 images:
 - name: stocklane/inventory
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory
-  digest: sha256:f536825b07e517ad5e0a8af37ef2f32eefb129b7c8294097cc5bd8b08274b435
+  digest: sha256:a54dde574ef7f753bc20b8ccd9ce07ffe846f997cbc2e7089697c53df12d1104
 - name: stocklane/workshop
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop
-  digest: sha256:9c6733f965de1204e45f5f71e20d10611ab5386a5a88fc30f1b5f2019c53cef7
+  digest: sha256:0f6af33941f3cac07c4ff17334437beab4ef3576c1d4f9f697b400473ea6484a
 - name: stocklane/vision
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision
-  digest: sha256:5068d861ae2d11009d9d3a3bff98f08ca458dcaf5211ab5603fa47dea1ab2793
+  digest: sha256:bb408d312c028232cc88b1e0c36188d4475c6d532e4b6db3c820c95088698002
 - name: stocklane/operations
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
-  digest: sha256:b39645b2aefdfe7af511971ba5b024b59653e3c02e821e3cbc255605cae41d74
+  digest: sha256:0474a8e72b1f8b60ba1a1632b48d8ab02f79c7d206991f6f8a0c3db2eb843858
 labels:
 - pairs:
     stocklane.io/environment: dev
