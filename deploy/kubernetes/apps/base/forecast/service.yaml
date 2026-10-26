@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: forecast
+  labels:
+    app: forecast
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /health/ready
+spec:
+  selector:
+    app: forecast
+  ports:
+  - name: http
+    port: 8084
+    targetPort: http

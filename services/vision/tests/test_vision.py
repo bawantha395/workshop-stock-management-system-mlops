@@ -111,3 +111,21 @@ def test_qr_endpoint_does_not_persist_a_capture_or_change_stock(client):
     assert response.status_code==200
     assert response.json()=={'value':value}
     assert client.get('/api/vision/captures').json()==[]
+
+def test_bedrock_daily_limit_applies_on_cache_misses_only(tmp_path,monkeypatch):
+    import redis,fakeredis
+    import app.main as main
+    shared=fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(redis.Redis,'from_url',lambda *a,**kw:shared)
+    calls=[]
+    def propose(*args):calls.append(1);return {'name':'Filter'},'bedrock'
+    monkeypatch.setattr(main,'propose',propose)
+    settings=Settings(environment='local',auth_mode='local',internal_token='x'*32,database_url='sqlite:///'+str(tmp_path/'ai.db'),files_root=str(tmp_path/'images'),model_dir=str(ROOT/'models/baseline'),bedrock_model_id='amazon.nova-lite-v1:0',bedrock_daily_request_limit=1)
+    with TestClient(create_app(settings)) as client:
+        first=upload(client).json()['imageId']
+        assert client.post('/api/vision/drafts',json={'imageId':first}).status_code==200
+        assert client.post('/api/vision/drafts',json={'imageId':first}).status_code==200
+        fresh=io.BytesIO();Image.new('RGB',(320,400),'#4477aa').save(fresh,format='JPEG')
+        second=upload(client,fresh.getvalue()).json()['imageId']
+        assert client.post('/api/vision/drafts',json={'imageId':second}).status_code==429
+    assert len(calls)==1

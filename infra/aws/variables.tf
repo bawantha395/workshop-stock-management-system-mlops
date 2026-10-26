@@ -160,3 +160,44 @@ variable "service_ipv4_cidr" {
     error_message = "service_ipv4_cidr must be a valid IPv4 CIDR."
   }
 }
+
+variable "bedrock_model_id" {
+  type        = string
+  default     = ""
+  description = "Optional regional model ID, for example amazon.nova-lite-v1:0. Empty keeps AI disabled unless bedrock_model_arn is set."
+  validation {
+    condition     = var.bedrock_model_id == "" || can(regex("^[a-z0-9.-]+:[0-9]+$", var.bedrock_model_id))
+    error_message = "Use a regional foundation model ID; cross-region inference profiles are not enabled by this policy."
+  }
+}
+variable "bedrock_daily_request_limit" {
+  type    = number
+  default = 50
+  validation {
+    condition     = var.bedrock_daily_request_limit >= 1 && var.bedrock_daily_request_limit <= 1000 && floor(var.bedrock_daily_request_limit) == var.bedrock_daily_request_limit
+    error_message = "Set a whole number between 1 and 1000."
+  }
+}
+
+variable "web_domain" {
+  type        = string
+  default     = ""
+  description = "Optional custom HTTPS hostname for the CloudFront application."
+}
+variable "argocd_domain" {
+  type    = string
+  default = ""
+}
+variable "grafana_domain" {
+  type    = string
+  default = ""
+}
+variable "admin_allowed_cidrs" {
+  type        = list(string)
+  default     = []
+  description = "Public IPv4 CIDRs permitted to reach the shared admin ALB, for example your office IP/32."
+  validation {
+    condition     = alltrue([for cidr in var.admin_allowed_cidrs : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) >= 24, false)])
+    error_message = "Use valid IPv4 ranges /24 or narrower; do not expose admin dashboards to the whole Internet."
+  }
+}

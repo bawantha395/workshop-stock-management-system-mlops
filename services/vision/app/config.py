@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     redis_url: str = 'redis://localhost:6379/0'
     inventory_url: str = 'http://localhost:8081'
     bedrock_model_id: str = ''
+    bedrock_daily_request_limit: int = 50
     aws_region: str = 'eu-west-1'
     catalogue_queue_url: str = ''
     match_threshold: float = 0.92

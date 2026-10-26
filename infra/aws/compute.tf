@@ -115,6 +115,7 @@ locals {
     inventory          = { namespace = local.workload_namespace, account = "inventory" }
     workshop           = { namespace = local.workload_namespace, account = "workshop" }
     vision             = { namespace = local.workload_namespace, account = "vision" }
+    forecast           = { namespace = local.workload_namespace, account = "forecast" }
     external-secrets   = { namespace = "external-secrets", account = "external-secrets" }
     load-balancer      = { namespace = "kube-system", account = "aws-load-balancer-controller" }
     ebs                = { namespace = "kube-system", account = "ebs-csi-controller-sa" }
@@ -147,6 +148,7 @@ resource "aws_iam_role_policy" "inventory" {
   name = "publish-inventory-events"
   role = aws_iam_role.pods["inventory"].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Effect = "Allow", Action = ["s3:PutObject"], Resource = "${aws_s3_bucket.private["models"].arn}/forecast/datasets/*" },
     { Effect = "Allow", Action = ["sqs:SendMessage"], Resource = [for q in aws_sqs_queue.events : q.arn] },
     { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = aws_kms_key.main.arn }
   ] })
@@ -168,7 +170,7 @@ resource "aws_iam_role_policy" "vision" {
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${aws_s3_bucket.private["media"].arn}/images/*" },
     { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.private["models"].arn}/releases/*" },
     { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = aws_kms_key.main.arn }
-  ], var.bedrock_model_arn == "" ? [] : [{ Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.bedrock_model_arn }]) })
+  ], local.bedrock_invoke_arn == "" ? [] : [{ Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = local.bedrock_invoke_arn }]) })
 }
 resource "aws_iam_role_policy" "secrets" {
   name = "read-application-secrets"
@@ -199,4 +201,14 @@ resource "aws_iam_role_policy" "telemetry" {
   name   = "write-container-logs"
   role   = aws_iam_role.pods["telemetry"].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"], Resource = "${aws_cloudwatch_log_group.application.arn}:*" }] })
+}
+
+resource "aws_iam_role_policy" "forecast" {
+  name = "read-published-stock-forecast"
+  role = aws_iam_role.pods["forecast"].id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.private["models"].arn },
+    { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.private["models"].arn}/forecast/current.json" },
+    { Effect = "Allow", Action = ["kms:Decrypt"], Resource = aws_kms_key.main.arn }
+  ] })
 }

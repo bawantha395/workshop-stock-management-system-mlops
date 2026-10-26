@@ -32,7 +32,7 @@ resource "aws_iam_role_policy" "github_training" {
   role = aws_iam_role.github_training.id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["sagemaker:CreateTrainingJob", "sagemaker:DescribeTrainingJob", "sagemaker:StopTrainingJob"], Resource = "arn:${data.aws_partition.current.partition}:sagemaker:${var.region}:${local.suffix}:training-job/${var.name}-*" },
-    { Effect = "Allow", Action = ["sagemaker:CreateModelPackage", "sagemaker:DescribeModelPackage"], Resource = [aws_sagemaker_model_package_group.vision.arn, "arn:${data.aws_partition.current.partition}:sagemaker:${var.region}:${local.suffix}:model-package/${aws_sagemaker_model_package_group.vision.model_package_group_name}/*"] },
+    { Effect = "Allow", Action = ["sagemaker:CreateModelPackage", "sagemaker:DescribeModelPackage", "sagemaker:UpdateModelPackage"], Resource = [aws_sagemaker_model_package_group.forecast.arn, "arn:${data.aws_partition.current.partition}:sagemaker:${var.region}:${local.suffix}:model-package/${aws_sagemaker_model_package_group.forecast.model_package_group_name}/*", aws_sagemaker_model_package_group.vision.arn, "arn:${data.aws_partition.current.partition}:sagemaker:${var.region}:${local.suffix}:model-package/${aws_sagemaker_model_package_group.vision.model_package_group_name}/*"] },
     { Effect = "Allow", Action = "iam:PassRole", Resource = aws_iam_role.training.arn, Condition = { StringEquals = { "iam:PassedToService" = "sagemaker.amazonaws.com" } } },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${aws_s3_bucket.private["models"].arn}/*" },
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.private["models"].arn },
@@ -126,4 +126,9 @@ resource "aws_iam_role_policy" "alertmanager" {
     { Effect = "Allow", Action = "sns:Publish", Resource = aws_sns_topic.operations.arn },
     { Effect = "Allow", Action = ["kms:Decrypt", "kms:GenerateDataKey*"], Resource = aws_kms_key.alerts.arn }
   ] })
+}
+
+resource "aws_sagemaker_model_package_group" "forecast" {
+  model_package_group_name        = "${var.name}-stock-forecast"
+  model_package_group_description = "Stock usage forecasting with temporal evaluation and weekday baseline gates"
 }

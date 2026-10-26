@@ -134,7 +134,8 @@ def bootstrap(args):
         "GitHubRepository": args.repository, "GitHubOwnerId": str(repo["owner"]["id"]),
         "GitHubRepositoryId": str(repo["id"]), "OidcSubjectStyle": style,
         "ExistingOidcProviderArn": provider, "StateBucketName": bucket,
-        "HostedZoneId": args.hosted_zone_id, "ApiDomain": args.api_domain}
+        "HostedZoneId": args.hosted_zone_id, "ApiDomain": args.api_domain,
+        "PublicZoneName": zone["Name"].rstrip(".")}
     cfn = session.client("cloudformation")
     action = "CREATE"
     try:

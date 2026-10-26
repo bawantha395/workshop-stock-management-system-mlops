@@ -21,6 +21,8 @@ spec:
       port: 8082
     - protocol: TCP
       port: 8083
+    - protocol: TCP
+      port: 8084
   egress:
   - ports:
     - protocol: UDP

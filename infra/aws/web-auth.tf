@@ -5,6 +5,7 @@ resource "aws_cloudfront_origin_access_control" "web" {
   signing_protocol                  = "sigv4"
 }
 resource "aws_cloudfront_distribution" "web" {
+  aliases             = var.web_domain == "" ? [] : [var.web_domain]
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
@@ -30,7 +31,12 @@ resource "aws_cloudfront_distribution" "web" {
   restrictions {
     geo_restriction { restriction_type = "none" }
   }
-  viewer_certificate { cloudfront_default_certificate = true }
+  viewer_certificate {
+    cloudfront_default_certificate = var.web_domain == ""
+    acm_certificate_arn            = var.web_domain == "" ? null : aws_acm_certificate_validation.web[0].certificate_arn
+    ssl_support_method             = var.web_domain == "" ? null : "sni-only"
+    minimum_protocol_version       = var.web_domain == "" ? "TLSv1" : "TLSv1.2_2021"
+  }
 }
 resource "aws_s3_bucket_policy" "web" {
   bucket = aws_s3_bucket.private["web"].id
@@ -71,8 +77,8 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = ["https://${aws_cloudfront_distribution.web.domain_name}/auth/callback"]
-  logout_urls                          = ["https://${aws_cloudfront_distribution.web.domain_name}"]
+  callback_urls                        = distinct(["https://${aws_cloudfront_distribution.web.domain_name}/auth/callback", "${local.web_url}/auth/callback"])
+  logout_urls                          = distinct(["https://${aws_cloudfront_distribution.web.domain_name}", local.web_url])
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
   access_token_validity                = 15

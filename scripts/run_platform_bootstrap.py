@@ -43,6 +43,20 @@ def main(args):
         time.sleep(10)
     else:
         raise TimeoutError("Argo CD root did not become Synced and Healthy. Inspect Argo CD/CodeBuild logs.")
+    # Root health alone can remain green while a child still runs an old image.
+    child = "stocklane-workshop-" + target
+    kubectl("-n", "argocd", "annotate", "application", child,
+            "argocd.argoproj.io/refresh=hard", "--overwrite")
+    while time.monotonic() < deadline:
+        result = kubectl("-n", "argocd", "get", "application", child, "-o", "json")
+        obj = json.loads(result.stdout).get("status", {}) if result.returncode == 0 else {}
+        if (obj.get("sync", {}).get("status") == "Synced"
+                and obj.get("sync", {}).get("revision") == source["sha"]
+                and obj.get("health", {}).get("status") == "Healthy"):
+            break
+        time.sleep(10)
+    else:
+        raise TimeoutError("Application child did not sync the reviewed commit; inspect its hook/resource errors")
     for name in ["inventory", "workshop", "vision"]:
         subprocess.run(["kubectl", "-n", namespace, "rollout", "status", "deployment/" + name,
                         "--timeout=300s"], env=env, check=True)

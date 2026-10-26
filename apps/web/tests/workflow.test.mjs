@@ -122,6 +122,7 @@ test("receive and issue drafts survive partial failure and reload without duplic
   );
   w.document.querySelector(".receive-tile").click();
   await delay();
+  await wait(() => w.document.querySelector('[aria-label="Close scanner"]'));
   w.document.querySelector('[aria-label="Close scanner"]').click();
   await delay();
   await scan(id, 5);
@@ -180,6 +181,7 @@ test("receive and issue drafts survive partial failure and reload without duplic
   await click("Workspace");
   w.document.querySelector(".issue-tile").click();
   await delay();
+  await wait(() => w.document.querySelector('[aria-label="Close scanner"]'));
   w.document.querySelector('[aria-label="Close scanner"]').click();
   await delay();
   await fill('[aria-label="QR value"]', "stocklane:v1:" + id);

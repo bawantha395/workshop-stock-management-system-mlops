@@ -72,7 +72,7 @@ def validate_objects(objects, custom_schemas):
 def validate_apps(objects, namespace, configured=False):
     deployments = {d['metadata']['name']: d for d in objects if d['kind'] == 'Deployment'}
     services = {d['metadata']['name']: d for d in objects if d['kind'] == 'Service'}
-    assert set(deployments) == {'inventory', 'workshop', 'vision'}
+    assert set(deployments) == {'inventory', 'workshop', 'vision', 'forecast'}
     for name, deployment in deployments.items():
         assert deployment['metadata']['namespace'] == namespace
         pod = deployment['spec']['template']

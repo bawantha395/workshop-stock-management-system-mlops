@@ -4,8 +4,14 @@ metadata:
   name: workshop-to-inventory-service
 spec:
   podSelector:
-    matchLabels:
-      app: workshop
+    matchExpressions:
+    - key: app
+      operator: In
+      values:
+      - workshop
+      - vision
+      - vision-index
+      - forecast
   policyTypes:
   - Egress
   egress:

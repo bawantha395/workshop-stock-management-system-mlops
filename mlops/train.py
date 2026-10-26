@@ -11,17 +11,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_score,recall_score,f1_score
 from app.encoder import Encoder
 
-def validate_manifest(rows):
-    if len(rows)<60:raise ValueError('At least 60 reviewed workshop images are required')
-    sessions={}
-    for r in rows:
-        if not all(r.get(k) for k in ['file','sku','session','split']):raise ValueError('Manifest requires file, sku, session, split')
-        if r['split'] not in {'train','validation','test'}:raise ValueError('Invalid dataset split')
-        if r['session'] in sessions and sessions[r['session']]!=r['split']:raise ValueError('Capture-session leakage across splits')
-        sessions[r['session']]=r['split']
-    for split in ['train','validation','test']:
-        group=[r for r in rows if r['split']==split]
-        if len(group)<15 or len({r['sku'] for r in group})<3:raise ValueError('Each split needs at least 15 images across at least 3 SKUs')
+from dataset import validate_manifest
 
 def pairs(rows,vectors):
     features=[];labels=[]
@@ -34,11 +24,13 @@ def pairs(rows,vectors):
 def train(dataset_dir,encoder_dir,output_dir,job_name='local-calibration'):
     dataset_dir=Path(dataset_dir).resolve();output_dir=Path(output_dir);output_dir.mkdir(parents=True,exist_ok=True)
     manifest=dataset_dir/'manifest.csv';rows=list(csv.DictReader(manifest.open()));validate_manifest(rows)
+    checksums=json.loads((dataset_dir/'dataset-checksums.json').read_text()) if (dataset_dir/'dataset-checksums.json').exists() else None
     encoder=Encoder(encoder_dir);vectors={};seen_hashes=set()
     for row in rows:
         p=(dataset_dir/row['file']).resolve()
         if dataset_dir not in p.parents or not p.is_file():raise ValueError('Image path must stay inside the reviewed dataset')
         raw=p.read_bytes();digest=hashlib.sha256(raw).hexdigest()
+        if checksums and checksums.get(row['file'])!=digest:raise ValueError('Reviewed dataset checksum mismatch')
         if digest in seen_hashes:raise ValueError('Duplicate image bytes in the dataset; deduplicate before training')
         seen_hashes.add(digest);vectors[row['file']]=encoder.encode(raw)
     data={}

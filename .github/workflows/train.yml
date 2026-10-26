@@ -6,11 +6,11 @@ on:
         description: Versioned S3 dataset prefix with manifest.csv and reviewed photos
         required: true
       encoder_uri:
-        description: S3 prefix containing encoder.onnx and model.json
-        required: true
+        description: Optional staged encoder prefix; empty stages the approved release encoder
+        required: false
       training_image:
-        description: Published ml-training ECR image with @sha256 digest
-        required: true
+        description: Optional pinned image; empty uses the approved ml-training image
+        required: false
 permissions:
   contents: read
   id-token: write
@@ -62,11 +62,27 @@ jobs:
           TRAINING_IMAGE: ${{ inputs.training_image }}
         run: |
           python - <<'PY'
-          import json, os, subprocess
+          import json, os, subprocess, sys, boto3
+          from pathlib import Path
+          sys.path.insert(0,"mlops")
+          from stage_encoder import stage
           c = json.load(open('artifacts/aws.json'))['deployment']['value']
+          overlay=Path('deploy/kubernetes/apps/overlays')/c['environment']
+          encoder=os.environ['ENCODER_URI'] or stage(json.loads((overlay/'release.json').read_text()),c['model_bucket'],boto3.client('s3',region_name=c['region']))
+          image=os.environ['TRAINING_IMAGE'] or json.loads((overlay/'images.json').read_text())['ml-training']
           subprocess.run(['python', 'mlops/run_training.py', '--region', c['region'],
               '--name', c['name'], '--role', c['training_role_arn'],
-              '--image', os.environ['TRAINING_IMAGE'], '--dataset', os.environ['DATASET_URI'],
-              '--encoder', os.environ['ENCODER_URI'], '--output', 's3://' + c['model_bucket'] + '/training',
-              '--group', c['model_package_group']], check=True)
+              '--image', image, '--dataset', os.environ['DATASET_URI'],
+              '--encoder', encoder, '--output', 's3://' + c['model_bucket'] + '/training',
+              '--group', c['model_package_group'], '--report', 'artifacts/training-report.json'], check=True)
+          PY
+      - name: Publish training result in summary
+        if: success()
+        run: |
+          python - <<'PY'
+          import json, os
+          r=json.load(open('artifacts/training-report.json'))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## Model awaiting review\n\n`'+r['modelPackageArn']+'`\n\n')
+              f.write('Review validation and test metrics before running **Review SageMaker model**.\n\n```json\n'+json.dumps(r['metrics'],indent=2)+'\n```\n')
           PY

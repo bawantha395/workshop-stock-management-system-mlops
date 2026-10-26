@@ -1530,3 +1530,62 @@ button {
     transform: none;
   }
 }
+
+.analysis-filters form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+  align-items: end;
+}
+.analysis-presets,
+.analysis-exports {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.analysis-filters {
+  margin-bottom: 22px;
+}
+.analysis-report .section-heading {
+  flex-wrap: wrap;
+}
+.analysis-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  font-size: 12px;
+  color: #839179;
+}
+.forecast-note {
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid #e1e9e3;
+  font-size: 12px;
+  color: #7b8e70;
+  line-height: 1.8;
+}
+.forecast-note summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+@media (max-width: 760px) {
+  .stock-sidebar {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .stock-sidebar > button {
+    font-size: 8px;
+    white-space: normal;
+  }
+  .analysis-filters form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.forecast-panel { margin-bottom: 24px; }
+.forecast-panel table small { display: block; max-width: 320px; margin-top: 4px; }
+.forecast-panel .section-heading { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+
+.forecast-panel .stock-table td:last-child { white-space: normal; min-width: 220px; }
+.forecast-panel .analysis-filters { display:flex; flex-wrap:wrap; align-items:end; gap:16px; }

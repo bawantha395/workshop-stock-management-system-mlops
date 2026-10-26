@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from kustomize_utils import ROOT, KUBERNETES, PROFILES, environment, load_yaml, write_yaml
 
-SERVICES = ('inventory', 'workshop', 'vision')
+SERVICES = ('inventory', 'workshop', 'vision', 'forecast')
 
 def patch(api, kind, name, **body):
     return {'apiVersion': api, 'kind': kind, 'metadata': {'name': name}, **body}
@@ -48,8 +48,10 @@ def render(config, images, model_uri, model_sha, destination=None, *, platform=F
         'APP_WEB_ORIGIN': c['frontend_url'], 'WEB_ORIGIN': c['frontend_url'],
         'STOCK_QUEUE_URL': c['stock_queue_url'], 'CATALOGUE_QUEUE_URL': c['catalogue_queue_url'],
         'REDIS_HOST': c['cache_host'], 'MEDIA_BUCKET': c['media_bucket'],
+        'MODEL_BUCKET': c.get('model_bucket', ''),
         'MODEL_URI': model_uri, 'MODEL_ARCHIVE_SHA256': model_sha,
         'BEDROCK_MODEL_ID': c.get('bedrock_model_id', ''),
+        'BEDROCK_DAILY_REQUEST_LIMIT': str(c.get('bedrock_daily_request_limit', 50)),
     })
     patches = []
     def save(name, obj):
@@ -152,6 +154,7 @@ def render_platform(c, images, env, namespace):
     for name in ['grafana-secret-patch.yaml', 'alertmanager-secret-patch.yaml']:
         if {'path': name} not in k['patches']:k['patches'].append({'path': name})
     write_yaml(folder / 'kustomization.yaml', k)
+    render_admin_access(c, env)
     repository = 'https://github.com/' + c.get('github_repository', 'bawantha395/workshop-stock-management-system-mlops') + '.git'
     apps = KUBERNETES / 'argocd/applications/overlays' / env
     for name in ['platform', 'monitoring-operator', 'monitoring', 'workshop']:
@@ -175,6 +178,54 @@ def render_platform(c, images, env, namespace):
     write_yaml(folder / 'kustomization.yaml', {'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
         'namespace': namespace, 'resources': ['../../base', 'configmap.yaml'],
         'images': [{'name': 'stocklane/operations', 'newName': image, 'digest': digest}]})
+
+def render_admin_access(c, env):
+    """Render optional admin routes separately from the public stock API ALB."""
+    folder = KUBERNETES / 'platform/overlays' / env
+    k = load_yaml(folder / 'kustomization.yaml')
+    filenames = ['admin-argocd-ingress.yaml', 'admin-grafana-ingress.yaml']
+    k['resources'] = [name for name in k['resources'] if name not in filenames]
+    configured = [(name, c.get(name + '_domain', ''), namespace, service, port, protocol, health)
+                  for name, namespace, service, port, protocol, health in [
+                      ('argocd', 'argocd', 'argocd-server', 443, 'HTTPS', '/healthz'),
+                      ('grafana', 'monitoring', 'grafana', 80, 'HTTP', '/api/health')]]
+    for name, host, namespace, service, port, protocol, health in configured:
+        if not host:
+            continue
+        ranges = c.get('admin_allowed_cidrs', [])
+        if not ranges or not c.get('admin_certificate_arn'):
+            raise ValueError('Admin domains require allowed public CIDRs and a validated regional certificate')
+        for network in ranges:
+            address = ipaddress.IPv4Network(network, strict=False)
+            if address.prefixlen < 24:
+                raise ValueError('Admin network ranges must be /24 or narrower')
+        ingress = {'apiVersion':'networking.k8s.io/v1','kind':'Ingress',
+            'metadata':{'name':'admin-'+name,'namespace':namespace,'annotations':{
+                'alb.ingress.kubernetes.io/scheme':'internet-facing',
+                'alb.ingress.kubernetes.io/target-type':'ip',
+                'alb.ingress.kubernetes.io/group.name':c['name']+'-admin',
+                'alb.ingress.kubernetes.io/listen-ports':'[{"HTTPS":443}]',
+                'alb.ingress.kubernetes.io/certificate-arn':c['admin_certificate_arn'],
+                'alb.ingress.kubernetes.io/inbound-cidrs':','.join(ranges),
+                'alb.ingress.kubernetes.io/backend-protocol':protocol,
+                'alb.ingress.kubernetes.io/healthcheck-protocol':protocol,
+                'alb.ingress.kubernetes.io/healthcheck-path':health}},
+            'spec':{'ingressClassName':'alb','rules':[{'host':host,'http':{'paths':[{
+                'path':'/','pathType':'Prefix','backend':{'service':{'name':service,'port':{'number':port}}}}]}}]}}
+        filename='admin-'+name+'-ingress.yaml'
+        write_yaml(folder/filename,ingress);k['resources'].append(filename)
+    write_yaml(folder/'kustomization.yaml',k)
+    monitor = KUBERNETES / 'monitoring/overlays' / env
+    k = load_yaml(monitor/'kustomization.yaml')
+    filename='grafana-domain-patch.yaml'
+    k['patches']=[entry for entry in k.get('patches',[]) if entry.get('path')!=filename]
+    if c.get('grafana_domain'):
+        obj=patch('apps/v1','Deployment','grafana',spec={'template':{'spec':{'containers':[{'name':'grafana','env':[
+            {'name':'GF_SERVER_ROOT_URL','value':'https://'+c['grafana_domain']+'/'},
+            {'name':'GF_SERVER_DOMAIN','value':c['grafana_domain']},
+            {'name':'GF_SECURITY_COOKIE_SECURE','value':'true'}]}]}}})
+        write_yaml(monitor/filename,obj);k['patches'].append({'path':filename})
+    write_yaml(monitor/'kustomization.yaml',k)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

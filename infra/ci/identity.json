@@ -61,6 +61,11 @@
         "access-key"
       ],
       "Default": "oidc"
+    },
+    "PublicZoneName": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9.-]+",
+      "Description": "Public DNS zone name used for approved application subdomains."
     }
   },
   "Conditions": {
@@ -665,6 +670,21 @@
                       "s3:if-none-match": "*"
                     }
                   }
+                },
+                {
+                  "Sid": "ReadCloudFrontCertificates",
+                  "Effect": "Allow",
+                  "Action": [
+                    "acm:DescribeCertificate",
+                    "acm:ListCertificates",
+                    "acm:ListTagsForCertificate"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "us-east-1"
+                    }
+                  }
                 }
               ]
             }
@@ -1157,7 +1177,9 @@
                   },
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": { "Ref": "AWS::Region" }
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
                     }
                   }
                 },
@@ -1211,6 +1233,9 @@
                         },
                         {
                           "Fn::Sub": "*.${ApiDomain}"
+                        },
+                        {
+                          "Fn::Sub": "*.${PublicZoneName}"
                         }
                       ]
                     }
@@ -1570,6 +1595,74 @@
             "Value": "GitHub pipeline role assumption only"
           }
         ]
+      }
+    },
+    "CloudFrontCertificatePolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": {
+          "Fn::Sub": "${ProjectName}-cloudfront-certificates"
+        },
+        "Roles": [
+          {
+            "Ref": "ApplyRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadCloudFrontCertificates",
+              "Effect": "Allow",
+              "Action": [
+                "acm:DescribeCertificate",
+                "acm:ListCertificates",
+                "acm:ListTagsForCertificate"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "us-east-1"
+                }
+              }
+            },
+            {
+              "Sid": "RequestTaggedCloudFrontCertificate",
+              "Effect": "Allow",
+              "Action": [
+                "acm:RequestCertificate"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "us-east-1",
+                  "aws:RequestTag/Project": {
+                    "Ref": "ProjectName"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "ManageTaggedCloudFrontCertificate",
+              "Effect": "Allow",
+              "Action": [
+                "acm:AddTagsToCertificate",
+                "acm:RemoveTagsFromCertificate",
+                "acm:DeleteCertificate"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:acm:us-east-1:${AWS::AccountId}:certificate/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:ResourceTag/Project": {
+                    "Ref": "ProjectName"
+                  }
+                }
+              }
+            }
+          ]
+        }
       }
     }
   },

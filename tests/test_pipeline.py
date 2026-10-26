@@ -316,7 +316,7 @@ def test_bootstrap_policies_bind_environment_and_preserve_state_history():
               "OidcSubjectStyle": "immutable", "ExistingOidcProviderArn": "",
               "GitHubProvider": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
               "StateBucketName": "s" * 63, "HostedZoneId": "Z123EXAMPLE",
-              "ApiDomain": "api.example.com", "WorkloadBoundary": "arn:aws:iam::123456789012:policy/" + "x"*20 + "-workload-boundary", "AWS::AccountId": "123456789012",
+              "ApiDomain": "api.example.com", "PublicZoneName": "example.com", "WorkloadBoundary": "arn:aws:iam::123456789012:policy/" + "x"*20 + "-workload-boundary", "AWS::AccountId": "123456789012",
               "AWS::Region": "ap-southeast-2", "AWS::Partition": "aws"}
     for name, env in [("Bootstrap", "aws-bootstrap"), ("Plan", "aws-infrastructure-plan"), ("Apply", "aws-infrastructure-apply")]:
         properties = template["Resources"][name + "Role"]["Properties"]
@@ -351,6 +351,8 @@ def test_delivery_filters_avoid_recursive_or_early_releases():
     assert eligible("application", [], manual=True)
     assert eligible("platform", ["deploy/kubernetes/apps/overlays/dev/release.json"])
     assert not eligible("platform", ["README.md"])
+    assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "infra/aws/compute.tf"])
+    assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "services/forecast/app/main.py"])
 
 
 def test_workflow_run_consumers_require_successful_own_main_push():
@@ -499,7 +501,7 @@ def test_access_key_workflow_authentication_assumes_roles_without_oidc():
                 assert step["with"]["role-skip-session-tagging"]=="true"
                 assert "role-to-assume" in step["with"]
                 assert step["with"]["aws-secret-access-key"]=="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-    assert found==7
+    assert found==9
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -892,7 +894,7 @@ def test_ci_discovery_covers_the_service_role_and_budget_without_global_access(r
     statements = resolve(template["Resources"][role_name]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"],
                          {"AWS::Partition": "aws", "AWS::AccountId": "123456789012", "AWS::Region": "ap-southeast-2",
                           "ProjectName": "stocklane-dev", "Environment": "dev", "StateBucketName": "state-bucket",
-                          "HostedZoneId": "Z123EXAMPLE", "ApiDomain": "api.example.com", "WorkloadBoundary": "boundary"})
+                          "HostedZoneId": "Z123EXAMPLE", "ApiDomain": "api.example.com", "PublicZoneName": "example.com", "WorkloadBoundary": "boundary"})
     def permitted(action, resource):
         for statement in statements:
             if statement["Effect"] != "Allow" or "Condition" in statement:

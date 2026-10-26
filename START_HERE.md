@@ -1,5 +1,15 @@
 # Start here
 
+**New stock forecasting:** [Deploy and run the separate Forecast microservice](docs/DEMAND_FORECASTING.md).
+
+**Current release scope and checks:** [FINAL_RELEASE_CHECKS.md](docs/FINAL_RELEASE_CHECKS.md).
+
+**Owner reporting:** [Stock analysis and forecasting data](docs/STOCK_ANALYSIS.md).
+
+**Final domain setup:** [Stocklane, Argo CD and Grafana HTTPS](docs/CUSTOM_DOMAINS.md).
+
+**Latest corrected release:** [Network fix, Bedrock and SageMaker lifecycle](docs/AI_MLOPS_RELEASE.md).
+
 **Latest UI:** see [the warehouse task release guide](docs/WAREHOUSE_UX.md).
 Receiving and stock-out now use scan → draft list → review → confirm.
 

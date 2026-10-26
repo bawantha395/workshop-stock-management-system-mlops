@@ -37,7 +37,10 @@ import {
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./stock.css";
-import { Scanner } from "./Scanner";
+const Scanner = React.lazy(() =>
+  import("./Scanner").then((module) => ({ default: module.Scanner })),
+);
+import { StockAnalysis } from "./StockAnalysis";
 import {
   emptyTask,
   complete,
@@ -62,6 +65,7 @@ type View =
   | "stock"
   | "find"
   | "count"
+  | "analysis"
   | "activity"
   | "review";
 const uid = () => crypto.randomUUID();
@@ -192,6 +196,7 @@ function App() {
     [query, setQuery] = useState("");
   const [countId, setCountId] = useState(""),
     [physical, setPhysical] = useState("");
+  const photoTarget = useRef("");
   const file = useRef<HTMLInputElement>(null),
     sequence = useRef(0),
     mutation = useCommand();
@@ -288,6 +293,7 @@ function App() {
     [preview],
   );
   const resetIdentification = () => {
+    photoTarget.current = "";
     sequence.current++;
     setSelected("");
     setQuantity(1);
@@ -351,6 +357,8 @@ function App() {
     [items, view],
   );
   const analyse = async (photo: File) => {
+    const target = photoTarget.current;
+    photoTarget.current = "";
     const run = ++sequence.current;
     setBusy(true);
     setError("");
@@ -385,6 +393,12 @@ function App() {
         ),
       });
       setImageId(found.imageId);
+      if (target) {
+        setSelected(target);
+        setNotice(
+          "Check that this photo belongs to the selected item, then save the verified reference.",
+        );
+      }
     } catch (e) {
       if (run === sequence.current) setError((e as Error).message);
     } finally {
@@ -674,6 +688,9 @@ function App() {
             ["stock", owner ? "Manage catalogue" : "Current stock", Package],
             ["review", "Needs review", Camera],
             ["activity", "Activity", Activity],
+            ...(owner
+              ? [["analysis", "Stock analysis", ClipboardCheck] as const]
+              : []),
           ] as const
         ).map(([key, label, Icon]) => (
           <button
@@ -1208,6 +1225,16 @@ function App() {
                             <Printer size={17} /> QR label
                           </button>
                         </div>
+                        <button
+                          className="button secondary full"
+                          disabled={busy}
+                          onClick={() => {
+                            photoTarget.current = active.id;
+                            file.current?.click();
+                          }}
+                        >
+                          <Camera size={18} /> Add a reference photo
+                        </button>
                         {imageId && (
                           <button
                             className="stock-link"
@@ -1628,6 +1655,7 @@ function App() {
             </section>
           </>
         )}
+        {view === "analysis" && owner && <StockAnalysis />}
         {view === "activity" && (
           <>
             <div className="stock-title">
@@ -1756,7 +1784,15 @@ function App() {
         )}
       </main>
       {scanner && (
-        <Scanner onScan={chooseQR} onClose={() => setScanner(false)} />
+        <React.Suspense
+          fallback={
+            <div className="stock-notice" role="status">
+              Opening camera…
+            </div>
+          }
+        >
+          <Scanner onScan={chooseQR} onClose={() => setScanner(false)} />
+        </React.Suspense>
       )}
       {(newItem || edit) && (
         <ProductEditor

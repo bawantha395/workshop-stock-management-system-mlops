@@ -10,9 +10,11 @@ class Security:
         self.keys = None
         self.expires = 0
 
-    def staff(self, request: Request, capture=False):
+    def staff(self, request: Request, capture=False, owner=False):
         s = self.settings
         if s.auth_mode == 'local':
+            if owner and request.headers.get('X-Demo-User') == 'mechanic':
+                raise HTTPException(403, 'Owner access is required')
             return 'local-mechanic' if request.headers.get('X-Demo-User') == 'mechanic' else 'local-owner'
         token = request.headers.get('Authorization', '')
         if not token.startswith('Bearer '):
@@ -28,6 +30,8 @@ class Security:
             if claims.get('token_use') != 'access' or claims.get('client_id') not in s.cognito_client_ids.split(','):
                 raise JWTError('Wrong token use/client')
             groups = set(claims.get('cognito:groups', []))
+            if owner and 'OWNER' not in groups:
+                raise HTTPException(403, 'Owner access is required')
             if not groups.intersection({'OWNER', 'MECHANIC'}):
                 if not capture or 'stocklane/capture' not in claims.get('scope', '').split():
                     raise HTTPException(403, 'Staff access is required')

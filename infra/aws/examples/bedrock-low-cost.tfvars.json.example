@@ -1,0 +1,5 @@
+{
+  "bedrock_model_id": "amazon.nova-lite-v1:0",
+  "bedrock_model_arn": "",
+  "bedrock_daily_request_limit": 50
+}

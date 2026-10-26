@@ -5,8 +5,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 @RestController
 public class InventoryApi {
- private final Inventory inventory;
- public InventoryApi(Inventory inventory){this.inventory=inventory;}
+ private final Inventory inventory;private final StockAnalysis analysis;private final ForecastSnapshotStore forecast;
+ public InventoryApi(Inventory inventory,StockAnalysis analysis,ForecastSnapshotStore forecast){this.inventory=inventory;this.analysis=analysis;this.forecast=forecast;}
+ public record ForecastSnapshot(String historyFrom,boolean historyConfirmed){}
+ @PostMapping("/api/inventory/analysis/forecast/history") @PreAuthorize("hasRole('OWNER')") Object forecastHistory(@RequestBody ForecastSnapshot body,Authentication actor){return forecast.prepare(body.historyFrom(),body.historyConfirmed(),actor.getName());}
+ @GetMapping("/api/inventory/analysis") @PreAuthorize("hasRole('OWNER')") Object analysis(@RequestParam String from,@RequestParam String until,@RequestParam(defaultValue="")String search,@RequestParam(defaultValue="")String category,@RequestParam(defaultValue="true")boolean archived,@RequestParam(defaultValue="0")int page){return analysis.summary(from,until,search,category,archived,page);}
+ @GetMapping("/api/inventory/analysis/daily") @PreAuthorize("hasRole('OWNER')") Object daily(@RequestParam String from,@RequestParam String until){return analysis.daily(from,until);}
  @GetMapping("/api/inventory/session") Object session(Authentication a){return Map.of("name",a.getName(),"roles",a.getAuthorities().stream().map(Object::toString).toList());}
  @GetMapping("/api/inventory/products") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object products(){return inventory.products();}
  @GetMapping(value="/api/inventory/catalogue",produces="application/json") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") String catalogue(){return inventory.catalogue();}

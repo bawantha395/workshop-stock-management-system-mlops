@@ -85,7 +85,7 @@ resource "aws_iam_role_policy" "platform_bootstrap" {
     { Effect = "Allow", Action = ["ec2:CreateNetworkInterface", "ec2:DeleteNetworkInterface", "ec2:DescribeDhcpOptions", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:DescribeSecurityGroups", "ec2:DescribeVpcs"], Resource = "*" },
     { Effect = "Allow", Action = ["ec2:CreateNetworkInterfacePermission"], Resource = "arn:${data.aws_partition.current.partition}:ec2:${var.region}:${local.suffix}:network-interface/*", Condition = { StringEquals = { "ec2:AuthorizedService" = "codebuild.amazonaws.com" }, ArnEquals = { "ec2:Subnet" = [for s in aws_subnet.private : s.arn] } } },
     { Effect = "Allow", Action = ["elasticloadbalancing:DescribeLoadBalancers"], Resource = "*" },
-    { Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = "arn:${data.aws_partition.current.partition}:route53:::hostedzone/${var.route53_zone_id}", Condition = { "ForAllValues:StringEquals" = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = [var.api_domain], "route53:ChangeResourceRecordSetsRecordTypes" = ["A"], "route53:ChangeResourceRecordSetsActions" = ["UPSERT"] } } }
+    { Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = "arn:${data.aws_partition.current.partition}:route53:::hostedzone/${var.route53_zone_id}", Condition = { "ForAllValues:StringEquals" = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = compact([var.api_domain, var.argocd_domain, var.grafana_domain]), "route53:ChangeResourceRecordSetsRecordTypes" = ["A"], "route53:ChangeResourceRecordSetsActions" = ["UPSERT"] } } }
   ] })
 }
 resource "aws_eks_access_entry" "platform_bootstrap" {

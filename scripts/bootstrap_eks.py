@@ -39,7 +39,7 @@ def bootstrap(a):
     apply([d for d in core if d['kind'] == 'Namespace'])
     apply([d for d in core if d['kind'] == 'CustomResourceDefinition']); crds(core)
     deferred = {'Certificate', 'Issuer', 'ClusterIssuer', 'ClusterSecretStore'}
-    apply([d for d in core if d['kind'] not in deferred | {'Namespace', 'CustomResourceDefinition'}])
+    apply([d for d in core if d['kind'] not in deferred | {'Namespace', 'CustomResourceDefinition', 'Ingress'}])
     rollout([d for d in core if d['kind'] == 'Deployment' and d['metadata'].get('namespace') == 'cert-manager'])
     apply([d for d in core if d['kind'] in {'Issuer', 'ClusterIssuer', 'Certificate'}])
     rollout([d for d in core if d['kind'] == 'Deployment' and d['metadata'].get('namespace') != 'cert-manager'])
@@ -54,9 +54,11 @@ def bootstrap(a):
     monitoring = build(KUBERNETES / 'monitoring/overlays' / target); apply(monitoring)
     run(['kubectl', '-n', 'monitoring', 'wait', '--for=condition=Ready', 'externalsecret/grafana-admin', '--timeout=180s'])
     rollout([d for d in monitoring if d['kind'] == 'Deployment'])
+    # Admin namespaces exist only after Argo CD and monitoring bootstrap.
+    apply([d for d in core if d['kind'] == 'Ingress'])
     resources = build(overlay)
-    apply([d for d in resources if d['kind'] in {'Namespace', 'ServiceAccount', 'ConfigMap', 'ExternalSecret'}])
-    for name in ['inventory', 'workshop', 'vision']:
+    apply([d for d in resources if d['kind'] in {'Namespace', 'ServiceAccount', 'ConfigMap', 'ExternalSecret', 'NetworkPolicy'}])
+    for name in ['inventory', 'workshop', 'vision', 'forecast']:
         run(['kubectl', '-n', namespace, 'wait', '--for=condition=Ready', 'externalsecret/' + name + '-secrets', '--timeout=180s'])
     jobs = build(KUBERNETES / 'bootstrap/overlays' / target)
     # A completed initialisation is retained; password rotation is a separate operator procedure.

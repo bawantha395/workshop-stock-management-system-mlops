@@ -1,5 +1,15 @@
 # Stocklane - Workshop Stock AI
 
+**New stock forecasting:** [Deploy and run the separate Forecast microservice](docs/DEMAND_FORECASTING.md).
+
+Owner reports: [Stock analysis with date/time filters](docs/STOCK_ANALYSIS.md).
+Current verification: [final release checks](docs/FINAL_RELEASE_CHECKS.md).
+
+Custom app/admin domains: [deployment and activation guide](docs/CUSTOM_DOMAINS.md).
+
+See [the corrected AI/MLOps release guide](docs/AI_MLOPS_RELEASE.md) for the permanent
+Vision networking fix, optional low-cost Bedrock suggestions and SageMaker model lifecycle.
+
 Start with **[START_HERE.md](START_HERE.md)** for the complete-project ZIP,
 GitHub upload instructions and the first validation step. The
 **[folder guide](docs/REPOSITORY_STRUCTURE.md)** explains where to make each change.
@@ -77,6 +87,7 @@ need separate catalogue entries. Photos do not measure remaining liquid.
 | --- | --- |
 | Web application | Stock IN/OUT, QR labels, catalogue search, photo matching, camera review and activity. Owner edits and archival. |
 | Inventory service | PostgreSQL stock ledger, exact SKU catalogue, row locking, non-negative balances, command idempotency, original-issue returns, job freeze and transactional outbox with retry backoff. |
+| Forecast service | Separate owner-only FastAPI service, live availability from Inventory, versioned batch forecasts from S3, 7/30-day usage estimates and labelled ML/baseline/data-needed results. SageMaker training and publication use a protected workflow. |
 | Workshop service | Customer/vehicle job cards, QR job links, idempotent event projections, authoritative invoice reconciliation, frozen-job protection and PDF generation. |
 | Vision service | Real CPU MobileNetV2 image embeddings through OpenCV DNN, reference matching, pgvector storage, versioned caches, manual/Bedrock drafts, camera inbox and approval checks. |
 | Cache | Redis locally; ElastiCache Redis OSS on AWS. Catalogue metadata and exact-image embeddings/drafts use bounded TTLs. Current stock and invoices come from database transactions. |

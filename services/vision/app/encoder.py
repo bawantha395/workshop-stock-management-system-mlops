@@ -61,3 +61,11 @@ class Encoder:
         if not calibration:return None
         logit=calibration['coefficient']*float(similarity)+calibration['intercept']
         return round(float(1/(1+np.exp(-np.clip(logit,-50,50)))),4)
+
+    def accepts(self, similarity, baseline_threshold):
+        calibration = self.manifest.get('calibration')
+        if not calibration:
+            return similarity >= baseline_threshold
+        logit = calibration['coefficient'] * float(similarity) + calibration['intercept']
+        estimate = float(1 / (1 + np.exp(-np.clip(logit, -50, 50))))
+        return estimate >= calibration['threshold']

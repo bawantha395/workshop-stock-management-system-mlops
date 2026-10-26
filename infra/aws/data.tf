@@ -154,7 +154,7 @@ resource "aws_elasticache_replication_group" "main" {
   auth_token                  = random_password.cache.result
 }
 resource "aws_ecr_repository" "services" {
-  for_each             = toset(["inventory", "workshop", "vision", "operations", "ml-training"])
+  for_each             = toset(["inventory", "workshop", "vision", "forecast", "operations", "ml-training"])
   name                 = "${var.name}/${each.key}"
   image_tag_mutability = "IMMUTABLE"
   force_delete         = false

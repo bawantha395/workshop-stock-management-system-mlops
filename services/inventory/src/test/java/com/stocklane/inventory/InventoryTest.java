@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:inventory-tests;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1","app.relay-delay=3600000"})
 @ActiveProfiles("local") @AutoConfigureMockMvc
 class InventoryTest {
- @Autowired Inventory inventory;@Autowired JdbcTemplate db;@Autowired MockMvc http;
+ @Autowired StockAnalysis analysis;@Autowired Inventory inventory;@Autowired JdbcTemplate db;@Autowired MockMvc http;
  String id;
  String key(){return UUID.randomUUID().toString();}
  BigDecimal n(String s){return new BigDecimal(s);}
@@ -39,4 +39,45 @@ class InventoryTest {
  @Test void catalogueEditKeepsStableIdentityAndAudit(){inventory.edit(key(),id,new Inventory.ProductEdit("AC filter","Filters","Example","","", "AC-123","Shelf B",n("3")));assertThat(inventory.product(id,false).get("part_number")).isEqualTo("AC-123");assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("50");assertThat(db.queryForObject("select count(*) from product_audit where product_id=?",Integer.class,id)).isEqualTo(1);}
  @Test void mechanicCannotEditCatalogue()throws Exception{http.perform(patch("/api/inventory/products/"+id).header("X-Demo-User","mechanic").header("Idempotency-Key",key()).contentType("application/json").content("{\"name\":\"test\"}")).andExpect(status().isForbidden());}
  @Test void archivePreservesHistoryAndBlocksMovements(){assertThatThrownBy(()->inventory.archive(key(),id,new Inventory.ArchiveInput(true))).isInstanceOf(Commands.Conflict.class);inventory.move(key(),move("STOCK_OUT","50",null,null));inventory.archive(key(),id,new Inventory.ArchiveInput(true));assertThat(inventory.products()).isEmpty();assertThat(inventory.archivedProducts()).hasSize(1);assertThatThrownBy(()->inventory.move(key(),move("RECEIPT","1",null,null))).isInstanceOf(Commands.Conflict.class);inventory.archive(key(),id,new Inventory.ArchiveInput(false));assertThat(inventory.products()).hasSize(1);}
+
+ @Test void analysisSeparatesPastPeriodFromCurrentStock(){
+  db.update("update movements set created_at='2025-01-01T00:00:00Z' where product_id=?",id);
+  String incoming=inventory.move(key(),move("RECEIPT","10",null,null)).get("id").toString();
+  String outgoing=inventory.move(key(),move("STOCK_OUT","2",null,null)).get("id").toString();
+  String later=inventory.move(key(),move("RECEIPT","5",null,null)).get("id").toString();
+  db.update("update movements set created_at='2025-01-02T00:00:00Z' where id=?",incoming);
+  db.update("update movements set created_at='2025-01-03T00:00:00Z' where id=?",outgoing);
+  db.update("update movements set created_at='2025-01-04T00:00:00Z' where id=?",later);
+  @SuppressWarnings("unchecked") var rows=(List<Map<String,Object>>)analysis.summary("2025-01-02T00:00:00Z","2025-01-04T00:00:00Z","","",true,0).get("rows");
+  var row=rows.getFirst();assertThat((BigDecimal)row.get("opening_quantity")).isEqualByComparingTo("50");assertThat((BigDecimal)row.get("added_quantity")).isEqualByComparingTo("10");assertThat((BigDecimal)row.get("taken_quantity")).isEqualByComparingTo("2");assertThat((BigDecimal)row.get("closing_quantity")).isEqualByComparingTo("58");assertThat((BigDecimal)row.get("available_now")).isEqualByComparingTo("63");
+ }
+ @Test void analysisUsesAllLedgerRowsBeyondActivityLimit(){
+  db.update("update movements set created_at='2025-01-01T00:00:00Z' where product_id=?",id);
+  for(int i=0;i<205;i++)db.update("insert into movements(id,product_id,kind,quantity,unit_price,actor,note,created_at) values(?,?,'RECEIPT',1,0,'test','','2025-01-02T12:00:00Z')",key(),id);
+  db.update("update products set quantity=255 where id=?",id);
+  @SuppressWarnings("unchecked") var rows=(List<Map<String,Object>>)analysis.summary("2025-01-02T00:00:00Z","2025-01-03T00:00:00Z","MOB","",true,0).get("rows");
+  assertThat((BigDecimal)rows.getFirst().get("added_quantity")).isEqualByComparingTo("205");
+ }
+ @Test void dailyUsageGroupsBySriLankaDate(){
+  String outgoing=inventory.move(key(),move("STOCK_OUT","2",null,null)).get("id").toString();db.update("update movements set created_at='2025-01-01T20:00:00Z' where id=?",outgoing);
+  var daily=analysis.daily("2025-01-01T19:00:00Z","2025-01-02T19:00:00Z");assertThat(daily).hasSize(1);assertThat(daily.getFirst().get("date")).isEqualTo("2025-01-02");assertThat((BigDecimal)daily.getFirst().get("out_quantity")).isEqualByComparingTo("2");
+ }
+ @Test void mechanicsCannotAccessOwnerAnalysis()throws Exception{http.perform(get("/api/inventory/analysis").param("from","2025-01-01T00:00:00Z").param("until","2025-02-01T00:00:00Z").header("X-Demo-User","mechanic")).andExpect(status().isForbidden());}
+ @Test void invalidAnalysisDatesAreRejected(){assertThatThrownBy(()->analysis.summary("invalid","2025-01-02T00:00:00Z","","",true,0)).isInstanceOf(IllegalArgumentException.class);assertThatThrownBy(()->analysis.summary("2025-02-01T00:00:00Z","2025-01-02T00:00:00Z","","",true,0)).isInstanceOf(IllegalArgumentException.class);}
+ @Autowired ForecastHistory forecastHistory;
+ @Test void forecastHistoryRequiresOwnerAndConfirmedTracking()throws Exception{
+  http.perform(post("/api/inventory/analysis/forecast/history").header("X-Demo-User","mechanic").contentType("application/json").content("{\"historyFrom\":\"2026-01-01\",\"historyConfirmed\":true}")).andExpect(status().isForbidden());
+  assertThatThrownBy(()->forecastHistory.snapshot("2026-01-01",false,"owner")).isInstanceOf(IllegalArgumentException.class);
+ }
+ @Test void forecastHistoryExcludesPartialRegistrationDayAndChecksLedger(){
+  var today=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo"));
+  var created=today.minusDays(35).atStartOfDay(java.time.ZoneId.of("Asia/Colombo")).toInstant().toString();
+  db.update("update products set created_at=? where id=?",created,id);db.update("update movements set created_at=? where product_id=?",created,id);
+  var snapshot=forecastHistory.snapshot(today.minusDays(40).toString(),true,"owner");
+  @SuppressWarnings("unchecked") var rows=(List<Map<String,Object>>)snapshot.get("products");
+  assertThat((List<?>)rows.getFirst().get("usage")).hasSize(34);
+  assertThat(snapshot.get("historyUntil")).isEqualTo(today.toString());
+  db.update("update products set quantity=49 where id=?",id);
+  assertThatThrownBy(()->forecastHistory.snapshot(today.minusDays(40).toString(),true,"owner")).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Ledger");
+ }
 }

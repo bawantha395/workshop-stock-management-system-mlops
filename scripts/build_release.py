@@ -29,7 +29,7 @@ def build(a):
         if description['ModelApprovalStatus']!='Approved':raise RuntimeError('The retained model package is no longer approved')
     tag=commit[:12]+'-'+os.environ.get('GITHUB_RUN_ID','local')+'-'+os.environ.get('GITHUB_RUN_ATTEMPT','1')
     work=ROOT/'artifacts/release';work.mkdir(parents=True,exist_ok=True);images={}
-    mapping={'inventory':'Java','workshop':'Java','vision':'Vision','operations':'Operations','ml-training':'Training'}
+    mapping={'inventory':'Java','workshop':'Java','vision':'Vision','forecast':'Forecast','operations':'Operations','ml-training':'Training'}
     for name,dockerfile in mapping.items():
         metadata=work/(name+'.json');image=c['ecr'][name]+':'+tag
         args=['docker','buildx','build','--platform','linux/amd64','-f',str(ROOT/'deploy/docker'/(dockerfile+'.Dockerfile')),'--tag',image,'--metadata-file',str(metadata),'--push']

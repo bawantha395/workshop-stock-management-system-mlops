@@ -18,7 +18,10 @@ def eligible(kind, paths, manual=False, current=True):
         return True
     if kind == "application":
         return any(p.startswith(APP_PREFIXES) for p in paths) and not any(p.startswith(INFRA_PREFIXES) for p in paths)
-    return any(p.startswith(PLATFORM_PREFIXES) for p in paths)
+    # Mixed source/infrastructure uploads need their reviewed Terraform and image
+    # release first. Bootstrap automatically only after the GitOps-only merge.
+    return (any(p.startswith(PLATFORM_PREFIXES) for p in paths)
+            and not any(p.startswith(INFRA_PREFIXES + APP_PREFIXES) for p in paths))
 
 
 def main():

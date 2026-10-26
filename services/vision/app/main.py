@@ -161,7 +161,7 @@ def create_app(settings=None):
             image=await asyncio.to_thread(store.image,image_id)
             vector=await asyncio.to_thread(embedding,image)
             candidates=await asyncio.to_thread(store.candidates,encoder.version,vector)
-            candidates=[candidate for candidate in candidates if candidate['similarity'] >= s.match_threshold]
+            candidates=[candidate for candidate in candidates if encoder.accepts(candidate['similarity'],s.match_threshold)]
             for candidate in candidates:candidate['sameSkuEstimate']=encoder.same_sku_estimate(candidate['similarity'])
         except HTTPException:raise
         except (ValueError,OSError):raise HTTPException(422,'Use a clear JPEG or PNG photo of one item') from None
@@ -202,7 +202,7 @@ def create_app(settings=None):
             else:
                 vector=await asyncio.to_thread(embedding,store.image(image_id))
                 candidates=await asyncio.to_thread(store.candidates,encoder.version,vector)
-                candidates=[candidate for candidate in candidates if candidate['similarity'] >= s.match_threshold]
+                candidates=[candidate for candidate in candidates if encoder.accepts(candidate['similarity'],s.match_threshold)]
                 for candidate in candidates:candidate['sameSkuEstimate']=encoder.same_sku_estimate(candidate['similarity'])
         except (ValueError,OSError):raise HTTPException(422,'Invalid item photo') from None
         result={'imageId':image_id,'state':'REVIEW' if candidates or identified else 'UNKNOWN','modelVersion':encoder.version,'candidates':candidates,'identifiedProductId':identified,'qrValue':qr_value,'autoPostEligible':False,'message':'QR identified the product. Confirm quantity.' if identified else 'Review this captured movement and confirm its quantity.'}
@@ -291,6 +291,14 @@ def create_app(settings=None):
             if hit:fields,source=json.loads(hit)
         except (redis.RedisError,ValueError):pass
         if fields is None:
+            if s.bedrock_model_id:
+                try:
+                    day=datetime.now(timezone.utc).strftime('%Y-%m-%d')
+                    limit_key='stocklane:bedrock:daily:'+day
+                    used=cache.incr(limit_key)
+                    if used==1:cache.expire(limit_key,172800)
+                    if used>s.bedrock_daily_request_limit:raise HTTPException(429,'Daily AI suggestion limit reached. Register manually or retry tomorrow UTC.')
+                except redis.RedisError:raise HTTPException(503,'AI usage control is unavailable. Enter the details manually.') from None
             try:fields,source=propose(s,image)
             except Exception:raise HTTPException(503,'AI drafting is unavailable. Retry or enter the product manually.') from None
             try:cache.set(key,json.dumps([fields,source]),ex=900)

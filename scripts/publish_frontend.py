@@ -15,5 +15,5 @@ for file in c['files']:
     if hashlib.sha256(data).hexdigest()!=file['sha256']:raise RuntimeError('Frontend artifact checksum mismatch')
     content=mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
     s3.put_object(Bucket=c['targetBucket'],Key=path.as_posix(),Body=data,ContentType=content,CacheControl='no-store' if path.name in {'index.html','config.js'} else 'public,max-age=31536000,immutable')
-boto3.client('cloudfront').create_invalidation(DistributionId=c['distributionId'],InvalidationBatch={'Paths':{'Quantity':2,'Items':['/index.html','/config.js']},'CallerReference':c['release']})
+boto3.client('cloudfront').create_invalidation(DistributionId=c['distributionId'],InvalidationBatch={'Paths':{'Quantity':3,'Items':['/','/index.html','/config.js']},'CallerReference':c['release']+'-paths-v2'})
 print('Published the reviewed frontend release:',c['release'])

@@ -108,7 +108,7 @@ def config(env='production'):
 
 def test_renderer_preserves_bases_and_rolls_pods_when_the_model_changes(tmp_path):
     before = (KUBERNETES/'apps/base/vision/deployment.yaml').read_bytes()
-    images = {s:'123456789012.dkr.ecr.eu-west-1.amazonaws.com/'+s+'@sha256:'+'a'*64 for s in ['inventory','workshop','vision','operations']}
+    images = {s:'123456789012.dkr.ecr.eu-west-1.amazonaws.com/'+s+'@sha256:'+'a'*64 for s in ['inventory','workshop','vision','forecast','operations']}
     render(config(),images,'s3://test-models/release.tar.gz','f'*64,tmp_path)
     initial = build(tmp_path)
     validate_apps(initial,'stocklane',configured=True)
@@ -139,7 +139,7 @@ def test_full_account_render_wires_platform_monitoring_and_bootstrap(tmp_path, m
     monkeypatch.setattr(renderer,'KUBERNETES',fixture)
     monkeypatch.setattr(validator,'KUBERNETES',fixture)
     c=config();c.update({'name':'stocklane-test','github_repository':'bawantha395/workshop-stock-ai-ops','workload_namespace':'stocklane','cluster_name':'stocklane-test','vpc_id':'vpc-0123456789abcdef0','master_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:rds-master','grafana_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:grafana','operations_topic_arn':'arn:aws:sns:eu-west-1:123456789012:stocklane-operations','application_log_group':'/stocklane/test/containers'})
-    images={s:'123456789012.dkr.ecr.eu-west-1.amazonaws.com/'+s+'@sha256:'+'a'*64 for s in ['inventory','workshop','vision','operations']}
+    images={s:'123456789012.dkr.ecr.eu-west-1.amazonaws.com/'+s+'@sha256:'+'a'*64 for s in ['inventory','workshop','vision','forecast','operations']}
     renderer.render(c,images,'s3://test-models/release.tar.gz','f'*64,platform=True)
     counts=validator.validate_environment('production',configured=True)
     assert counts['platform']>20 and counts['monitoring']>10 and counts['bootstrap']==3
@@ -150,12 +150,14 @@ def test_service_network_policy_is_scoped_and_uses_configured_cidr(tmp_path):
     c = config()
     c['service_ipv4_cidr'] = '172.21.0.0/16'
     images = {s: '123456789012.dkr.ecr.eu-west-1.amazonaws.com/' + s + '@sha256:' + 'a' * 64
-              for s in ('inventory', 'workshop', 'vision', 'operations')}
+              for s in ('inventory', 'workshop', 'vision', 'forecast', 'operations')}
     render(c, images, 's3://models/releases/model.tar.gz', 'f' * 64, tmp_path)
     docs = build(tmp_path)
     policy = next(d for d in docs if d['kind'] == 'NetworkPolicy'
                   and d['metadata']['name'] == 'workshop-to-inventory-service')
-    assert policy['spec']['podSelector'] == {'matchLabels': {'app': 'workshop'}}
+    assert policy['spec']['podSelector'] == {'matchExpressions': [{'key': 'app', 'operator': 'In', 'values': ['workshop', 'vision', 'vision-index', 'forecast']}]}
+    # Include the PreSync reindex Job, not just long-running Deployments.
+    assert 'vision-index' in policy['spec']['podSelector']['matchExpressions'][0]['values']
     assert policy['spec']['policyTypes'] == ['Egress']
     rule = policy['spec']['egress'][0]
     assert rule['ports'] == [{'protocol': 'TCP', 'port': 8081}]

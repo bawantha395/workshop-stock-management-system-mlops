@@ -13,3 +13,8 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 data "aws_availability_zones" "available" { state = "available" }
+provider "aws" {
+  alias  = "cloudfront_acm"
+  region = "us-east-1"
+  default_tags { tags = { Project = var.name, Environment = var.environment, ManagedBy = "Terraform" } }
+}
