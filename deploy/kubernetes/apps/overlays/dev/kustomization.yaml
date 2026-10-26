@@ -23,16 +23,16 @@ patches:
 images:
 - name: stocklane/inventory
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory
-  digest: sha256:05295913c9fb5cb89c122adf6016570eac0cd6c48a25fbe4b1d78517ac7a1805
+  digest: sha256:f536825b07e517ad5e0a8af37ef2f32eefb129b7c8294097cc5bd8b08274b435
 - name: stocklane/workshop
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop
-  digest: sha256:a492193dd5793db25fd285c6ffcc57bf0fc9f30b825b327aaf9866d2e1ae2be2
+  digest: sha256:9c6733f965de1204e45f5f71e20d10611ab5386a5a88fc30f1b5f2019c53cef7
 - name: stocklane/vision
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision
-  digest: sha256:b016aa3d3a2a8fa57fbe2143f768ebda4df5914e4ed12747a21f0c28d77204a1
+  digest: sha256:5068d861ae2d11009d9d3a3bff98f08ca458dcaf5211ab5603fa47dea1ab2793
 - name: stocklane/operations
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
-  digest: sha256:4413402428f57a197d24295ed7872b97d43161a2f1f30056071db5e3692413e8
+  digest: sha256:b39645b2aefdfe7af511971ba5b024b59653e3c02e821e3cbc255605cae41d74
 labels:
 - pairs:
     stocklane.io/environment: dev

@@ -1,11 +1,11 @@
 {
   "sourceBucket": "stocklane-dev-models-721274598579",
-  "sourcePrefix": "releases/frontend/efbbb93a9326-40279447437-1",
+  "sourcePrefix": "releases/frontend/18a254a298a1-40286666068-1",
   "targetBucket": "stocklane-dev-web-721274598579",
   "distributionId": "EBAJUKGUIWMAQ",
   "region": "ap-southeast-2",
   "accountId": "721274598579",
-  "release": "efbbb93a9326-40279447437-1",
+  "release": "18a254a298a1-40286666068-1",
   "files": [
     {
       "path": "assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
