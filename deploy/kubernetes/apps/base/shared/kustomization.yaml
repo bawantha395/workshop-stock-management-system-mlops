@@ -4,3 +4,4 @@ resources:
 - configmap.yaml
 - ingress.yaml
 - networkpolicy.yaml
+- workshop-inventory-networkpolicy.yaml

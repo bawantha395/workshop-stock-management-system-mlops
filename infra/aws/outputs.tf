@@ -11,6 +11,7 @@ output "deployment" {
     github_repository          = var.github_repository
     application_replicas       = var.application_replicas
     account_id                 = local.suffix
+    service_ipv4_cidr          = aws_eks_cluster.main.kubernetes_network_config[0].service_ipv4_cidr
     cluster_name               = aws_eks_cluster.main.name
     vpc_id                     = aws_vpc.main.id
     api_domain                 = var.api_domain

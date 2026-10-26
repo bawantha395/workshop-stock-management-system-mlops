@@ -150,3 +150,13 @@ variable "application_replicas" {
   type    = number
   default = 3
 }
+
+variable "service_ipv4_cidr" {
+  description = "EKS Service CIDR. Immutable after cluster creation; keep the existing cluster value."
+  type        = string
+  default     = "172.20.0.0/16"
+  validation {
+    condition     = can(cidrnetmask(var.service_ipv4_cidr))
+    error_message = "service_ipv4_cidr must be a valid IPv4 CIDR."
+  }
+}

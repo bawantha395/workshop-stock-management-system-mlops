@@ -8,6 +8,7 @@ import argparse
 import base64
 import copy
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -60,6 +61,13 @@ def render(config, images, model_uri, model_sha, destination=None, *, platform=F
             'pod-security.kubernetes.io/enforce': 'restricted',
             'stocklane.io/environment': env, 'stocklane.io/monitoring': 'enabled'}}})
     save('configmap', patch('v1', 'ConfigMap', 'platform-config', data=common))
+    # Egress can be evaluated before Service DNAT. Permit the declared Service
+    # range as well as Inventory pods; never bind GitOps to an allocated VIP.
+    service_cidr = str(ipaddress.IPv4Network(c.get('service_ipv4_cidr', '172.20.0.0/16')))
+    service_policy = copy.deepcopy(load_yaml(base / 'shared/workshop-inventory-networkpolicy.yaml'))
+    service_policy['spec']['egress'][0]['to'][1]['ipBlock']['cidr'] = service_cidr
+    save('workshop-inventory-networkpolicy', service_policy)
+
     checksum = hashlib.sha256(json.dumps(common, sort_keys=True).encode()).hexdigest()
     for service in SERVICES:
         save(service + '-deployment', patch('apps/v1', 'Deployment', service, spec={

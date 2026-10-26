@@ -46,6 +46,22 @@ def main(args):
     for name in ["inventory", "workshop", "vision"]:
         subprocess.run(["kubectl", "-n", namespace, "rollout", "status", "deployment/" + name,
                         "--timeout=300s"], env=env, check=True)
+    # A public ALB health check does not exercise cross-service ClusterIP traffic.
+    # Check the real Workshop network namespace without exposing internal tokens.
+    connection_deadline = time.monotonic() + 180
+    probe = ('exec 3<>/dev/tcp/inventory/8081; '
+             'printf "GET /actuator/health/readiness HTTP/1.1\\r\\nHost: inventory\\r\\nConnection: close\\r\\n\\r\\n" >&3; '
+             'IFS= read -r status <&3; printf "%s\\n" "$status"; [[ "$status" == *" 200 "* ]]')
+    while time.monotonic() < connection_deadline:
+        result = kubectl('-n', namespace, 'exec', 'deployment/workshop', '--',
+                         'timeout', '10', 'bash', '-c', probe)
+        if result.returncode == 0:
+            print('Workshop-to-Inventory Service HTTP readiness passed')
+            break
+        time.sleep(5)
+    else:
+        raise RuntimeError('Workshop cannot reach Inventory through its Kubernetes Service. '
+                           'Inspect Service endpoints, network policies and node networking.')
     while time.monotonic() < deadline:
         ingress = kubectl("-n", namespace, "get", "ingress", "api", "-o", "json")
         if ingress.returncode == 0 and json.loads(ingress.stdout).get("status", {}).get("loadBalancer", {}).get("ingress"):

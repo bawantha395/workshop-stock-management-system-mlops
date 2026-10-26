@@ -21,6 +21,7 @@ resource "aws_cloudwatch_log_group" "eks" {
   retention_in_days = 14
 }
 resource "aws_eks_cluster" "main" {
+  kubernetes_network_config { service_ipv4_cidr = var.service_ipv4_cidr }
   name                      = var.name
   version                   = var.eks_version
   role_arn                  = aws_iam_role.eks.arn

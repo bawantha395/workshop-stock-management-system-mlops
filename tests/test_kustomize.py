@@ -143,3 +143,22 @@ def test_full_account_render_wires_platform_monitoring_and_bootstrap(tmp_path, m
     renderer.render(c,images,'s3://test-models/release.tar.gz','f'*64,platform=True)
     counts=validator.validate_environment('production',configured=True)
     assert counts['platform']>20 and counts['monitoring']>10 and counts['bootstrap']==3
+
+
+def test_service_network_policy_is_scoped_and_uses_configured_cidr(tmp_path):
+    from render_cloud import render
+    c = config()
+    c['service_ipv4_cidr'] = '172.21.0.0/16'
+    images = {s: '123456789012.dkr.ecr.eu-west-1.amazonaws.com/' + s + '@sha256:' + 'a' * 64
+              for s in ('inventory', 'workshop', 'vision', 'operations')}
+    render(c, images, 's3://models/releases/model.tar.gz', 'f' * 64, tmp_path)
+    docs = build(tmp_path)
+    policy = next(d for d in docs if d['kind'] == 'NetworkPolicy'
+                  and d['metadata']['name'] == 'workshop-to-inventory-service')
+    assert policy['spec']['podSelector'] == {'matchLabels': {'app': 'workshop'}}
+    assert policy['spec']['policyTypes'] == ['Egress']
+    rule = policy['spec']['egress'][0]
+    assert rule['ports'] == [{'protocol': 'TCP', 'port': 8081}]
+    assert {'podSelector': {'matchLabels': {'app': 'inventory'}}} in rule['to']
+    assert {'ipBlock': {'cidr': '172.21.0.0/16'}} in rule['to']
+    assert '172.20.147.62' not in str(policy)
