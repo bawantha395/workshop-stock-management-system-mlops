@@ -1226,20 +1226,22 @@
                     "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
                   },
                   "Condition": {
-                    "ForAllValues:StringLike": {
+                    "ForAllValues:StringEquals": {
                       "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
                         {
                           "Ref": "ApiDomain"
                         },
-                        {
-                          "Fn::Sub": "*.${ApiDomain}"
-                        },
-                        {
-                          "Fn::Sub": "*.${PublicZoneName}"
-                        }
+                        "argocd-stocklane.bawantha-rathnayake.tech",
+                        "grafana-stocklane.bawantha-rathnayake.tech"
+                      ],
+                      "route53:ChangeResourceRecordSetsRecordTypes": [
+                        "A"
+                      ],
+                      "route53:ChangeResourceRecordSetsActions": [
+                        "UPSERT"
                       ]
                     }
-                  }
+                  } 
                 },
                 {
                   "Sid": "ManageFrontendDistribution",
