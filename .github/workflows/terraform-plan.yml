@@ -1,6 +1,11 @@
 name: Plan AWS infrastructure
 on:
   workflow_dispatch:
+    inputs:
+      adopt_existing_nodegroup:
+        description: Adopt the verified cpu-workers group left outside state by a cancelled apply
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -68,5 +73,9 @@ jobs:
         env:
           TFVARS_JSON: ${{ secrets.TFVARS_JSON }}
           OIDC_SUBJECT_STYLE: ${{ vars.OIDC_SUBJECT_STYLE || 'immutable' }}
-        run: python scripts/pipeline_terraform.py plan
+          ADOPT_EXISTING_NODEGROUP: ${{ inputs.adopt_existing_nodegroup }}
+        run: |
+          args=()
+          if [ "$ADOPT_EXISTING_NODEGROUP" = "true" ]; then args+=(--adopt-existing-nodegroup); fi
+          python scripts/pipeline_terraform.py plan "${args[@]}"
 

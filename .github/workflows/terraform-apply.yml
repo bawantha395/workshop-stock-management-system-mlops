@@ -15,10 +15,14 @@ on:
         required: true
         type: boolean
         default: false
+      allow_nodegroup_replacement:
+        description: Approve only the reviewed create-before-destroy replacement of aws_eks_node_group.main
+        type: boolean
+        default: false
       prepare_release:
         description: Prepare an application release PR after successful infrastructure apply
         type: boolean
-        default: true
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -81,9 +85,11 @@ jobs:
           APPROVED_PLAN_ID: ${{ inputs.plan_id }}
           APPROVED_PLAN_SHA256: ${{ inputs.plan_sha256 }}
           APPROVE_DELETIONS: ${{ inputs.allow_deletions }}
+          APPROVE_NODEGROUP_REPLACEMENT: ${{ inputs.allow_nodegroup_replacement }}
         run: |
           args=()
           if [ "$APPROVE_DELETIONS" = "true" ]; then args+=(--allow-deletions); fi
+          if [ "$APPROVE_NODEGROUP_REPLACEMENT" = "true" ]; then args+=(--allow-nodegroup-replacement); fi
           python scripts/pipeline_terraform.py apply --plan-id "$APPROVED_PLAN_ID" --sha256 "$APPROVED_PLAN_SHA256" "${args[@]}"
   release:
     needs: apply

@@ -255,17 +255,20 @@ profile is:
 | --- | --- |
 | Availability Zones | 2 |
 | NAT gateways | 1 |
-| EKS workers | 2 × `t3.micro`; maximum 2 |
+| EKS workers | 2 × `m7i-flex.large` On-Demand, 2 vCPUs / 8 GiB each; maximum 2 |
 | Application replicas | 1 each |
 | RDS | Single-AZ `db.t4g.micro`; 20 GiB `gp2`; no storage autoscaling; one-day backups |
 | Redis | 2 × `cache.t4g.micro`, with failover |
 | Platform bootstrap | On-demand, non-privileged CodeBuild Small; maximum 45 build minutes |
 
-The requested micro workers have 1 GiB RAM each. The three applications,
-Prometheus, Grafana and Alertmanager alone request 2,144 MiB, exceeding the
-two nodes' combined raw 2,048 MiB before Kubernetes and controller overhead.
-The complete platform cannot fit this profile; use it for infrastructure
-experiments and allocate additional capacity before a full rollout.
+AWS lists `m7i-flex.large` as eligible for the newer Free Tier. This demo
+profile replaces the earlier workers, whose combined memory could not fit
+the application and monitoring requests. Allocatable capacity, CPU, pod slots,
+actual workload usage and availability must still be checked during rollout.
+The managed project policy denies Spot instance requests and Spot launches;
+no Spot Fleet, account upgrade or SCP changes are attempted. See
+[FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md) to adopt the node group left by
+the cancelled apply and review a create-before-destroy replacement.
 
 This is a prototype capacity profile. `infra/ci/capacity-production.json`
 retains three AZs/NATs/workers, replicated application capacity and Multi-AZ
@@ -283,10 +286,12 @@ Open **Actions → Apply reviewed Terraform plan → Run workflow → main**.
 
 - Paste the Plan ID and Plan SHA256 from the plan summary.
 - Keep `allow_deletions` false for the first deployment.
-- For the requested two-worker `t3.micro` infrastructure experiment, set
-  `prepare_release` false. The full stack's requests exceed these workers'
-  memory. Set it true to prepare a release after sufficient worker capacity
-  is configured and its infrastructure plan is reviewed.
+- Keep `allow_nodegroup_replacement` false for a fresh deployment. For the
+  reviewed recovery plan only, set it true to permit replacement of
+  `aws_eks_node_group.main`, with new workers created before the old group is
+  deleted. Other deletions remain blocked when `allow_deletions=false`.
+- `prepare_release` defaults to false. Finish infrastructure recovery first;
+  then request application release preparation and platform bootstrap.
 
 The workflow checks the account, Region, environment, source SHA, plan age
 (maximum six hours), S3 object version, plan checksum, provider lock and current
@@ -373,3 +378,24 @@ existing state and AWS credentials. The micro RDS profile requires replacing
   does not claim a live AWS deployment, hardware acceptance, model accuracy,
   backup recovery targets or an achieved availability SLA.
 
+
+## Cancelled apply recovery and locks
+
+Plan and apply share a concurrency group with `cancel-in-progress=false`.
+The S3 backend retains `use_lockfile=true`, encrypted state and version history.
+Force cancellation or runner failure can still leave a stale lock and resources
+created in AWS before their IDs reached state. DynamoDB locking is deprecated
+and does not make a forced interruption safe. No automatic lock expiry or
+force-unlock runs in this pipeline. Verify all writers have stopped and match
+the exact lock ID before a deliberate recovery. Keep the state and its versions.
+
+On manual **Plan AWS infrastructure**, `adopt_existing_nodegroup=true` prepares
+a configuration-driven import only after verifying the existing `cpu-workers`
+group against this state's cluster ARN, worker role, private subnets and tags.
+Plan credentials cannot write state. The private saved plan carries the import
+into the later reviewed apply; the job summary counts imports as well as other
+changes. Groups already tracked elsewhere, ownership mismatches and operations
+still in progress stop the workflow. The worker quota check accounts for current
+standard On-Demand instances plus the new desired workers; insufficient quota
+stops publication of an approved plan. This is a preflight, not a reservation
+of EC2 capacity. Follow [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md).

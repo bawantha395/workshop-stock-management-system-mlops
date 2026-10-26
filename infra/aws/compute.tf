@@ -77,13 +77,13 @@ resource "aws_launch_template" "workers" {
   }
 }
 resource "aws_eks_node_group" "main" {
-  cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "cpu-workers"
-  node_role_arn   = aws_iam_role.nodes.arn
-  subnet_ids      = aws_subnet.private[*].id
-  instance_types  = [var.node_instance_type]
-  capacity_type   = "ON_DEMAND"
-  ami_type        = "AL2023_x86_64_STANDARD"
+  cluster_name           = aws_eks_cluster.main.name
+  node_group_name_prefix = "cpu-workers-"
+  node_role_arn          = aws_iam_role.nodes.arn
+  subnet_ids             = aws_subnet.private[*].id
+  instance_types         = [var.node_instance_type]
+  capacity_type          = "ON_DEMAND"
+  ami_type               = "AL2023_x86_64_STANDARD"
   launch_template {
     id      = aws_launch_template.workers.id
     version = tostring(aws_launch_template.workers.latest_version)
@@ -94,6 +94,9 @@ resource "aws_eks_node_group" "main" {
     max_size     = var.node_max_size
   }
   update_config { max_unavailable = 1 }
+  # Instance types are immutable. A unique name lets EKS create replacement
+  # capacity before draining the previous group; temporary quota is required.
+  lifecycle { create_before_destroy = true }
   depends_on = [aws_iam_role_policy_attachment.nodes, aws_nat_gateway.main]
 }
 resource "aws_eks_addon" "main" {

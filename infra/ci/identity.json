@@ -1146,6 +1146,22 @@
                   }
                 },
                 {
+                  "Sid": "CreateRdsManagedMasterSecret",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:TagResource"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds!db-*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": { "Ref": "AWS::Region" }
+                    }
+                  }
+                },
+                {
                   "Sid": "ManageProjectBuckets",
                   "Effect": "Allow",
                   "Action": [

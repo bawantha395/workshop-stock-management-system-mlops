@@ -224,10 +224,10 @@ to update that one configuration secret and generate a new plan. AWS access
 keys remain the same. No role creation, IAM access check, micro RDS creation or
 successful corrected apply has been executed from this build environment.
 
-### User-selected micro instances
+### Previous micro-instance revision
 
 The user subsequently requested `t3.micro` for the node group (replacing the
-earlier nano request) and `db.t4g.micro` for RDS. The current demo profile uses
+earlier nano request) and `db.t4g.micro` for RDS. That revision used
 those types, retaining two workers, Single-AZ RDS, 20 GiB `gp2`, disabled storage
 autoscaling and one-day backups. The earlier `db.t3.micro` selection above
 describes the preceding revision.
@@ -241,3 +241,43 @@ raw memory before platform controllers, EKS add-ons and node overhead. The full
 rollout cannot fit these requested worker settings. The recovery guide now
 recommends an infrastructure-only apply with `prepare_release=false` until
 capacity is addressed. No scheduling or readiness success on AWS is claimed.
+
+
+### Interrupted-apply recovery — 26 October 2026
+
+The supplied apply log reports EKS `ResourceInUseException` for `cpu-workers`
+and an RDS managed-secret creation denial. The source now prepares an explicit,
+reviewed import after verifying the old group's ownership against remote state.
+Plan credentials remain unable to overwrite state. Import actions appear in
+the sanitized review summary, including imports with otherwise no-op changes.
+The generated import file is ignored by Git and embedded in the saved plan.
+
+Worker names now use a unique prefix and create-before-destroy. A targeted
+approval permits only that replacement; unrelated deletions, mixed database
+replacements and destroy-before-create operations remain blocked. The apply
+role gains only CreateSecret/TagResource for account/Region-scoped RDS-managed
+instance secrets; it does not gain password reads or deletion on that prefix.
+
+The demo profile now selects two On-Demand `m7i-flex.large` workers, retaining
+`db.t4g.micro`, Single-AZ, 20 GiB gp2 and one-day backups. AWS documents the new
+worker type as Free Tier eligible and available in Sydney. Its published
+project policies deny Spot launches, so no Spot or account-plan change is added.
+S3 locking and bucket version history are retained; no lock TTL or automatic
+force-unlock is introduced. `prepare_release` now defaults to false.
+
+116 targeted tests passed, with two training tests deselected. Coverage includes
+read-only import preparation, ownership mismatches, in-flight AWS operations,
+resources already tracked at another root/module address, service errors,
+import-aware summaries, narrow deletion approval, scoped secret permissions
+and overlapping worker vCPU quota. A real Terraform 1.13.5 test using the built-in
+terraform_data resource imports and replaces a local test resource, then
+successfully applies the saved plan after removing its generated import file.
+This validates saved-plan mechanics, not EKS or RDS creation on AWS.
+
+CloudFormation lint, inline-policy size checks, actionlint/ShellCheck, Terraform
+formatting, HCL parsing and changed Python compilation passed. No application
+source or dependencies changed. Full application integration/security CI must
+still pass on the uploaded commit. AWS provider validation runs in GitHub;
+local provider processes are restricted in this build environment. No live
+node-group import, quota check, IAM update or corrected RDS/apply has run here.
+Follow FIRST_APPLY_FIX.md before requesting a new reviewed plan.

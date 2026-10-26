@@ -1,63 +1,43 @@
-# Resume AWS with the requested micro instances
+# Recover the interrupted AWS apply
 
 Repository: `bawantha395/workshop-stock-management-system-mlops`.
 AWS account: `721274598579`. Region: Sydney, `ap-southeast-2`.
 
-SNS and the monthly budget completed in the latest apply. EKS node-group
-creation still reported a service-linked-role read error; RDS rejected the
-previous `db.t4g.small` class. Keep the existing resources and remote state.
+The latest log reports an existing EKS `cpu-workers` group while Terraform
+attempts to create it, and RDS cannot create its managed master-password secret.
+A cancelled apply can leave a resource in AWS before its ID is persisted to
+state. Removing a stale lock permits access to state; it does not import that
+resource. Keep the existing backend, state versions and completed resources.
 
-## Current corrections
+## What changes
 
-| Setting | Demo value |
-| --- | --- |
-| EKS workers | 2 × `t3.micro` |
-| Database class | `db.t4g.micro` |
-| Database availability | Single-AZ |
-| Database storage | 20 GiB `gp2` |
-| Storage autoscaling | Disabled, maximum allocated storage `0` |
-| Automated backups | One day |
+- The apply role gains `secretsmanager:CreateSecret` and `TagResource` for
+  RDS-managed instance secrets named `rds!db-*` in this account and Region.
+  Existing project-secret permissions cover `stocklane-dev/*`, which does not
+  include RDS's generated names. This new statement grants no password reads
+  or secret deletion. Existing regional KMS permissions remain in place.
+- The demo profile uses two `m7i-flex.large` On-Demand workers, each with
+  2 vCPUs and 8 GiB RAM. AWS lists this type for the newer Free Tier. Eligible
+  usage consumes credits; it is not an unlimited free cluster.
+- AWS's published policy for this project-account experience denies Spot
+  requests and Spot market launches. No Spot Fleet or policy bypass is added.
+- Workers use a generated `cpu-workers-` name and create-before-destroy.
+  Changing instance types requires replacement; reusing a fixed name would
+  collide with the existing group. Old and new workers briefly overlap and
+  need enough EC2 quota. Planning checks that quota before publishing a plan.
+- RDS stays Single-AZ `db.t4g.micro`, 20 GiB `gp2`, one-day backups and no
+  storage autoscaling. The production capacity profile stays unchanged.
 
-AWS lists `db.t4g.micro` for PostgreSQL in its [RDS Free Tier documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html).
-Account eligibility and available regional capacity still need confirmation
-during deployment. The production capacity profile keeps its existing settings.
+## 1. Upload the update and validate
 
-Each `t3.micro` worker has 1 GiB RAM. The application and monitoring requests
-alone total 2,144 MiB before Kubernetes and platform controllers, exceeding
-the two workers' combined 2,048 MiB raw memory. The full rollout cannot fit
-this profile. These are the requested infrastructure experiment settings;
-additional worker capacity is required for the complete platform.
+Copy the project contents into your existing repository and push to `main`.
+Wait for **Validate platform** on that commit. If a plan automatically starts
+before you update IAM/configuration, request a new plan after the next steps.
 
-The updated CloudShell bootstrap verifies the account-wide
-`AWSServiceRoleForAmazonEKSNodegroup`. It creates that AWS-managed role only
-when IAM reports `NoSuchEntity`. Existing roles are reused; denied reads do not
-trigger a creation attempt. The role is a shared account prerequisite, not a
-Terraform-managed role that should be destroyed with one application.
+## 2. Update the existing AWS trust stack
 
-The plan and apply workflows now test their own `iam:GetRole` access before
-Terraform initialization. They distinguish a missing role from a denied read.
-The repeated EKS message alone does not establish which condition caused the
-server-side validation error. The new check supplies direct evidence instead
-of widening IAM permissions without evidence.
-
-## 1. Update the existing repository
-
-Copy the updated project contents into your existing checkout, then commit and
-push to `main`. Keep the existing repository and history. The additional runtime
-changes for this follow-up are:
-
-- `infra/ci/capacity-demo.json`
-- `infra/aws/variables.tf`
-- `infra/aws/data.tf`
-- `scripts/bootstrap_pipeline.py`
-- `scripts/pipeline_common.py`
-- `scripts/pipeline_terraform.py`
-
-The archive also retains the earlier IAM, Cognito, SNS and backup corrections,
-and includes the tests and updated guides. Wait for **Validate platform** to
-pass on the new commit.
-
-## 2. Run the updated bootstrap in CloudShell
+Use an authenticated Sydney CloudShell session. No Terraform installation is
+needed for this bootstrap, and no new AWS access key is requested.
 
 ```bash
 export AWS_REGION=ap-southeast-2
@@ -79,63 +59,87 @@ python3 scripts/bootstrap_pipeline.py \
   --execute
 ```
 
-An unchanged trust-stack template is expected when the IAM correction has
-already been applied. The helper still checks the service-linked role when
-`--execute` is supplied. Expect:
+Expect an `ApplyRole` policy update and the existing EKS service-linked-role
+verification. If the checkout is missing in a new CloudShell home, clone the
+repository first. Keep any specific authorization error for investigation.
 
-```text
-EKS node-group service-linked role is ready: arn:aws:iam::721274598579:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup
-```
+## 3. Replace TFVARS_JSON with the full generated object
 
-If IAM denies this step, retain that specific error. The helper does not change
-SCPs or treat denied reads as missing roles. No new access key is requested.
-
-## 3. Replace only the TFVARS_JSON secret
-
-This time the existing GitHub secret must change: it still contains the old
-node and database classes. Source defaults cannot override explicit values
-in that secret.
-
-Print the new configuration object in your own CloudShell session:
+The existing secret contains `t3.micro`; editing the default profile alone
+cannot override that explicit input. Print the generated configuration:
 
 ```bash
 python3 -c 'import json; print(json.dumps(json.load(open("deploy/generated/github-setup.json"))["repository_secret"]["value"], indent=2))'
 ```
 
-Copy the complete printed object into GitHub **Settings → Secrets and variables
-→ Actions → Repository secrets → TFVARS_JSON → Update**.
+Paste the complete object into GitHub **Settings → Secrets and variables →
+Actions → Repository secrets → TFVARS_JSON → Update**. It must include
+`"node_instance_type": "m7i-flex.large"`. Keep both existing AWS access-key
+secrets and repository variables.
 
-Verify these entries are present:
+## 4. Plan the import and worker replacement
 
-```json
-"node_instance_type": "t3.micro",
-"database_instance_class": "db.t4g.micro",
-"database_multi_az": false,
-"database_storage_type": "gp2",
-"database_max_allocated_storage": 0,
-"database_backup_retention_days": 1
-```
+Open **Actions → Plan AWS infrastructure → Run workflow → main**.
+Set **adopt_existing_nodegroup=true** for this recovery.
 
-Keep the existing `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and repository
-variables. The printed configuration is not a replacement for those keys.
+The planner reads the current state and EKS metadata. It only prepares an
+import when the old group matches this state's cluster ARN, worker IAM role,
+private subnets, Project/Environment/ManagedBy tags, account and Region.
+Groups in CREATING, UPDATING or DELETING must finish first. A group already
+tracked in state does not need another import. A group tracked at another
+address is not imported twice.
 
-## 4. Request a new plan, then apply that plan
+Review the existing group's status and health codes in the log. The saved plan
+should include an import at `aws_eks_node_group.main` if it was untracked,
+followed by creation of a uniquely named group and deletion of the legacy
+group. The summary shows import/create/delete counts and addresses. The new
+workers should use `m7i-flex.large`; RDS should use the settings above.
 
-1. Run **Plan AWS infrastructure** on `main` after the bootstrap and secret
-   update. A plan automatically started by the earlier push may use old inputs;
-   request a fresh one now.
-2. Check for **Verified EKS service-linked role with current workflow
-   credentials**. If this check fails, use its specific missing-role or denied
-   permission error before another apply.
-3. Review the plan log and summary. RDS should request `db.t4g.micro`, 20 GiB,
-   `gp2`, one-day backups and Single-AZ. Existing completed resources should be
-   retained. Inspect unexpected deletions or replacements before proceeding.
-4. Run **Apply reviewed Terraform plan** on `main`, supplying this new plan's
-   ID and SHA256 and `allow_deletions=false`. For this infrastructure experiment,
-   use `prepare_release=false`; the full application/platform rollout requires
-   additional worker capacity. Request release preparation after resolving
-   that capacity limit.
+Planning does not modify state or delete workers. The import is embedded in
+the private saved plan for the reviewed apply. If ownership checks or the EC2
+quota check fail, retain the exact message; do not delete resources or reset
+state. Quotas and real regional capacity still govern successful creation.
 
-Do not reuse a plan from before either the partial apply or secret update.
-The existing state bucket/key stays in use. After a successful apply, follow
-**Prepare AWS release** and its deployment PR using [PIPELINE_SETUP.md](PIPELINE_SETUP.md).
+## 5. Apply the newly reviewed plan
+
+Open **Apply reviewed Terraform plan** on `main` and set:
+
+| Input | Value |
+| --- | --- |
+| plan_id | This new plan's ID |
+| plan_sha256 | This new plan's checksum |
+| allow_deletions | false |
+| allow_nodegroup_replacement | true, after reviewing this worker replacement |
+| prepare_release | false |
+
+The targeted approval permits only create-before-destroy replacement of
+`aws_eks_node_group.main`. An unrelated deletion or a destroy-before-create
+replacement still fails approval. Do not reuse a plan from an earlier apply
+or from before the IAM/configuration update.
+
+Wait for the apply to finish. After infrastructure succeeds, continue with
+**Prepare AWS release**, its reviewed GitOps PR, and **Bootstrap EKS platform**
+using [PIPELINE_SETUP.md](PIPELINE_SETUP.md). Application readiness has not been
+verified just because Terraform succeeds.
+
+## State locks after interruptions
+
+Keep S3 native locking and bucket versioning. Plan and apply share one GitHub
+concurrency group and do not automatically cancel each other. DynamoDB locking
+is deprecated; either mechanism can retain a lock after a forced cancellation.
+Do not disable locking or automatically expire/delete a lock by age.
+
+If a lock remains, first confirm all Terraform writers are stopped and match
+the lock ID to your cancelled run. Use `terraform force-unlock LOCK_ID` only
+from the matching initialized backend, or deliberately remove only that
+verified `.tflock` object. Keep `terraform.tfstate` and its version history.
+Generate a fresh plan afterward; investigate any AWS/state mismatch separately.
+
+## References
+
+- [RDS managed-password permissions](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html)
+- [EC2 Free Tier eligible instance types](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html)
+- [EC2 instance specifications](https://docs.aws.amazon.com/ec2/latest/instancetypes/gp.html)
+- [Managed project policies, including Spot denials](https://docs.aws.amazon.com/accounts/latest/reference/scps-and-rcps-for-projects.html)
+- [Terraform imports](https://developer.hashicorp.com/terraform/language/import)
+- [S3 backend locking and DynamoDB deprecation](https://developer.hashicorp.com/terraform/language/backend/s3)

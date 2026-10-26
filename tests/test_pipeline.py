@@ -22,6 +22,7 @@ import bootstrap_pipeline
 import pipeline_common as common
 import pipeline_platform as platform
 import pipeline_terraform as delivery
+import pipeline_nodegroup as nodegroup
 
 
 @pytest.fixture
@@ -649,6 +650,238 @@ def test_demo_capacity_reaches_terraform_with_micro_rds_and_fixed_storage(config
     assert rendered["database_storage_type"] == "gp2"
     assert rendered["database_max_allocated_storage"] == 0
     assert rendered["database_backup_retention_days"] == 1
+
+
+def recovery_state(config):
+    def resource(kind, name, *attributes):
+        return {"mode": "managed", "type": kind, "name": name,
+                "instances": [{"attributes": item} for item in attributes]}
+    return {"version": 4, "resources": [
+        resource("aws_eks_cluster", "main", {"arn": f"arn:aws:eks:{config['region']}:{config['account']}:cluster/{config['project']}"}),
+        resource("aws_iam_role", "nodes", {"arn": f"arn:aws:iam::{config['account']}:role/{config['project']}-nodes"}),
+        resource("aws_subnet", "private", {"id": "subnet-11111111"}, {"id": "subnet-22222222"})]}
+
+
+def recovery_group(config):
+    return {"nodegroupName": "cpu-workers", "clusterName": config["project"], "status": "ACTIVE",
+            "nodegroupArn": f"arn:aws:eks:{config['region']}:{config['account']}:nodegroup/{config['project']}/cpu-workers/uuid",
+            "nodeRole": f"arn:aws:iam::{config['account']}:role/{config['project']}-nodes",
+            "subnets": ["subnet-11111111", "subnet-22222222"], "instanceTypes": ["t3.micro"],
+            "tags": {"Project": config["project"], "Environment": "dev", "ManagedBy": "Terraform"}}
+
+
+def recovery_clients(config, tmp_path, monkeypatch, state=None, group=None, error_code=None):
+    from botocore.exceptions import ClientError
+    state = recovery_state(config) if state is None else state
+    group = recovery_group(config) if group is None else group
+    calls = []
+    class Storage:
+        def get_object(self, **kwargs):
+            calls.append("read-state")
+            assert kwargs == {"Bucket": config["bucket"], "Key": config["key"], "ExpectedBucketOwner": config["account"]}
+            return {"Body": body(state)}
+    class Eks:
+        def describe_nodegroup(self, **kwargs):
+            calls.append("describe-nodegroup")
+            assert kwargs == {"clusterName": config["project"], "nodegroupName": "cpu-workers"}
+            if error_code:
+                raise ClientError({"Error": {"Code": error_code}}, "DescribeNodegroup")
+            return {"nodegroup": group}
+    (tmp_path / "infra/aws").mkdir(parents=True)
+    monkeypatch.setattr(nodegroup, "ROOT", tmp_path)
+    monkeypatch.setattr(nodegroup, "client", lambda name, c: {"s3": Storage(), "eks": Eks()}[name])
+    return tmp_path / "infra/aws/pipeline-recovery.tf", calls
+
+
+@pytest.mark.parametrize("status", ["ACTIVE", "CREATE_FAILED", "DEGRADED", "UPDATE_FAILED"])
+def test_cancelled_apply_adoption_only_prepares_private_import_configuration(config, tmp_path, monkeypatch, status):
+    group = recovery_group(config); group["status"] = status
+    path, calls = recovery_clients(config, tmp_path, monkeypatch, group=group)
+    nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert calls == ["read-state", "describe-nodegroup"]
+    assert 'id = "stocklane-dev:cpu-workers"' in path.read_text()
+    assert "to = aws_eks_node_group.main" in path.read_text()
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_orphaned_nodegroup_requires_explicit_plan_option(config, tmp_path, monkeypatch):
+    path, _ = recovery_clients(config, tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match="adopt_existing_nodegroup=true"):
+        nodegroup.prepare_nodegroup_recovery(config)
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("nodeRole", "arn:aws:iam::123456789012:role/another-project-nodes"),
+    ("nodegroupArn", "arn:aws:eks:ap-southeast-2:999999999999:nodegroup/stocklane-dev/cpu-workers/uuid"),
+    ("clusterName", "another-project"), ("subnets", ["subnet-11111111", "subnet-33333333"]),
+    ("tags", {"Project": "another-project", "Environment": "dev", "ManagedBy": "Terraform"}),
+])
+def test_recovery_refuses_unowned_nodegroups(config, tmp_path, monkeypatch, field, value):
+    group = recovery_group(config); group[field] = value
+    path, _ = recovery_clients(config, tmp_path, monkeypatch, group=group)
+    with pytest.raises(RuntimeError, match="ownership tags"):
+        nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("status", ["CREATING", "UPDATING", "DELETING"])
+def test_recovery_waits_for_inflight_aws_operations(config, tmp_path, monkeypatch, status):
+    group = recovery_group(config); group["status"] = status
+    path, _ = recovery_clients(config, tmp_path, monkeypatch, group=group)
+    with pytest.raises(RuntimeError, match="operation to finish"):
+        nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("module", [None, "module.another_stack"])
+def test_recovery_does_not_import_resources_twice(config, tmp_path, monkeypatch, module):
+    state = recovery_state(config)
+    state["resources"].append({"mode": "managed", "type": "aws_eks_node_group", "name": "another",
+                               "instances": [{"attributes": {"id": "stocklane-dev:cpu-workers"}}]})
+    if module: state["resources"][-1]["module"] = module
+    path, _ = recovery_clients(config, tmp_path, monkeypatch, state=state)
+    with pytest.raises(RuntimeError, match="another address"):
+        nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert not path.exists()
+
+
+def test_tracked_group_never_reimports_and_removes_stale_generated_configuration(config, tmp_path, monkeypatch):
+    state = recovery_state(config)
+    state["resources"].append({"mode": "managed", "type": "aws_eks_node_group", "name": "main",
+                               "instances": [{"attributes": {"id": "stocklane-dev:cpu-workers-new"}}]})
+    path, calls = recovery_clients(config, tmp_path, monkeypatch, state=state)
+    path.write_text("stale import")
+    nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert calls == ["read-state"] and not path.exists()
+
+
+@pytest.mark.parametrize("error", ["AccessDeniedException", "ServiceUnavailableException"])
+def test_aws_errors_are_not_treated_as_missing_nodegroups(config, tmp_path, monkeypatch, error):
+    from botocore.exceptions import ClientError
+    path, _ = recovery_clients(config, tmp_path, monkeypatch, error_code=error)
+    with pytest.raises(ClientError):
+        nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert not path.exists()
+
+
+def test_fresh_cluster_does_not_need_recovery_but_explicit_missing_adoption_is_an_error(config, tmp_path, monkeypatch):
+    path, _ = recovery_clients(config, tmp_path, monkeypatch, error_code="ResourceNotFoundException")
+    nodegroup.prepare_nodegroup_recovery(config)
+    with pytest.raises(RuntimeError, match="No legacy"):
+        nodegroup.prepare_nodegroup_recovery(config, adopt=True)
+    assert not path.exists()
+
+
+def test_summary_includes_imports_even_when_the_resource_has_no_other_changes():
+    summary = delivery.public_summary({"resource_changes": [{"address": "aws_eks_node_group.main", "change": {
+        "actions": ["no-op"], "importing": {"id": "stocklane-dev:cpu-workers"}, "after": {"private": "SENTINEL"}}}]})
+    assert summary["actions"]["import"] == 1
+    assert summary["resources"] == [{"address": "aws_eks_node_group.main", "actions": ["no-op"], "import": True}]
+    assert "SENTINEL" not in json.dumps(summary)
+
+
+def test_saved_plan_retains_reviewed_import_and_replacement_in_a_fresh_apply_checkout(tmp_path):
+    # Exercise Terraform's actual saved-plan semantics without AWS resources or
+    # external provider plugins. The apply job does not have the generated
+    # import file that existed during planning.
+    terraform = shutil.which("terraform")
+    (tmp_path / "main.tf").write_text('resource "terraform_data" "worker" {\n'
+        'triggers_replace = "new-capacity"\nlifecycle { create_before_destroy = true }\n}\n')
+    recovery = tmp_path / "import.tf"
+    recovery.write_text('import {\nto = terraform_data.worker\nid = "orphaned-worker"\n}\n')
+    for args in [["init", "-backend=false", "-input=false"],
+                 ["plan", "-input=false", "-no-color", "-out=plan.bin"]]:
+        result = subprocess.run([terraform, *args], cwd=tmp_path, text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+    document = json.loads(subprocess.check_output([terraform, "show", "-json", "plan.bin"], cwd=tmp_path))
+    assert document["resource_changes"][0]["change"]["actions"] == ["create", "delete"]
+    assert delivery.public_summary(document)["actions"]["import"] == 1
+    recovery.unlink()
+    result = subprocess.run([terraform, "apply", "-input=false", "-no-color", "plan.bin"],
+                            cwd=tmp_path, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    state = json.loads((tmp_path / "terraform.tfstate").read_text())
+    assert state["resources"][0]["instances"][0]["attributes"]["id"] != "orphaned-worker"
+
+
+@pytest.mark.parametrize("address,actions,approved", [
+    ("aws_eks_node_group.main", ["create", "delete"], True),
+    ("aws_eks_node_group.main", ["delete", "create"], False),
+    ("aws_eks_node_group.main", ["delete"], False),
+    ("aws_db_instance.main", ["create", "delete"], False),
+])
+def test_nodegroup_replacement_approval_cannot_authorize_other_deletions(address, actions, approved):
+    summary = {"resources": [{"address": address, "actions": actions}]}
+    if approved:
+        nodegroup.check_change_approval(summary, allow_nodegroup_replacement=True)
+        with pytest.raises(RuntimeError): nodegroup.check_change_approval(summary)
+    else:
+        with pytest.raises(RuntimeError):
+            nodegroup.check_change_approval(summary, allow_nodegroup_replacement=True)
+
+
+def test_nodegroup_approval_still_refuses_mixed_database_and_worker_replacements():
+    summary = {"resources": [{"address": address, "actions": ["create", "delete"]}
+                              for address in ["aws_eks_node_group.main", "aws_db_instance.main"]]}
+    with pytest.raises(RuntimeError):
+        nodegroup.check_change_approval(summary, allow_nodegroup_replacement=True)
+
+
+def test_rds_managed_secret_creation_is_scoped_to_account_region_prefix_and_two_actions():
+    from fnmatch import fnmatchcase
+    template = json.loads((ROOT / "infra/ci/identity.json").read_text())
+    statements = template["Resources"]["ApplyRole"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"]
+    statement = resolve(next(s for s in statements if s["Sid"] == "CreateRdsManagedMasterSecret"),
+                        {"AWS::Partition": "aws", "AWS::AccountId": "123456789012", "AWS::Region": "ap-southeast-2"})
+    assert set(statement["Action"]) == {"secretsmanager:CreateSecret", "secretsmanager:TagResource"}
+    assert statement["Condition"] == {"StringEquals": {"aws:RequestedRegion": "ap-southeast-2"}}
+    arn = "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:rds!db-randomid-abcdef"
+    assert fnmatchcase(arn, statement["Resource"])
+    assert not fnmatchcase(arn.replace("123456789012", "999999999999"), statement["Resource"])
+    assert not fnmatchcase(arn.replace("ap-southeast-2", "us-east-1"), statement["Resource"])
+    assert not fnmatchcase(arn.replace("rds!db-randomid", "unrelated-app-password"), statement["Resource"])
+    plan = template["Resources"]["PlanRole"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"]
+    assert not any(s["Sid"] == "CreateRdsManagedMasterSecret" for s in plan)
+
+
+@pytest.mark.parametrize("quota,should_pass", [(8, True), (5, False)])
+def test_replacement_quota_counts_existing_on_demand_workers_and_new_capacity(config, monkeypatch, quota, should_pass):
+    class Paginator:
+        def paginate(self, **kwargs):
+            assert kwargs == {"Filters": [{"Name": "instance-state-name", "Values": ["pending", "running"]}]}
+            instances = [{"InstanceType": "t3.micro", "CpuOptions": {"CoreCount": 1, "ThreadsPerCore": 2}} for _ in range(2)]
+            # Spot and GPU quotas are separate from standard On-Demand vCPUs.
+            instances.extend([{"InstanceType": "m7i-flex.large", "InstanceLifecycle": "spot"},
+                              {"InstanceType": "g5.xlarge"}])
+            return [{"Reservations": [{"Instances": instances}]}]
+    class Ec2:
+        def describe_instance_types(self, **kwargs):
+            if kwargs == {"InstanceTypes": ["t3.micro"]}:
+                return {"InstanceTypes": [{"InstanceType": "t3.micro", "VCpuInfo": {"DefaultVCpus": 2}}]}
+            assert kwargs == {"InstanceTypes": ["m7i-flex.large"]}
+            return {"InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
+                                      "VCpuInfo": {"DefaultVCpus": 2}, "MemoryInfo": {"SizeInMiB": 8192}}]}
+        def get_paginator(self, name):
+            assert name == "describe_instances"
+            return Paginator()
+    class Quotas:
+        def get_service_quota(self, **kwargs):
+            assert kwargs == {"ServiceCode": "ec2", "QuotaCode": "L-1216C47A"}
+            return {"Quota": {"Value": quota}}
+    monkeypatch.setattr(nodegroup, "client", lambda name, c: {"ec2": Ec2(), "service-quotas": Quotas()}[name])
+    document = {"resource_changes": [{"address": "aws_eks_node_group.main", "change": {"actions": ["create", "delete"]}}]}
+    capacity = {"node_instance_type": "m7i-flex.large", "node_desired_size": 2}
+    if should_pass:
+        nodegroup.check_worker_quota(config, capacity, document)
+    else:
+        with pytest.raises(RuntimeError, match="quota cannot fit"):
+            nodegroup.check_worker_quota(config, capacity, document)
+
+
+def test_read_only_plan_without_worker_creation_does_not_require_extra_capacity(config, monkeypatch):
+    monkeypatch.setattr(nodegroup, "client", lambda *args: pytest.fail("No quota check needed without new workers"))
+    nodegroup.check_worker_quota(config, {}, {"resource_changes": []})
 
 
 @pytest.mark.parametrize("role_name", ["PlanRole", "ApplyRole"])

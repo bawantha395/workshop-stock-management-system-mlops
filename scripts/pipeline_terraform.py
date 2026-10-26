@@ -11,6 +11,7 @@ from pathlib import Path
 
 from botocore.exceptions import ClientError
 from pipeline_common import ROOT, check_account, check_eks_nodegroup_role, client, settings, terraform_inputs, write_private
+from pipeline_nodegroup import check_change_approval, check_worker_quota, prepare_nodegroup_recovery
 
 WORK = ROOT / "artifacts" / "terraform"
 MAX_PLAN_AGE = 6 * 60 * 60
@@ -111,25 +112,32 @@ def assert_main_current(sha):
 
 
 def public_summary(document):
-    actions = {"create": 0, "update": 0, "delete": 0, "read": 0}
+    actions = {"create": 0, "update": 0, "delete": 0, "read": 0, "import": 0}
     resources = []
     for change in document.get("resource_changes", []):
         operations = change["change"]["actions"]
-        if operations == ["no-op"]:
+        importing = change["change"].get("importing") is not None
+        if operations == ["no-op"] and not importing:
             continue
         for action in operations:
             if action in actions:
                 actions[action] += 1
-        resources.append({"address": change["address"], "actions": operations})
+        item = {"address": change["address"], "actions": operations}
+        if importing:
+            actions["import"] += 1
+            item["import"] = True
+        resources.append(item)
     return {"actions": actions, "resources": resources}
 
 
-def plan(c):
+def plan(c, adopt_existing_nodegroup=False):
     sha = os.environ["GITHUB_SHA"]
     assert_main_current(sha)
     inputs = prepare(c)
+    prepare_nodegroup_recovery(c, adopt=adopt_existing_nodegroup)
     tf("plan", "-input=false", "-lock-timeout=300s", "-out=" + str(WORK / "plan.bin"), "-no-color")
     document = json.loads(tf("show", "-json", str(WORK / "plan.bin"), capture=True))
+    check_worker_quota(c, inputs, document)
     summary = public_summary(document)
     plan_id = os.environ["GITHUB_RUN_ID"] + "-" + os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     prefix = f"plans/{c['environment']}/{plan_id}"
@@ -156,6 +164,7 @@ def plan(c):
     report = ("## Terraform plan\n\n"
         + f"Plan ID: `{plan_id}`\n\nCommit: `{sha}`\n\nSHA256: `{digest}`\n\n"
         + "Run **Apply reviewed Terraform plan** with that Plan ID and SHA256 after review.\n\n"
+        + "Imports are included below. To approve only worker replacement, set `allow_nodegroup_replacement=true` and keep `allow_deletions=false`. Temporary EC2 quota is needed while old and new workers overlap.\n\n"
         + "Full binary plans and state remain in private encrypted S3.\n\n"
         + "```json\n" + json.dumps(summary, indent=2) + "\n```\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -203,8 +212,7 @@ def apply(c, args):
     digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
     if digest != metadata["inputs_sha256"]:
         raise RuntimeError("Terraform inputs changed after planning; generate a fresh plan")
-    if metadata["summary"]["actions"]["delete"] and not args.allow_deletions:
-        raise RuntimeError("Plan includes deletes/replacements; explicitly approve them or re-plan")
+    check_change_approval(metadata["summary"], args.allow_deletions, args.allow_nodegroup_replacement)
     path = WORK / "approved-plan.bin"
     path.write_bytes(payload)
     path.chmod(0o600)
@@ -229,9 +237,16 @@ if __name__ == "__main__":
     parser.add_argument("--plan-id")
     parser.add_argument("--sha256")
     parser.add_argument("--allow-deletions", action="store_true")
+    parser.add_argument("--allow-nodegroup-replacement", action="store_true")
+    parser.add_argument("--adopt-existing-nodegroup", action="store_true")
     args = parser.parse_args()
     config = settings()
     check_account(config)
-    {"bootstrap": lambda: bootstrap(config), "plan": lambda: plan(config),
-     "apply": lambda: apply(config, args)}[args.operation]()
+    try:
+        {"bootstrap": lambda: bootstrap(config),
+         "plan": lambda: plan(config, args.adopt_existing_nodegroup),
+         "apply": lambda: apply(config, args)}[args.operation]()
+    except subprocess.CalledProcessError as error:
+        # Terraform has already printed the actionable provider error.
+        raise SystemExit(error.returncode) from None
 
