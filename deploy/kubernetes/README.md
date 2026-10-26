@@ -27,3 +27,14 @@ The checked-in templates need account-specific release rendering before live
 deployment. Follow [docs/AWS_DEPLOYMENT.md](../../docs/AWS_DEPLOYMENT.md) for
 bootstrap order; applying individual folders out of order can fail because
 their CRDs or controllers are not ready.
+
+The metrics-server high-availability import declares an obsolete
+`policy/v1beta1` PodDisruptionBudget. A shared Kustomize patch in
+`platform/base/kustomization.yaml` renders it as `policy/v1` for every
+environment, keeping the explicit pod selector and upstream checksums.
+
+Validation rejects obsolete budget APIs even without kubeconform. When
+kubeconform is installed, every ordinary built-in resource must have a schema;
+missing schemas fail. CRD definitions must match the pinned API/spec, and custom
+resources are validated separately against their served CRD schemas. See
+[the bootstrap recovery guide](../../docs/PLATFORM_BOOTSTRAP_FIX.md).

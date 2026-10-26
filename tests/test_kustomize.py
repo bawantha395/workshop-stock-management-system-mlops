@@ -1,5 +1,6 @@
 """Exercise the manifests built by real Kustomize, rather than a YAML imitation."""
 import importlib.util
+import copy
 import json
 import sys
 from pathlib import Path
@@ -60,6 +61,47 @@ def test_imported_manifests_match_the_reviewed_lock_and_use_one_resource_per_fil
         docs = list(yaml.load_all(path.read_text(), Loader=getattr(yaml,'CSafeLoader',yaml.SafeLoader)))
         assert len(docs) == 1, str(path)
         assert docs[0].get('apiVersion') and docs[0].get('kind'), str(path)
+
+@pytest.mark.parametrize('env', ENVIRONMENTS)
+def test_metrics_server_budget_uses_supported_api_and_selects_only_metrics_pods(env):
+    docs = build(KUBERNETES / 'platform/overlays' / env)
+    validate_objects(docs, schemas())
+    pdb = next(o for o in docs if o['kind'] == 'PodDisruptionBudget' and o['metadata']['name'] == 'metrics-server')
+    deployment = next(o for o in docs if o['kind'] == 'Deployment' and o['metadata']['name'] == 'metrics-server')
+    assert pdb['apiVersion'] == 'policy/v1'
+    assert pdb['metadata']['namespace'] == deployment['metadata']['namespace'] == 'kube-system'
+    assert pdb['spec']['minAvailable'] == 1
+    selector = pdb['spec']['selector']['matchLabels']
+    assert selector == {'k8s-app': 'metrics-server'}
+    assert all(deployment['spec']['template']['metadata']['labels'].get(k) == v for k, v in selector.items())
+    assert deployment['spec']['replicas'] >= 2
+
+def test_removed_budget_api_is_rejected_without_an_optional_schema_tool():
+    legacy = load_yaml(KUBERNETES / 'vendor/metrics-server/poddisruptionbudget-metrics-server.yaml')
+    legacy['apiVersion'] = 'policy/v1beta1'
+    with pytest.raises(ValueError, match='must use policy/v1'):
+        validate_objects([legacy], schemas())
+
+def test_metrics_api_service_keeps_its_supported_beta_metrics_endpoint():
+    docs = build(KUBERNETES / 'platform/overlays/dev')
+    api = next(o for o in docs if o['kind'] == 'APIService' and o['metadata']['name'] == 'v1beta1.metrics.k8s.io')
+    assert api['apiVersion'] == 'apiregistration.k8s.io/v1'
+    assert api['spec']['group'] == 'metrics.k8s.io' and api['spec']['version'] == 'v1beta1'
+
+def test_schema_validation_accepts_pinned_crd_specs_and_metadata_patches_only():
+    from validate_kustomize import crd_definitions
+    original = next(iter(crd_definitions().values()))
+    metadata_only = copy.deepcopy(original)
+    metadata_only['metadata'].setdefault('annotations', {})['argocd.argoproj.io/sync-wave'] = '-20'
+    validate_objects([metadata_only], schemas())
+    changed = copy.deepcopy(original)
+    changed['spec']['scope'] = 'Cluster' if original['spec']['scope'] == 'Namespaced' else 'Namespaced'
+    with pytest.raises(ValueError, match='Unpinned or modified CustomResourceDefinition'):
+        validate_objects([changed], schemas())
+    unknown = copy.deepcopy(original)
+    unknown['metadata']['name'] = 'unreviewed.example.com'
+    with pytest.raises(ValueError, match='Unpinned or modified CustomResourceDefinition'):
+        validate_objects([unknown], schemas())
 
 def config(env='production'):
     return {'environment':env,'region':'eu-west-1','account_id':'123456789012','cognito_issuer':'https://cognito-idp.eu-west-1.amazonaws.com/test','cognito_web_client_id':'web-client','cognito_camera_client_id':'camera-client','frontend_url':'https://test.cloudfront.net','stock_queue_url':'https://sqs.eu-west-1.amazonaws.com/123456789012/stock','catalogue_queue_url':'https://sqs.eu-west-1.amazonaws.com/123456789012/catalogue','cache_host':'cache.example.internal','media_bucket':'test-media','database_host':'db.example.internal','database_secrets':{s:'arn:aws:secretsmanager:eu-west-1:123456789012:secret:'+s for s in ['inventory','workshop','vision']},'platform_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:platform','api_domain':'api.example.com','api_certificate_arn':'arn:aws:acm:eu-west-1:123456789012:certificate/test'}

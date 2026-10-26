@@ -21,8 +21,9 @@ def bootstrap(a):
     actual = json.loads(subprocess.check_output(['aws', 'sts', 'get-caller-identity'], env=env))['Account']
     if actual != c['account_id']: raise RuntimeError('AWS account does not match Terraform outputs')
     overlay = KUBERNETES / 'apps/overlays' / target
-    # Refuse example/unconfigured manifests before contacting Kubernetes.
-    run(['python3', str(ROOT / 'scripts/validate_kustomize.py'), '--environment', target, '--configured', '--apps-only'])
+    # Validate platform/controller manifests as well as application configuration
+    # before contacting Kubernetes, including when invoked directly in CodeBuild.
+    run(['python3', str(ROOT / 'scripts/validate_kustomize.py'), '--environment', target, '--configured'])
     run(['aws', 'eks', 'update-kubeconfig', '--region', c['region'], '--name', c['cluster_name'], '--kubeconfig', env['KUBECONFIG']])
     def apply(docs):
         if docs: run(['kubectl', 'apply', '--server-side', '--field-manager=argocd-controller', '-f', '-'], input=yaml.safe_dump_all(docs).encode())

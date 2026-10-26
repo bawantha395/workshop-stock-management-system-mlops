@@ -27,18 +27,38 @@ def verify_upstream():
                 raise ValueError('Pinned upstream resource changed: ' + str(path))
 
 @lru_cache(maxsize=1)
-def schemas():
+def crd_definitions():
     result = {}
     for path in (KUBERNETES / 'vendor').glob('*/customresourcedefinition-*.yaml'):
         obj = load_yaml(path)
+        result[obj['metadata']['name']] = obj
+    return result
+
+@lru_cache(maxsize=1)
+def schemas():
+    result = {}
+    for obj in crd_definitions().values():
         for version in obj['spec']['versions']:
             schema = version.get('schema', {}).get('openAPIV3Schema')
-            if schema:result[(obj['spec']['group'] + '/' + version['name'], obj['spec']['names']['kind'])] = schema
+            if schema is not None and version.get('served'):
+                result[(obj['spec']['group'] + '/' + version['name'], obj['spec']['names']['kind'])] = schema
     return result
 
 def validate_objects(objects, custom_schemas):
     identities = set()
     for obj in objects:
+        # Always check this, including private builds without kubeconform.
+        # policy/v1beta1 PDBs have not been served since Kubernetes 1.25.
+        if obj['kind'] == 'PodDisruptionBudget' and obj['apiVersion'] != 'policy/v1':
+            raise ValueError('PodDisruptionBudget ' + obj['metadata']['name']
+                             + ' must use policy/v1 for Kubernetes 1.35; found ' + obj['apiVersion'])
+        if obj['kind'] == 'CustomResourceDefinition':
+            # The public built-in schema catalog omits CRD definitions. Require
+            # their API and complete spec to match our checksum-pinned imports;
+            # metadata changes such as sync-wave annotations remain supported.
+            expected = crd_definitions().get(obj['metadata']['name'])
+            if not expected or obj['apiVersion'] != expected['apiVersion'] or obj['spec'] != expected['spec']:
+                raise ValueError('Unpinned or modified CustomResourceDefinition: ' + obj['metadata']['name'])
         identity = (obj['apiVersion'], obj['kind'], obj['metadata'].get('namespace', ''), obj['metadata']['name'])
         if identity in identities:raise ValueError('Duplicate Kubernetes resource: ' + str(identity))
         identities.add(identity)
@@ -101,13 +121,20 @@ def validate_environment(env, binary=None, configured=False, apps_only=False):
     if not apps_only:
         objects = build(KUBERNETES / 'argocd/applications/overlays' / env, binary)
         validate_objects(objects, definitions)
+        schema_objects.extend(objects)
         projects = {o['metadata']['name'] for o in objects if o['kind']=='AppProject'}
         for app in (o for o in objects if o['kind']=='Application'):
             assert app['spec']['project'] in projects
             assert app['spec']['source']['path'].endswith('/' + env)
         counts['argocd-applications'] = len(objects)
     if shutil.which('kubeconform'):
-        result = subprocess.run(['kubeconform', '-strict', '-ignore-missing-schemas', '-kubernetes-version', '1.35.0', '-summary', '-'], input=yaml.safe_dump_all(schema_objects), text=True, capture_output=True)
+        # Custom resources have already passed their served CRD schemas above.
+        # Every remaining object must have a built-in schema: missing schemas
+        # may indicate a removed API and must fail rather than be skipped.
+        builtins = [obj for obj in schema_objects
+                    if obj['kind'] != 'CustomResourceDefinition'
+                    and (obj['apiVersion'], obj['kind']) not in definitions]
+        result = subprocess.run(['kubeconform', '-strict', '-kubernetes-version', '1.35.0', '-summary', '-'], input=yaml.safe_dump_all(builtins), text=True, capture_output=True)
         if result.returncode:raise ValueError('Kubernetes schema check failed: ' + result.stdout + result.stderr)
         print(result.stdout.strip(), flush=True)
     print(env + ': ' + ', '.join(f'{k}={v}' for k,v in counts.items()), flush=True)

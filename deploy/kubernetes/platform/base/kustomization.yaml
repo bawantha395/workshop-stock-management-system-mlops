@@ -14,3 +14,15 @@ resources:
 - fluent-bit-serviceaccount.yaml
 - secretstore.yaml
 - storageclass.yaml
+patches:
+# The pinned high-availability bundle still declares the removed beta PDB API.
+# Apply this compatibility fix to every environment without changing vendor pins.
+- target:
+    group: policy
+    kind: PodDisruptionBudget
+    name: metrics-server
+    namespace: kube-system
+  patch: |-
+    - op: replace
+      path: /apiVersion
+      value: policy/v1

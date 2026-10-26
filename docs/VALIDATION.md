@@ -281,3 +281,47 @@ still pass on the uploaded commit. AWS provider validation runs in GitHub;
 local provider processes are restricted in this build environment. No live
 node-group import, quota check, IAM update or corrected RDS/apply has run here.
 Follow FIRST_APPLY_FIX.md before requesting a new reviewed plan.
+
+
+### Metrics-server PDB compatibility correction — 26 October 2026
+
+The user's private CodeBuild log reached the EKS API and applied controller
+objects, then failed on metrics-server's policy/v1beta1 PodDisruptionBudget.
+This API was removed in Kubernetes 1.25. The supplied EKS bootstrap targets
+Kubernetes 1.35, so that object must use policy/v1. Controller readiness had
+not yet been checked when the apply command returned an error.
+
+A shared platform/base Kustomize JSON patch changes only that budget's API
+version for dev, test, UAT and production. It retains minAvailable: 1 and the
+explicit k8s-app: metrics-server selector. The separate metrics.k8s.io/v1beta1
+APIService endpoint stays intact. Vendor files and upstream checksum pins are
+unchanged. This update is based on current main 9aa7191, including merged
+release PR #10; application image/model/frontend release configuration and
+Terraform resources are retained.
+
+The earlier global kubeconform ignore-missing-schemas flag could silently skip
+the removed API. It is now removed. Ordinary built-in objects require schemas;
+custom resources use the served schemas of their pinned CRDs. CRD definitions
+are handled explicitly because this schema catalog does not provide their
+schemas: their complete API/spec must match the pinned imports, while metadata
+patches remain allowed. An unconditional PDB API check also runs when kubeconform
+is not installed. Private bootstrap validates all configured groups before
+contacting the Kubernetes API.
+
+123 targeted tests passed, with two training tests deselected. These include
+four real Kustomize builds checking budget API, selector, minAvailable and
+metrics-server replica compatibility; rejection of the obsolete API without
+kubeconform; preservation of the separate metrics APIService; and pinned-CRD
+validation accepting metadata changes while rejecting altered specs.
+
+Online strict kubeconform checks passed for all four environments. Each checked
+138 built-in resources: Valid 138, Invalid 0, Errors 0, Skipped 0. CRD definition
+pin checks and served custom-resource schema checks passed separately. The
+actual merged dev release also passed configured validation. Python compilation
+and git diff whitespace checks passed. No dependency, Terraform or IAM changes
+are part of this correction, and application integration tests were not rerun
+locally for these Kubernetes validation changes.
+
+Upload the update, wait for CI, and use a new Bootstrap EKS platform run on main.
+A rerun of the previous failed workflow retains its old source SHA. The corrected
+live AWS bootstrap and application readiness remain pending that new run.
