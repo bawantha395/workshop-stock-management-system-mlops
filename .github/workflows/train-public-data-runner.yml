@@ -89,6 +89,8 @@ jobs:
         run: python prepare_public_data.py --output ../artifacts/data --cache ../artifacts/cache
       - name: Train photo benchmark
         working-directory: mlops
+        env:
+          PYTHONPATH: ${{ github.workspace }}/services/vision
         run: |
           URI=$(python -c "import json;print(json.load(open('../deploy/kubernetes/apps/overlays/dev/release.json'))['model']['uri'])")
           aws s3 cp "$URI" /tmp/enc.tar.gz
