@@ -54,8 +54,18 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          for f in artifacts/out/*/metrics.json; do [ -f "$f" ] && { echo "### $f" >> "$GITHUB_STEP_SUMMARY"; echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat "$f" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; }; done
-          echo "Benchmark only. No live model, stock or forecast changed." >> "$GITHUB_STEP_SUMMARY"
+          {
+            for f in artifacts/out/*/metrics.json; do
+              if [ -f "$f" ]; then
+                echo "### $f"
+                echo '```json'
+                cat "$f"
+                echo
+                echo '```'
+              fi
+            done
+            echo "Benchmark only. No live model, stock or forecast changed."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
