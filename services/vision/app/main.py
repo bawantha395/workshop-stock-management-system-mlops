@@ -11,7 +11,7 @@ import boto3
 import httpx
 import redis
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select, insert, update
@@ -21,7 +21,7 @@ from .security import Security
 from .storage import Store
 from .encoder import Encoder
 from .qr import product_qr
-from .bedrock import propose, PROMPT_VERSION
+from .bedrock import propose, PROMPT_VERSION, BedrockUnavailable, failure
 
 log = logging.getLogger('stocklane.vision')
 
@@ -33,6 +33,8 @@ def create_app(settings=None):
     encoder = Encoder(s.model_dir) if (Path(s.model_dir)/'model.json').exists() else None
     cache = redis.Redis.from_url(s.redis_url, socket_connect_timeout=.25, socket_timeout=.25,decode_responses=True)
     stop = threading.Event()
+    bedrock_observation={'state':'not_verified' if s.bedrock_model_id else 'not_configured',
+                         'checkedAt':None,'errorCode':None,'scope':'this_replica'}
 
     def embedding(image):
         if encoder is None:
@@ -113,6 +115,7 @@ def create_app(settings=None):
     requests=Counter('stocklane_http_requests_total','HTTP requests',['method','route','status'],registry=registry)
     latency=Histogram('stocklane_http_request_seconds','Request latency',['route'],registry=registry)
     cache_events=Counter('stocklane_embedding_cache_total','Embedding cache results',['result'],registry=registry)
+    draft_events=Counter('stocklane_ai_drafts_total','AI draft outcomes',['outcome'],registry=registry)
     @app.middleware('http')
     async def observe(request,call_next):
         started=time.perf_counter();response=await call_next(request)
@@ -140,7 +143,11 @@ def create_app(settings=None):
         security.staff(request)
         try:cache_ok=cache.ping()
         except redis.RedisError:cache_ok=False
-        return {'modelReady':encoder is not None,'modelVersion':encoder.version if encoder else None,'bedrockConfigured':bool(s.bedrock_model_id),'cacheAvailable':cache_ok,'automaticPosting':False,'mode':s.auth_mode}
+        return {'modelReady':encoder is not None,'modelVersion':encoder.version if encoder else None,
+                'workshopCalibrated':bool(encoder and encoder.manifest.get('workshopCalibrated')),
+                'bedrockConfigured':bool(s.bedrock_model_id),'bedrockModelId':s.bedrock_model_id or None,
+                'bedrockAccess':dict(bedrock_observation),'cacheAvailable':cache_ok,
+                'automaticPosting':False,'mode':s.auth_mode}
 
     @app.post('/api/vision/qr')
     async def read_qr(request:Request,file:UploadFile=File(...)):
@@ -288,7 +295,9 @@ def create_app(settings=None):
         fields=None;source='manual'
         try:
             hit=cache.get(key)
-            if hit:fields,source=json.loads(hit)
+            if hit:
+                fields,source=json.loads(hit)
+                draft_events.labels('cache_hit').inc()
         except (redis.RedisError,ValueError):pass
         if fields is None:
             if s.bedrock_model_id:
@@ -299,8 +308,19 @@ def create_app(settings=None):
                     if used==1:cache.expire(limit_key,172800)
                     if used>s.bedrock_daily_request_limit:raise HTTPException(429,'Daily AI suggestion limit reached. Register manually or retry tomorrow UTC.')
                 except redis.RedisError:raise HTTPException(503,'AI usage control is unavailable. Enter the details manually.') from None
-            try:fields,source=propose(s,image)
-            except Exception:raise HTTPException(503,'AI drafting is unavailable. Retry or enter the product manually.') from None
+            try:
+                fields,source=propose(s,image)
+                draft_events.labels(source).inc()
+                if source=='bedrock':
+                    bedrock_observation.update(state='invocation_verified',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=None)
+            except Exception as error:
+                problem=error if isinstance(error,BedrockUnavailable) else failure(error)
+                draft_events.labels(problem.code).inc()
+                bedrock_observation.update(state='unavailable',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=problem.code)
+                log.warning('AI drafting unavailable code=%s',problem.code)
+                return JSONResponse(status_code=problem.status,
+                    content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
+                    headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
             try:cache.set(key,json.dumps([fields,source]),ex=900)
             except redis.RedisError:pass
         row={'id':str(uuid.uuid4()),'image_id':body.imageId,'fields':json.dumps(fields),'source':source,'status':'PENDING','created_at':datetime.now(timezone.utc).isoformat(),'actor':actor,'product_id':None}

@@ -69,7 +69,7 @@ public class Inventory {
   db.update("insert into movements(id,product_id,kind,quantity,unit_price,job_id,issue_id,actor,note,created_at,source_capture_id) values(?,?,?,?,?,?,?,?,?,?,?)",id,m.productId(),m.kind(),m.quantity(),price,m.jobId(),m.issueId(),Commands.actor(),Objects.toString(m.note(),""),Instant.now().toString(),m.sourceCaptureId());
   if(job)db.update("update job_gates set revision=revision+1 where id=?",m.jobId());
   Map<String,Object> result=new LinkedHashMap<>(db.queryForMap("select * from movements where id=?",id));result.put("sku",product.get("sku"));result.put("name",product.get("name"));result.put("unit",product.get("unit"));result.put("balance",balance);
-  if(job)event("STOCK_MOVED",result);return result;
+  event("STOCK_MOVED",result);return result;
  }
  private void event(String type,Object payload){db.update("insert into outbox(id,type,payload,created_at) values(?,?,?,?)",UUID.randomUUID().toString(),type,commands.encode(payload),Instant.now().toString());}
  private Map<String,Object> gate(String id,boolean lock){if(id==null)throw new IllegalArgumentException("A repair job is required");var rows=db.queryForList("select * from job_gates where id=?"+(lock?" for update":""),id);if(rows.isEmpty())throw new Conflict("Repair job is not registered with inventory");return rows.getFirst();}

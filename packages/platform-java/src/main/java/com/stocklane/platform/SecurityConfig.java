@@ -20,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.*;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.server.resource.authentication.*;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -80,7 +81,13 @@ public class SecurityConfig {
       if(groups!=null)groups.forEach(g->a.add(new SimpleGrantedAuthority("ROLE_"+g)));
       return a;
     });
-    http.oauth2ResourceServer(o->o.jwt(j->j.decoder(decoder).jwtAuthenticationConverter(converter)));
+    // Prometheus uses the internal scrape token in the Authorization header.
+    // Leave that exact endpoint to the constant-time token check above, rather
+    // than attempting to decode the opaque token as a Cognito JWT first.
+    var bearerTokens=new DefaultBearerTokenResolver();
+    http.oauth2ResourceServer(o->o
+      .bearerTokenResolver(req->"/actuator/prometheus".equals(req.getRequestURI())?null:bearerTokens.resolve(req))
+      .jwt(j->j.decoder(decoder).jwtAuthenticationConverter(converter)));
    }
    return http.build();
  }

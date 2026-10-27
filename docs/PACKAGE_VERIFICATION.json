@@ -1,0 +1,86 @@
+{
+  "preparedOn": "2026-10-27",
+  "baselineCommit": "46ca6c78d56d052470af379874c7f1c21cc08f32",
+  "python": {
+    "passed": 239,
+    "skipped": 5,
+    "skipReason": "PostgreSQL integration fixtures require TEST_DATABASE_DSN",
+    "finalPublicDataRegressionPassed": 18
+  },
+  "java": {
+    "passed": 39,
+    "scope": "Prior runtime update verification; Java source unchanged by real-data extension."
+  },
+  "workflowLint": "actionlint passed for all workflows",
+  "pythonCompile": "passed",
+  "whitespaceCheck": "git diff --check passed",
+  "patches": [
+    {
+      "baseline": "cumulative",
+      "selectedPatch": "runtime-and-real-data.patch",
+      "exactChangedFilesVerified": 52,
+      "passed": true
+    },
+    {
+      "baseline": "incremental",
+      "selectedPatch": "real-data-only.patch",
+      "exactChangedFilesVerified": 52,
+      "passed": true
+    }
+  ],
+  "data": {
+    "photos": 115,
+    "productIdentities": 23,
+    "monthlySeries": 64,
+    "monthlyObservations": 3264,
+    "sourceLockSha256": "07f3eac476fcd946988399dbf607a7df1e9809945b42bafb757a614a751900a8"
+  },
+  "localRealDataEvaluation": {
+    "execution": "local validation; AWS jobs have not been started by this preparation",
+    "syntheticData": false,
+    "benchmarkOnly": true,
+    "productionEligible": false,
+    "monthly": {
+      "task": "monthly_car_parts_benchmark",
+      "frequency": "monthly",
+      "syntheticData": false,
+      "benchmarkOnly": true,
+      "productionEligible": false,
+      "seriesCount": 64,
+      "acceptedSeries": 1,
+      "meanModelMAE": 0.7357452656638231,
+      "meanBaselineMAE": 0.6703032380724651,
+      "modelWAPE": 1.754821006303777,
+      "baselineWAPE": 1.598735673415072,
+      "qualityGatePassed": false,
+      "datasetSha256": "9f0a7b48e0ca63fe6474725488979d5c51666116a58586a7df1426a1b17e1811",
+      "source": "https://zenodo.org/records/4656022",
+      "sourceSha256": "80557703397c7dca6c007bd28930b0e213e529f428afd02e5af87804fdc38ee1",
+      "limitations": [
+        "Historical anonymous monthly series from another business.",
+        "No Friday/daily pattern or current workshop stock is inferred.",
+        "Missing-value series were excluded; no unknown sales were replaced by zero."
+      ]
+    },
+    "photo": {
+      "precision": 0.38461538461538464,
+      "recall": 0.07142857142857142,
+      "f1": 0.12048192771084337,
+      "testPairs": 595,
+      "testPredictedPositive": 13,
+      "imageCount": 115,
+      "datasetSha256": "cb6c8ca1b784fda182554fb1caec4522e4197ce29a6fbb84905e31d4944fd45e",
+      "encoderSha256": "4a6230ba637f63593511f264270b80b9cb9e5937e337944a9e06228f63889352",
+      "job": "local-real-public-benchmark",
+      "qualityGatePassed": false,
+      "syntheticData": false,
+      "benchmarkOnly": true,
+      "validationGatePassed": true,
+      "sourceLockSha256": "07f3eac476fcd946988399dbf607a7df1e9809945b42bafb757a614a751900a8"
+    }
+  },
+  "awsTrainingExecuted": false,
+  "liveDeploymentExecuted": false,
+  "packageType": "complete_project_source_and_real_public_data",
+  "sourceFiles": 680
+}

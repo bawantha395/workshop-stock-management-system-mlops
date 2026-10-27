@@ -1,0 +1,13 @@
+{
+  "synthetic": false,
+  "realData": true,
+  "benchmarkOnly": true,
+  "dataPurpose": "public_data_benchmark",
+  "source": "Amazon Berkeley Objects",
+  "sourceUrl": "https://registry.opendata.aws/amazon-berkeley-objects/",
+  "sourceLockSha256": "07f3eac476fcd946988399dbf607a7df1e9809945b42bafb757a614a751900a8",
+  "license": "CC-BY-4.0",
+  "captureSessionsProvided": false,
+  "splitGrouping": "product_identity",
+  "note": "session stores a product grouping key, not a claimed physical capture session."
+}

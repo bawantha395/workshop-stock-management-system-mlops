@@ -489,19 +489,23 @@ def test_failed_key_handoff_revokes_the_unusable_key(tmp_path,monkeypatch):
 
 
 def test_access_key_workflow_authentication_assumes_roles_without_oidc():
-    found=0
+    authenticated_jobs=[]
     for path in (ROOT/".github/workflows").glob("*.yml"):
         workflow=yaml.load(path.read_text(),Loader=yaml.BaseLoader)
-        for job in workflow["jobs"].values():
-            for step in job.get("steps",[]):
-                if step.get("name")!="Assume delivery role with restricted CI user":continue
-                found+=1
-                assert step["if"]=="vars.AWS_AUTH_MODE == 'access-key'"
-                assert step["with"]["force-skip-oidc"]=="true"
-                assert step["with"]["role-skip-session-tagging"]=="true"
-                assert "role-to-assume" in step["with"]
-                assert step["with"]["aws-secret-access-key"]=="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-    assert found==9
+        for name,job in workflow["jobs"].items():
+            credentials=[step for step in job.get("steps",[])
+                if step.get("uses","").startswith("aws-actions/configure-aws-credentials@")]
+            if not credentials:continue
+            access=[step for step in credentials if step.get("if")=="vars.AWS_AUTH_MODE == 'access-key'"]
+            oidc=[step for step in credentials if step.get("if")=="vars.AWS_AUTH_MODE != 'access-key'"]
+            assert len(access)==len(oidc)==1, (path.name,name)
+            step=access[0]
+            assert step["with"]["force-skip-oidc"]=="true"
+            assert step["with"]["role-skip-session-tagging"]=="true"
+            assert "role-to-assume" in step["with"]
+            assert step["with"]["aws-secret-access-key"]=="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            authenticated_jobs.append((path.name,name))
+    assert authenticated_jobs
 
 
 @pytest.mark.parametrize("existing", [False, True])

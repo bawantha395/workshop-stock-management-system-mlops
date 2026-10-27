@@ -10,3 +10,4 @@ patches:
 - path: grafana-secret-patch.yaml
 - path: alertmanager-secret-patch.yaml
 - path: grafana-domain-patch.yaml
+- path: grafana-provisioning-patch.yaml

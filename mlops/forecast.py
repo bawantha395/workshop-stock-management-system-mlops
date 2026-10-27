@@ -80,10 +80,14 @@ def train(data):
             except ValueError:output['message']='Insufficient uncensored windows for ML; weekday baseline retained.'
         output['daily']=[{'date':d.isoformat(),'quantity':round(v,4)} for d,v in zip(future,predictions)];result.append(output)
     encoded=json.dumps(data,sort_keys=True,separators=(',',':')).encode()
-    return {'schemaVersion':1,'task':'stock_usage_forecast','timezone':'Asia/Colombo','trainedAt':datetime.now(timezone.utc).isoformat(),'historyUntil':end.isoformat(),'datasetSha256':hashlib.sha256(encoded).hexdigest(),'products':result,'qualityGatePassed':any(r['status']=='trained_ml' for r in result),'limitations':['Recorded outgoing usage, not unobserved demand.','End-of-day zero stock is censored; intraday stock-outs can remain undetected.','No automatic stock changes or purchase orders.']}
+    return {'schemaVersion':1,'task':'stock_usage_forecast','timezone':'Asia/Colombo','trainedAt':datetime.now(timezone.utc).isoformat(),'historyUntil':end.isoformat(),'datasetSha256':hashlib.sha256(encoded).hexdigest(),'products':result,'qualityGatePassed':any(r['status']=='trained_ml' for r in result),'syntheticData':data.get('synthetic') is True,'limitations':['Recorded outgoing usage, not unobserved demand.','End-of-day zero stock is censored; intraday stock-outs can remain undetected.','No automatic stock changes or purchase orders.']}
 
-def main(dataset='/opt/ml/input/data/dataset',output='/opt/ml/model'):
-    result=train(json.loads((Path(dataset)/'history.json').read_text()));Path(output).mkdir(parents=True,exist_ok=True)
+def main(dataset='/opt/ml/input/data/dataset',output='/opt/ml/model',demo_mode=False):
+    data=json.loads((Path(dataset)/'history.json').read_text())
+    synthetic=data.get('synthetic') is True
+    if synthetic and not demo_mode:raise ValueError('Synthetic history requires the demo training workflow')
+    if demo_mode and not synthetic:raise ValueError('Demo mode requires marked synthetic history')
+    result=train(data);Path(output).mkdir(parents=True,exist_ok=True)
     (Path(output)/'forecast.json').write_text(json.dumps(result,allow_nan=False))
     print(json.dumps({'task':result['task'],'qualityGatePassed':result['qualityGatePassed'],'counts':{s:sum(p['status']==s for p in result['products']) for s in ('trained_ml','weekday_baseline','insufficient_history')}}))
 if __name__=='__main__':main()

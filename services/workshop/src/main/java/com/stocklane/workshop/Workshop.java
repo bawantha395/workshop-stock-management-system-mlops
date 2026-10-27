@@ -57,6 +57,10 @@ public class Workshop {
    var seen=db.queryForList("select payload_hash from processed_events where id=?",id);if(!seen.isEmpty()){if(!hash.equals(seen.getFirst().get("payload_hash")))throw new Conflict("Event ID reused with different content");return;}
    db.update("insert into processed_events(id,payload_hash) values(?,?)",id,hash);
    @SuppressWarnings("unchecked") var p=(Map<String,Object>)event.get("payload");
+   // Ordinary stock movements are acknowledged and deduplicated, but are not
+   // repair-job allocations. Inventory remains the stock ledger authority.
+   if(Set.of("OPENING","RECEIPT","STOCK_OUT").contains(p.get("kind")))return;
+   if(!Set.of("ISSUE","RETURN").contains(p.get("kind")))throw new IllegalArgumentException("Unexpected stock movement kind");
    db.update("insert into allocations(id,job_id,product_id,sku,name,unit,kind,quantity,unit_price,issue_id,created_at) values(?,?,?,?,?,?,?,?,?,?,?)",p.get("id"),p.get("job_id"),p.get("product_id"),p.get("sku"),p.get("name"),p.get("unit"),p.get("kind"),new BigDecimal(p.get("quantity").toString()),new BigDecimal(p.get("unit_price").toString()),p.get("issue_id"),p.get("created_at"));
   });}catch(DuplicateKeyException duplicate){var seen=db.queryForList("select payload_hash from processed_events where id=?",id);if(seen.isEmpty()||!hash.equals(seen.getFirst().get("payload_hash")))throw duplicate;}
  }

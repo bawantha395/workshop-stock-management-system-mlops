@@ -7,6 +7,10 @@ def review(arn,decision,config,client=None):
     if decision not in {'Approved','Rejected'}:raise ValueError('Unsupported approval decision')
     sm=client or boto3.client('sagemaker',region_name=config['region'])
     package=sm.describe_model_package(ModelPackageName=arn)
+    if decision=='Approved' and package.get('CustomerMetadataProperties',{}).get('syntheticData')=='true':
+        raise ValueError('Synthetic demo packages cannot be approved for the live application')
+    if decision=='Approved' and package.get('CustomerMetadataProperties',{}).get('benchmarkOnly')=='true':
+        raise ValueError('Public benchmark packages require workshop validation before any live release')
     if package['ModelPackageStatus']!='Completed':raise ValueError('Package is not ready for review')
     sm.update_model_package(ModelPackageArn=arn,ModelApprovalStatus=decision)
     print('Recorded model review:',decision,arn)

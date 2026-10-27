@@ -154,6 +154,7 @@ def render_platform(c, images, env, namespace):
     for name in ['grafana-secret-patch.yaml', 'alertmanager-secret-patch.yaml']:
         if {'path': name} not in k['patches']:k['patches'].append({'path': name})
     write_yaml(folder / 'kustomization.yaml', k)
+    render_grafana_provisioning(env)
     render_admin_access(c, env)
     repository = 'https://github.com/' + c.get('github_repository', 'bawantha395/workshop-stock-management-system-mlops') + '.git'
     apps = KUBERNETES / 'argocd/applications/overlays' / env
@@ -178,6 +179,23 @@ def render_platform(c, images, env, namespace):
     write_yaml(folder / 'kustomization.yaml', {'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
         'namespace': namespace, 'resources': ['../../base', 'configmap.yaml'],
         'images': [{'name': 'stocklane/operations', 'newName': image, 'digest': digest}]})
+
+def render_grafana_provisioning(env):
+    """Roll Grafana when startup-only provisioning configuration changes."""
+    base = KUBERNETES / 'monitoring/base/grafana'
+    configuration = {name: load_yaml(base / name)['data'] for name in
+                     ['datasources-configmap.yaml', 'dashboard-provider-configmap.yaml']}
+    checksum = hashlib.sha256(json.dumps(configuration, sort_keys=True).encode()).hexdigest()
+    folder = KUBERNETES / 'monitoring/overlays' / env
+    filename = 'grafana-provisioning-patch.yaml'
+    write_yaml(folder / filename, patch('apps/v1', 'Deployment', 'grafana', spec={
+        'template': {'metadata': {'annotations': {'stocklane.io/provisioning-sha256': checksum}}}}))
+    k = load_yaml(folder / 'kustomization.yaml')
+    entry = {'path': filename}
+    if entry not in k.setdefault('patches', []):
+        k['patches'].append(entry)
+    write_yaml(folder / 'kustomization.yaml', k)
+    return checksum
 
 def render_admin_access(c, env):
     """Render optional admin routes separately from the public stock API ALB."""

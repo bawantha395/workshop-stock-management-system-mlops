@@ -24,6 +24,7 @@ def execute(c,publish=False):
     raw=read(s3,bucket,key)
     if hashlib.sha256(raw).hexdigest()!=pointer['sha256']:raise ValueError('Snapshot checksum mismatch')
     data=json.loads(raw);rows=validate(data)
+    if data.get('synthetic') is True:raise ValueError('Synthetic history cannot be published to the live forecast. Use Train demo ML models.')
     age=(datetime.now(timezone.utc)-datetime.fromisoformat(data['asOf'].replace('Z','+00:00'))).total_seconds()
     if not 0<=age<=7*86400:raise ValueError('Prepare a fresh history snapshot (at most seven days old)')
     job_name=None;artifact_uri=None;package_arn=None

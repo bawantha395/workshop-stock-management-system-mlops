@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     aws_region:str='ap-southeast-2'
 
 def projection(model,products,today=None):
+    if model.get('syntheticData'):raise ValueError('Synthetic demo forecasts cannot be served as workshop demand')
+    if model.get('benchmarkOnly'):raise ValueError('Public benchmark results cannot be served as workshop demand')
     today=today or datetime.now(ZoneInfo('Asia/Colombo')).date()
     if model.get('schemaVersion')!=1 or model.get('task')!='stock_usage_forecast':raise ValueError('Invalid forecast schema')
     end=date.fromisoformat(model['historyUntil'])

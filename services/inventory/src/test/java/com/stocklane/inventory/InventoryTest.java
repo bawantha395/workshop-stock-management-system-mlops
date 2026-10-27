@@ -36,6 +36,17 @@ class InventoryTest {
 
  @Test void stockOutNeedsNoRepairJobAndIsIdempotent(){String k=key();var m=move("STOCK_OUT","2",null,null);inventory.move(k,m);inventory.move(k,m);assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("48");assertThat(db.queryForObject("select count(*) from movements where kind='STOCK_OUT'",Integer.class)).isEqualTo(1);}
  @Test void stockOutCannotOverdraw(){assertThatThrownBy(()->inventory.move(key(),move("STOCK_OUT","51",null,null))).isInstanceOf(Commands.Conflict.class);assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("50");}
+ @Test void ordinaryStockMovementsCreateOneOutboxEventPerCommittedMovement(){
+  int before=db.queryForObject("select count(*) from outbox where type='STOCK_MOVED'",Integer.class);
+  assertThat(before).isEqualTo(1); // The opening physical count is also a movement.
+  String command=key();var receipt=move("RECEIPT","3",null,null);
+  inventory.move(command,receipt);inventory.move(command,receipt);
+  inventory.move(key(),move("STOCK_OUT","2",null,null));
+  assertThat(db.queryForObject("select count(*) from outbox where type='STOCK_MOVED'",Integer.class)).isEqualTo(before+2);
+  int committed=db.queryForObject("select count(*) from movements",Integer.class);
+  assertThatThrownBy(()->inventory.move(key(),move("STOCK_OUT","100",null,null))).isInstanceOf(Commands.Conflict.class);
+  assertThat(db.queryForObject("select count(*) from outbox where type='STOCK_MOVED'",Integer.class)).isEqualTo(committed);
+ }
  @Test void catalogueEditKeepsStableIdentityAndAudit(){inventory.edit(key(),id,new Inventory.ProductEdit("AC filter","Filters","Example","","", "AC-123","Shelf B",n("3")));assertThat(inventory.product(id,false).get("part_number")).isEqualTo("AC-123");assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("50");assertThat(db.queryForObject("select count(*) from product_audit where product_id=?",Integer.class,id)).isEqualTo(1);}
  @Test void mechanicCannotEditCatalogue()throws Exception{http.perform(patch("/api/inventory/products/"+id).header("X-Demo-User","mechanic").header("Idempotency-Key",key()).contentType("application/json").content("{\"name\":\"test\"}")).andExpect(status().isForbidden());}
  @Test void archivePreservesHistoryAndBlocksMovements(){assertThatThrownBy(()->inventory.archive(key(),id,new Inventory.ArchiveInput(true))).isInstanceOf(Commands.Conflict.class);inventory.move(key(),move("STOCK_OUT","50",null,null));inventory.archive(key(),id,new Inventory.ArchiveInput(true));assertThat(inventory.products()).isEmpty();assertThat(inventory.archivedProducts()).hasSize(1);assertThatThrownBy(()->inventory.move(key(),move("RECEIPT","1",null,null))).isInstanceOf(Commands.Conflict.class);inventory.archive(key(),id,new Inventory.ArchiveInput(false));assertThat(inventory.products()).hasSize(1);}

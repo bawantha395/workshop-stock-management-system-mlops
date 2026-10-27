@@ -12,7 +12,14 @@ def immutable_put(s3,bucket,key,data):
         if hashlib.sha256(s3.get_object(Bucket=bucket,Key=key)['Body'].read()).digest()!=hashlib.sha256(data).digest():raise ValueError('Existing dataset bytes differ')
 
 def upload(directory,bucket,region,s3=None):
-    root=Path(directory).resolve();manifest=(root/'manifest.csv').read_bytes()
+    root=Path(directory).resolve()
+    marker=root/'dataset-metadata.json'
+    metadata=json.loads(marker.read_text()) if marker.exists() else {}
+    if metadata.get('synthetic') is True:
+        raise ValueError('Synthetic data belongs to the demo workflow, not the reviewed workshop dataset prefix')
+    if metadata.get('benchmarkOnly') is True:
+        raise ValueError('Public benchmark data belongs to the public-data workflow, not the workshop dataset prefix')
+    manifest=(root/'manifest.csv').read_bytes()
     rows=list(csv.DictReader(io.StringIO(manifest.decode('utf-8-sig'))));validate_manifest(rows)
     files={'manifest.csv':manifest};checks={'manifest.csv':hashlib.sha256(manifest).hexdigest()};seen=set()
     if len(rows)>2000:raise ValueError('Split datasets larger than 2000 images into reviewed training versions')

@@ -1,5 +1,9 @@
 # Stocklane - Workshop Stock AI
 
+**Complete project download:** start with [START_HERE.md](START_HERE.md).
+**New real public-data training:** [SageMaker workflow and evaluation](docs/REAL_DATA_TRAINING.md).
+The included inputs are in `datasets/public-benchmark/`.
+
 **New stock forecasting:** [Deploy and run the separate Forecast microservice](docs/DEMAND_FORECASTING.md).
 
 Owner reports: [Stock analysis with date/time filters](docs/STOCK_ANALYSIS.md).
