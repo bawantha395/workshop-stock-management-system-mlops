@@ -1,11 +1,11 @@
 {
   "sourceBucket": "stocklane-dev-models-721274598579",
-  "sourcePrefix": "releases/frontend/138865ec3463-40456971788-1",
+  "sourcePrefix": "releases/frontend/34b0c7a4a0c6-40495875149-1",
   "targetBucket": "stocklane-dev-web-721274598579",
   "distributionId": "EBAJUKGUIWMAQ",
   "region": "ap-southeast-2",
   "accountId": "721274598579",
-  "release": "138865ec3463-40456971788-1",
+  "release": "34b0c7a4a0c6-40495875149-1",
   "files": [
     {
       "path": "assets/Scanner-Ce1Yvn8t.js",
