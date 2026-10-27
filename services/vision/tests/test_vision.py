@@ -106,7 +106,7 @@ def test_low_similarity_cannot_become_a_photo_match(client,monkeypatch):
 
 def test_qr_endpoint_does_not_persist_a_capture_or_change_stock(client):
     from test_qr import qr_image
-    value='stocklane:v1:'+str(uuid.uuid4())
+    value='stocklane:v1:3f2b8c1e-5a47-4d9e-9b6a-0c1d2e3f4a5b'
     response=client.post('/api/vision/qr',files={'file':('qr.png',qr_image(value),'image/png')})
     assert response.status_code==200
     assert response.json()=={'value':value}

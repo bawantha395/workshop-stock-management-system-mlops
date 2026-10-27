@@ -1,5 +1,4 @@
 import io
-import uuid
 import cv2
 import numpy as np
 from PIL import Image
@@ -17,7 +16,7 @@ def qr_image(value):
 
 
 def test_stocklane_qr_retains_stable_product_identity():
-    identity = str(uuid.uuid4())
+    identity = '3f2b8c1e-5a47-4d9e-9b6a-0c1d2e3f4a5b'
     assert product_qr(qr_image('stocklane:v1:' + identity)) == 'stocklane:v1:' + identity
 
 
