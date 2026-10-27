@@ -6,5 +6,6 @@ resources:
 - grafana
 - ../../vendor/kube-state-metrics
 - kube-state-metrics-servicemonitor.yaml
+- kubelet-servicemonitor.yaml
 - prometheusrule.yaml
 namespace: monitoring

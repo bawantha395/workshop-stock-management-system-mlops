@@ -32,3 +32,54 @@ spec:
         severity: warning
       annotations:
         summary: Spring Boot server error ratio exceeds five percent
+  - name: stocklane-cluster
+    rules:
+    - alert: StocklaneNodeNotReady
+      expr: kube_node_status_condition{condition="Ready",status=~"false|unknown"} == 1
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: A Kubernetes node has not been Ready for five minutes
+    - alert: StocklaneContainerCannotStart
+      expr: sum by (namespace, pod, reason) (kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError"} == 1) > 0
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: A container is stuck in CrashLoopBackOff or image pull failure
+    - alert: StocklanePodsPending
+      expr: sum(kube_pod_status_phase{phase="Pending"}) > 0
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: Pods have stayed Pending for fifteen minutes; the cluster may be out of CPU, memory or pod slots
+    - alert: StocklaneDeploymentReplicasUnavailable
+      expr: (kube_deployment_spec_replicas{namespace=~"stocklane(-.*)?"} - kube_deployment_status_replicas_available{namespace=~"stocklane(-.*)?"}) > 0
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: An application deployment has fewer available replicas than desired
+    - alert: StocklaneNodeMemoryHigh
+      expr: sum by (instance) (container_memory_working_set_bytes{id="/"}) / on (instance) sum by (instance) (machine_memory_bytes) > 0.9
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: A node is using more than ninety percent of its memory
+    - alert: StocklaneNodeCpuHigh
+      expr: sum by (instance) (rate(container_cpu_usage_seconds_total{id="/"}[5m])) / on (instance) sum by (instance) (machine_cpu_cores) > 0.9
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: A node has used more than ninety percent of its CPU for fifteen minutes
+    - alert: StocklaneVolumeAlmostFull
+      expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9
+      for: 15m
+      labels:
+        severity: critical
+      annotations:
+        summary: A persistent volume is more than ninety percent full

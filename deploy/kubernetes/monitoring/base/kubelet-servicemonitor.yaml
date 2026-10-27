@@ -1,0 +1,47 @@
+# Node and container metrics from every kubelet. The Prometheus Operator keeps the
+# kube-system/kubelet Service up to date (see its --kubelet-service argument).
+# Provides container CPU/memory (cAdvisor) and node-level cgroup totals without
+# a privileged node-exporter DaemonSet, which the baseline-enforced monitoring
+# namespace would reject.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kubelet
+  labels:
+    stocklane.io/monitoring: enabled
+spec:
+  jobLabel: k8s-app
+  namespaceSelector:
+    matchNames:
+    - kube-system
+  selector:
+    matchLabels:
+      k8s-app: kubelet
+  endpoints:
+  - port: https-metrics
+    scheme: https
+    path: /metrics
+    interval: 30s
+    honorLabels: true
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tlsConfig:
+      insecureSkipVerify: true
+    relabelings:
+    - sourceLabels: [__metrics_path__]
+      targetLabel: metrics_path
+  - port: https-metrics
+    scheme: https
+    path: /metrics/cadvisor
+    interval: 30s
+    honorLabels: true
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tlsConfig:
+      insecureSkipVerify: true
+    metricRelabelings:
+    # Drop high-cardinality series the dashboards never use to protect memory.
+    - sourceLabels: [__name__]
+      regex: container_(network_tcp_usage_total|network_udp_usage_total|tasks_state|cpu_load_average_10s|memory_failures_total|blkio_device_usage_total)
+      action: drop
+    relabelings:
+    - sourceLabels: [__metrics_path__]
+      targetLabel: metrics_path
