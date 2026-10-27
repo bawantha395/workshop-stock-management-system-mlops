@@ -27,7 +27,8 @@ spec:
     tlsConfig:
       insecureSkipVerify: true
     relabelings:
-    - sourceLabels: [__metrics_path__]
+    - action: replace
+      sourceLabels: [__metrics_path__]
       targetLabel: metrics_path
   - port: https-metrics
     scheme: https
@@ -43,5 +44,6 @@ spec:
       regex: container_(network_tcp_usage_total|network_udp_usage_total|tasks_state|cpu_load_average_10s|memory_failures_total|blkio_device_usage_total)
       action: drop
     relabelings:
-    - sourceLabels: [__metrics_path__]
+    - action: replace
+      sourceLabels: [__metrics_path__]
       targetLabel: metrics_path
