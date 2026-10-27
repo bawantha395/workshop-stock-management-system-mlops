@@ -1,0 +1,63 @@
+name: Train real-data ML models (on GitHub runner, no SageMaker)
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Benchmark-only training on the GitHub runner; nothing is promoted
+        type: choice
+        options: [both, photo, forecast]
+        default: both
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: runner-training
+  cancel-in-progress: false
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_DEFAULT_REGION: ap-southeast-2
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    environment: aws-training
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r mlops/requirements.txt
+      - name: Prepare verified real public data
+        working-directory: mlops
+        run: python prepare_public_data.py --output ../artifacts/data --cache ../artifacts/cache
+      - name: Train forecast benchmark
+        if: inputs.task != 'photo'
+        working-directory: mlops
+        run: |
+          python -c "from monthly_parts_benchmark import main; main('../artifacts/data/monthly-history','../artifacts/out/forecast')"
+      # Photo task only: the encoder lives in S3 (S3 works on the free tier; SageMaker is not used).
+      - name: Authenticate to AWS (OIDC, only to download the encoder)
+        if: inputs.task != 'forecast'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ format('arn:aws:iam::{0}:role/{1}-github-training', vars.AWS_ACCOUNT_ID, vars.PROJECT_NAME) }}
+          aws-region: ap-southeast-2
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - name: Train photo benchmark
+        if: inputs.task != 'forecast'
+        working-directory: mlops
+        run: |
+          URI=$(python -c "import json;print(json.load(open('../deploy/kubernetes/apps/overlays/dev/release.json'))['model']['uri'])")
+          aws s3 cp "$URI" /tmp/enc.tar.gz
+          mkdir -p ../artifacts/encoder
+          tar -xzf /tmp/enc.tar.gz -C ../artifacts/encoder encoder.onnx model.json
+          python -c "from train import train; train('../artifacts/data/photos','../artifacts/encoder','../artifacts/out/photo','runner-public',benchmark_mode=True)"
+      - name: Summary
+        if: always()
+        run: |
+          for f in artifacts/out/*/metrics.json; do [ -f "$f" ] && { echo "### $f" >> "$GITHUB_STEP_SUMMARY"; echo '```json' >> "$GITHUB_STEP_SUMMARY"; cat "$f" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; }; done
+          echo "Benchmark only. No live model, stock or forecast changed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-models
+          path: artifacts/out
