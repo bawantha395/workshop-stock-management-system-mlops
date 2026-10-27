@@ -55,6 +55,8 @@ spec:
           value: console
         - name: GF_METRICS_ENABLED
           value: 'true'
+        - name: GF_PLUGINS_PREINSTALL_DISABLED
+          value: 'true'
         volumeMounts:
         - name: data
           mountPath: /var/lib/grafana
