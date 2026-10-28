@@ -201,3 +201,18 @@ variable "admin_allowed_cidrs" {
     error_message = "Use valid IPv4 ranges /24 or narrower; do not expose admin dashboards to the whole Internet."
   }
 }
+variable "alarm_rca_cooldown_hours" {
+  type        = number
+  default     = 6
+  description = "One root-cause report per alarm within this window; later repeats are only counted."
+}
+variable "alarm_rca_daily_cap" {
+  type        = number
+  default     = 10
+  description = "Maximum root-cause reports per UTC day across all alarms."
+}
+variable "application_error_threshold" {
+  type        = number
+  default     = 20
+  description = "Container error lines per 5 minutes that raise the application-errors alarm."
+}

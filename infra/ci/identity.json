@@ -509,7 +509,19 @@
                     "codebuild:List*",
                     "servicequotas:GetServiceQuota",
                     "cloudwatch:DescribeAlarms",
-                    "cloudwatch:ListTagsForResource"
+                    "cloudwatch:ListTagsForResource",
+                    "lambda:GetFunction",
+                    "lambda:GetFunctionCodeSigningConfig",
+                    "lambda:ListVersionsByFunction",
+                    "lambda:GetPolicy",
+                    "lambda:ListTags",
+                    "dynamodb:DescribeTable",
+                    "dynamodb:DescribeContinuousBackups",
+                    "dynamodb:DescribeTimeToLive",
+                    "dynamodb:ListTagsOfResource",
+                    "events:DescribeRule",
+                    "events:ListTargetsByRule",
+                    "events:ListTagsForResource"
                   ],
                   "Resource": "*",
                   "Condition": {
@@ -1034,7 +1046,10 @@
                     "cognito-idp:*",
                     "acm:*",
                     "codebuild:*",
-                    "cloudwatch:*"
+                    "cloudwatch:*",
+                    "lambda:*",
+                    "dynamodb:*",
+                    "events:*"
                   ],
                   "Resource": "*",
                   "Condition": {
@@ -1124,7 +1139,8 @@
                         "ec2.amazonaws.com",
                         "pods.eks.amazonaws.com",
                         "sagemaker.amazonaws.com",
-                        "codebuild.amazonaws.com"
+                        "codebuild.amazonaws.com",
+                        "lambda.amazonaws.com"
                       ]
                     }
                   }
@@ -1416,7 +1432,13 @@
                 "bedrock:InvokeModel",
                 "acm:DescribeCertificate",
                 "acm:ListCertificates",
-                "cognito-idp:DescribeUserPoolClient"
+                "cognito-idp:DescribeUserPoolClient",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:DescribeAlarmHistory",
+                "cloudwatch:GetMetricData",
+                "cloudtrail:LookupEvents",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem"
               ],
               "Resource": "*",
               "Condition": {
