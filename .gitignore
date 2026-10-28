@@ -20,7 +20,7 @@ __pycache__/
 *.tfvars
 *.tfvars.json
 *.auto.tfvars
-infra/aws/pipeline-recovery.tf
+infra/terraform/environments/*/pipeline-recovery.tf
 terraform.tfvars
 !*.tfvars.example
 !*.tfvars.json.example
@@ -36,5 +36,7 @@ artifacts/
 .openai/
 .preview-runtime/
 
-# Temporary files from scripts/destroy_current_stack.py
-infra/aws/*_override.tf
+# Per-environment sizes are reviewed code; account-specific values stay in the
+# TFVARS_JSON secret and are written to pipeline.auto.tfvars.json at run time.
+!infra/terraform/environments/*/terraform.tfvars
+infra/terraform/**/*_override.tf
