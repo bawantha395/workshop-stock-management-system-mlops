@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     inventory_url: str = 'http://localhost:8081'
     bedrock_model_id: str = ''
     bedrock_daily_request_limit: int = 50
+    bedrock_region: str = ''
     aws_region: str = 'eu-west-1'
     catalogue_queue_url: str = ''
     match_threshold: float = 0.92

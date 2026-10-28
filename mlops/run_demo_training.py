@@ -8,10 +8,8 @@ import argparse
 import hashlib
 import io
 import json
-import signal
 import tarfile
 import tempfile
-import time
 import uuid
 from datetime import datetime,timezone
 from pathlib import Path
@@ -22,6 +20,7 @@ from botocore.exceptions import ClientError
 from generate_demo_data import generate
 from stage_encoder import stage
 from upload_dataset import immutable_put
+import sagemaker_jobs
 
 ROOT=Path(__file__).resolve().parents[1]
 MAX_ARTIFACT=40*1024*1024
@@ -42,29 +41,7 @@ def upload_demo(root,bucket,s3):
     return 's3://'+bucket+'/'+prefix
 
 
-def wait_for_job(sm,name):
-    deadline=time.monotonic()+1200
-    def interrupted(*_):raise InterruptedError('Training interrupted')
-    previous=signal.signal(signal.SIGTERM,interrupted)
-    last_status=None
-    try:
-        while time.monotonic()<deadline:
-            job=sm.describe_training_job(TrainingJobName=name)
-            current=(job['TrainingJobStatus'],job.get('SecondaryStatus',''))
-            if current!=last_status:
-                print('SageMaker job state:',name,*current,flush=True);last_status=current
-            if job['TrainingJobStatus'] in {'Completed','Failed','Stopped'}:
-                if job['TrainingJobStatus']!='Completed':
-                    raise RuntimeError('Training '+job['TrainingJobStatus']+'; inspect /aws/sagemaker/TrainingJobs for '+name)
-                return job
-            time.sleep(15)
-        raise TimeoutError('Training wall-clock limit exceeded')
-    except BaseException:
-        # Preserve the original error if a completed/failed job cannot be stopped.
-        try:sm.stop_training_job(TrainingJobName=name)
-        except ClientError:pass
-        raise
-    finally:signal.signal(signal.SIGTERM,previous)
+wait_for_job=sagemaker_jobs.wait
 
 
 def read_artifact(s3,bucket,uri,filename):
@@ -86,16 +63,10 @@ def train_one(task,c,sm,s3,image,dataset,encoder):
     channel=dataset+('photos/' if task=='photo' else 'forecast/seasonal_mixed/')
     inputs=[('dataset',channel)]
     if task=='photo':inputs.append(('encoder',encoder))
-    sm.create_training_job(TrainingJobName=name,RoleArn=c['training_role_arn'],
-        AlgorithmSpecification={'TrainingImage':image,'TrainingInputMode':'File'},
-        HyperParameters={'task':'stock_forecast' if task=='forecast' else 'visual_sku','demo_mode':'true'},
-        InputDataConfig=[{'ChannelName':key,'DataSource':{'S3DataSource':{'S3DataType':'S3Prefix',
-            'S3Uri':uri,'S3DataDistributionType':'FullyReplicated'}}} for key,uri in inputs],
-        OutputDataConfig={'S3OutputPath':'s3://'+c['model_bucket']+'/demo/training'},
-        ResourceConfig={'InstanceType':'ml.m5.large','InstanceCount':1,'VolumeSizeInGB':10},
-        StoppingCondition={'MaxRuntimeInSeconds':600},EnableNetworkIsolation=True)
+    kind,_=sagemaker_jobs.start(sm,name,c['training_role_arn'],image,inputs,'s3://'+c['model_bucket']+'/demo/training',
+        {'task':'stock_forecast' if task=='forecast' else 'visual_sku','demo_mode':'true'})
     print('Started bounded SYNTHETIC DEMO job:',name,flush=True)
-    job=wait_for_job(sm,name);uri=job['ModelArtifacts']['S3ModelArtifacts']
+    job=wait_for_job(sm,kind,name);uri=job['ModelArtifacts']['S3ModelArtifacts']
     metrics,digest=read_artifact(s3,c['model_bucket'],uri,'metrics.json' if task=='photo' else 'forecast.json')
     if metrics.get('qualityGatePassed') is not True:raise ValueError('Demo candidate did not pass its evaluation gate')
     metric_key='demo/evaluations/'+name+'/metrics.json'

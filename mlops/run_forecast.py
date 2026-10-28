@@ -1,7 +1,8 @@
 """One protected workflow: snapshot preflight -> bounded SageMaker -> gate -> publish.
 Insufficient history never starts a paid training job. Forecasts are batch artifacts.
 """
-import argparse,hashlib,io,json,os,signal,tarfile,time
+import argparse,hashlib,io,json,os,tarfile
+import sagemaker_jobs
 from datetime import datetime,timezone
 from pathlib import Path
 import boto3
@@ -32,22 +33,10 @@ def execute(c,publish=False):
         images=json.loads((Path('deploy/kubernetes/apps/overlays')/c['environment']/'images.json').read_text());image=images['ml-training']
         if not image.startswith(c['account_id']+'.dkr.ecr.'+c['region']+'.amazonaws.com/') or '@sha256:' not in image:raise ValueError('Use the released training image digest')
         job_name=c['name']+'-forecast-'+datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
-        sm.create_training_job(TrainingJobName=job_name,RoleArn=c['training_role_arn'],AlgorithmSpecification={'TrainingImage':image,'TrainingInputMode':'File'},HyperParameters={'task':'stock_forecast'},
-            InputDataConfig=[{'ChannelName':'dataset','DataSource':{'S3DataSource':{'S3DataType':'S3Prefix','S3Uri':'s3://'+bucket+'/'+key.rsplit('/',1)[0]+'/','S3DataDistributionType':'FullyReplicated'}}}],
-            OutputDataConfig={'S3OutputPath':'s3://'+bucket+'/forecast/training'},ResourceConfig={'InstanceType':'ml.m5.large','InstanceCount':1,'VolumeSizeInGB':10},StoppingCondition={'MaxRuntimeInSeconds':600},EnableNetworkIsolation=True)
-        print('Bounded forecast training:',job_name,flush=True)
-        def interrupted(*_):raise InterruptedError('Forecast training interrupted')
-        signal.signal(signal.SIGTERM,interrupted)
-        try:
-            deadline=time.monotonic()+1200
-            while time.monotonic()<deadline:
-                job=sm.describe_training_job(TrainingJobName=job_name)
-                if job['TrainingJobStatus'] in {'Completed','Failed','Stopped'}:break
-                time.sleep(15)
-            else:raise TimeoutError('Forecast wall-clock limit exceeded')
-            if job['TrainingJobStatus']!='Completed':raise RuntimeError('SageMaker training failed; inspect its CloudWatch log')
-        except BaseException:
-            sm.stop_training_job(TrainingJobName=job_name);raise
+        kind,_=sagemaker_jobs.start(sm,job_name,c['training_role_arn'],image,[('dataset','s3://'+bucket+'/'+key.rsplit('/',1)[0]+'/')],
+            's3://'+bucket+'/forecast/training',{'task':'stock_forecast'})
+        print('Bounded forecast SageMaker',kind,'job:',job_name,flush=True)
+        job=sagemaker_jobs.wait(sm,kind,job_name)
         artifact_uri=job['ModelArtifacts']['S3ModelArtifacts'];artifact_bucket,artifact_key=artifact_uri[5:].split('/',1)
         if artifact_bucket!=bucket or not artifact_key.startswith('forecast/training/'):raise ValueError('Unexpected artifact location')
         archive=read(s3,bucket,artifact_key)

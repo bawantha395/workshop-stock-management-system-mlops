@@ -51,6 +51,7 @@ def render(config, images, model_uri, model_sha, destination=None, *, platform=F
         'MODEL_BUCKET': c.get('model_bucket', ''),
         'MODEL_URI': model_uri, 'MODEL_ARCHIVE_SHA256': model_sha,
         'BEDROCK_MODEL_ID': c.get('bedrock_model_id', ''),
+        'BEDROCK_REGION': c.get('bedrock_region', ''),
         'BEDROCK_DAILY_REQUEST_LIMIT': str(c.get('bedrock_daily_request_limit', 50)),
     })
     patches = []

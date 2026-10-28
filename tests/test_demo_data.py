@@ -96,6 +96,7 @@ def test_demo_uploads_are_isolated_from_live_dataset_and_release_prefixes(fixtur
 
 
 def test_demo_training_registers_only_a_marked_pending_package(monkeypatch):
+    monkeypatch.setenv('SAGEMAKER_JOB_TYPE','training')
     import run_demo_training as demo
     content=json.dumps({'syntheticData':True,'qualityGatePassed':True,'products':[{'status':'trained_ml'}]}).encode()
     buffer=io.BytesIO()

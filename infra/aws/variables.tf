@@ -170,6 +170,15 @@ variable "bedrock_model_id" {
     error_message = "Use a regional foundation model ID; cross-region inference profiles are not enabled by this policy."
   }
 }
+variable "bedrock_region" {
+  type        = string
+  default     = ""
+  description = "Optional Region for Bedrock model calls, for example us-east-1. Empty uses var.region."
+  validation {
+    condition     = var.bedrock_region == "" || can(regex("^[a-z]{2}(-gov)?-[a-z]+-[0-9]$", var.bedrock_region))
+    error_message = "Use an AWS Region code such as us-east-1, or leave empty."
+  }
+}
 variable "bedrock_daily_request_limit" {
   type    = number
   default = 50

@@ -1450,6 +1450,16 @@
               }
             },
             {
+              "Sid": "FoundationModelInvokeAnyRegion",
+              "Effect": "Allow",
+              "Action": [
+                "bedrock:InvokeModel"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+              }
+            },
+            {
               "Sid": "ProjectObjectStorage",
               "Effect": "Allow",
               "Action": [

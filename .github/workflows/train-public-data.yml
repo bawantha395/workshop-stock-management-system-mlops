@@ -25,7 +25,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: aws-training
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -51,7 +51,7 @@ jobs:
           role-session-name: stocklane-${{ github.run_id }}
       - run: pip install boto3==1.43.118 pillow==13.0.0
       - run: python scripts/pipeline_common.py --output artifacts/aws.json
-      - name: Download verified real data and create SageMaker training jobs
+      - name: Download verified real data and run SageMaker training
         env:
           TRAINING_TASK: ${{ inputs.task }}
         run: python mlops/run_public_training.py --config artifacts/aws.json --task "$TRAINING_TASK"
@@ -66,7 +66,7 @@ jobs:
               report=json.loads(path.read_text())
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
                   f.write('## Real public-data SageMaker training\n\n')
-                  f.write('Open SageMaker AI in ap-southeast-2 and find the reported names under Training jobs.\n\n')
+                  f.write('Open SageMaker AI in ap-southeast-2 and find the reported names under Processing jobs (jobType processing) or Training jobs (jobType training).\n\n')
                   f.write('```json\n'+json.dumps(report,indent=2)+'\n```\n')
                   f.write('Real external data benchmarks remain pending. No workshop stock, live model or live forecast was changed.\n')
           PY

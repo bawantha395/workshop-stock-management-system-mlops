@@ -146,6 +146,7 @@ def create_app(settings=None):
         return {'modelReady':encoder is not None,'modelVersion':encoder.version if encoder else None,
                 'workshopCalibrated':bool(encoder and encoder.manifest.get('workshopCalibrated')),
                 'bedrockConfigured':bool(s.bedrock_model_id),'bedrockModelId':s.bedrock_model_id or None,
+                'bedrockRegion':(s.bedrock_region or s.aws_region) if s.bedrock_model_id else None,
                 'bedrockAccess':dict(bedrock_observation),'cacheAvailable':cache_ok,
                 'automaticPosting':False,'mode':s.auth_mode}
 

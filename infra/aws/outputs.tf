@@ -46,6 +46,7 @@ output "deployment" {
     github_training_role_arn     = aws_iam_role.github_training.arn
     training_role_arn            = aws_iam_role.training.arn
     bedrock_model_id             = local.bedrock_runtime_model_id
+    bedrock_region               = local.bedrock_region
     bedrock_daily_request_limit  = var.bedrock_daily_request_limit
     model_package_group          = aws_sagemaker_model_package_group.vision.model_package_group_name
     kms_key_arn                  = aws_kms_key.main.arn

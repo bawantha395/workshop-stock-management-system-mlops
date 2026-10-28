@@ -101,6 +101,7 @@ services:
       VISION_URL: http://localhost:8083
       MODEL_DIR: /models/baseline
       BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      BEDROCK_REGION: ${BEDROCK_REGION:-}
       AWS_REGION: ${AWS_REGION:-eu-west-1}
     volumes:
       - images:/data/images

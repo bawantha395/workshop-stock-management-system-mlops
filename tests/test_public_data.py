@@ -123,6 +123,7 @@ def test_public_photos_require_the_explicit_benchmark_training_path(tmp_path):
 
 @pytest.mark.parametrize('task',['photo','forecast'])
 def test_real_training_uses_valid_aws_requests_and_registers_failed_gates_as_benchmark_only(task,monkeypatch):
+    monkeypatch.setenv('SAGEMAKER_JOB_TYPE','training')
     metrics={'benchmarkOnly':True,'syntheticData':False,'qualityGatePassed':False}
     buffer=io.BytesIO();content=json.dumps(metrics).encode()
     with tarfile.open(fileobj=buffer,mode='w:gz') as archive:
@@ -153,7 +154,8 @@ def test_real_training_uses_valid_aws_requests_and_registers_failed_gates_as_ben
     assert all(call.kwargs['Key'].startswith('benchmarks/public/') for call in s3.put_object.call_args_list)
 
 
-def test_failed_job_creation_is_not_reported_as_created():
+def test_failed_job_creation_is_not_reported_as_created(monkeypatch):
+    monkeypatch.setenv('SAGEMAKER_JOB_TYPE','training')
     sm=Mock();sm.create_training_job.side_effect=ClientError({'Error':{'Code':'ResourceLimitExceeded'}},'CreateTrainingJob')
     result={};config={'name':'stocklane-dev','training_role_arn':'role','model_bucket':'owned'}
     with pytest.raises(ClientError):runner.train_one('forecast',config,sm,Mock(),'image','s3://owned/data/',None,'a'*64,'b'*64,result)

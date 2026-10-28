@@ -101,6 +101,7 @@ def test_forecast_cognito_mechanic_cannot_read_owner_forecasts(monkeypatch):
     assert denied.value.status_code==403
 
 def test_sagemaker_train_gate_registry_and_publish_are_one_run(monkeypatch,tmp_path):
+    monkeypatch.setenv('SAGEMAKER_JOB_TYPE','training')
     import run_forecast,hashlib,tarfile
     data=snapshot(200,True);raw=json.dumps(data).encode();pointer={'key':'forecast/datasets/abc/history.json','sha256':hashlib.sha256(raw).hexdigest()}
     artifact=json.dumps(train(data)).encode();buffer=io.BytesIO()

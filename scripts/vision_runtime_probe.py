@@ -45,11 +45,11 @@ def main(probe_bedrock=False):
     result['catalogueConsumer']={'configured':bool(settings.catalogue_queue_url),
                                  'note':'Configuration alone does not prove message consumption.'}
     result['bedrock']={'modelId':settings.bedrock_model_id or None,
-        'region':settings.aws_region,
+        'region':settings.bedrock_region or settings.aws_region,
         'status':'not_verified' if settings.bedrock_model_id else 'not_configured'}
     if probe_bedrock and settings.bedrock_model_id:
         try:
-            response=boto3.client('bedrock-runtime',region_name=settings.aws_region,
+            response=boto3.client('bedrock-runtime',region_name=settings.bedrock_region or settings.aws_region,
                 config=Config(connect_timeout=5,read_timeout=15,retries={'total_max_attempts':1})).converse(
                 modelId=settings.bedrock_model_id,
                 messages=[{'role':'user','content':[{'text':'Reply with OK.'}]}],

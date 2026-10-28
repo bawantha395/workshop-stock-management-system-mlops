@@ -18,7 +18,8 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from prepare_public_data import prepare
-from run_demo_training import wait_for_job
+import sagemaker_jobs
+from sagemaker_jobs import wait as wait_for_job
 from stage_encoder import stage
 from upload_dataset import immutable_put
 
@@ -64,18 +65,11 @@ def train_one(task,c,sm,s3,image,dataset,encoder,dataset_sha,source_sha,result):
     if task=='photo':inputs.append(('encoder',encoder))
     names=['precision','recall'] if task=='photo' else ['meanModelMAE','meanBaselineMAE']
     print('Requesting real-data SageMaker job:',name,flush=True)
-    submitted=sm.create_training_job(TrainingJobName=name,RoleArn=c['training_role_arn'],
-        AlgorithmSpecification={'TrainingImage':image,'TrainingInputMode':'File',
-            'MetricDefinitions':[{'Name':'benchmark:'+key,'Regex':'"'+key+'":\\s*([0-9.eE+-]+)'} for key in names]},
-        HyperParameters={'task':'visual_sku' if task=='photo' else 'monthly_car_parts_benchmark','benchmark_mode':'true'},
-        InputDataConfig=[
-            {'ChannelName':key,'DataSource':{'S3DataSource':{'S3DataType':'S3Prefix','S3Uri':uri,
-                'S3DataDistributionType':'FullyReplicated'}}} for key,uri in inputs],
-        OutputDataConfig={'S3OutputPath':'s3://'+c['model_bucket']+'/benchmarks/public/training'},
-        ResourceConfig={'InstanceType':'ml.m5.large','InstanceCount':1,'VolumeSizeInGB':10},
-        StoppingCondition={'MaxRuntimeInSeconds':600},EnableNetworkIsolation=True)
-    result.update(creationConfirmed=True,trainingJobArn=submitted['TrainingJobArn'])
-    job=wait_for_job(sm,name)
+    kind,arn=sagemaker_jobs.start(sm,name,c['training_role_arn'],image,inputs,
+        's3://'+c['model_bucket']+'/benchmarks/public/training',
+        {'task':'visual_sku' if task=='photo' else 'monthly_car_parts_benchmark','benchmark_mode':'true'},names)
+    result.update(creationConfirmed=True,trainingJobArn=arn,jobType=kind)
+    job=wait_for_job(sm,kind,name)
     result['trainingJobStatus']=job['TrainingJobStatus']
     uri=job['ModelArtifacts']['S3ModelArtifacts'];metrics,digest=read_metrics(s3,c['model_bucket'],uri)
     key='benchmarks/public/evaluations/'+name+'/metrics.json'
@@ -89,7 +83,7 @@ def train_one(task,c,sm,s3,image,dataset,encoder,dataset_sha,source_sha,result):
         ModelMetrics={'ModelQuality':{'Statistics':{'ContentType':'application/json',
             'S3Uri':'s3://'+c['model_bucket']+'/'+key}}},
         CustomerMetadataProperties={'syntheticData':'false','benchmarkOnly':'true','dataPurpose':'public_data_benchmark',
-            'artifactSha256':digest,'datasetInputSha256':dataset_sha,'sourceLockSha256':source_sha,'trainingJob':name})
+            'artifactSha256':digest,'datasetInputSha256':dataset_sha,'sourceLockSha256':source_sha,'trainingJob':name,'sagemakerJobType':kind})
     result.update(status='real_public_training_completed',artifactUri=uri,
         modelPackageArn=package['ModelPackageArn'],approval='PendingManualApproval',
         qualityGatePassed=metrics['qualityGatePassed'],metrics=metrics)
@@ -121,7 +115,7 @@ def run(c,task='both'):
             except Exception as error:
                 code=error.response['Error']['Code'] if isinstance(error,ClientError) else type(error).__name__
                 item.update(status='failed',errorCode=code,
-                    nextCheck='Check the named job and CloudWatch logs. If creation was rejected, check SageMaker training permissions, account restrictions and the ml.m5.large training quota.')
+                    nextCheck='Check the named job and CloudWatch logs. If creation was rejected, check SageMaker permissions and the quota for '+sagemaker_jobs.instance_type()+' ('+sagemaker_jobs.job_type()+' job usage).')
     return result
 
 
