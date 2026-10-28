@@ -35,3 +35,6 @@ deploy/generated/
 artifacts/
 .openai/
 .preview-runtime/
+
+# Temporary files from scripts/destroy_current_stack.py
+infra/aws/*_override.tf
