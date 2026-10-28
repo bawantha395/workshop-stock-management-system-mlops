@@ -9,7 +9,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'infra/aws/**'
+      - 'infra/terraform/**'
       - 'infra/ci/**'
       - 'deploy/codebuild/**'
       - 'scripts/pipeline_*.py'

@@ -194,10 +194,11 @@ def bootstrap(args):
     email = args.budget_email or input("Email for AWS budget alerts: ").strip()
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         raise ValueError("Invalid budget email")
-    capacity = json.loads((ROOT / "infra/ci" / ("capacity-" + args.capacity_profile + ".json")).read_text())
-    inputs = {**capacity, "administrator_arn": operator_arn, "operator_cidrs": [cidr],
+    # Account-specific values only. Sizes and deletion protection are reviewed
+    # code in infra/terraform/environments/<env>/terraform.tfvars.
+    inputs = {"administrator_arn": operator_arn, "operator_cidrs": [cidr],
         "api_domain": args.api_domain, "route53_zone_id": args.hosted_zone_id,
-        "budget_email": email, "monthly_budget_usd": 25, "github_oidc_subject_style": style,
+        "budget_email": email, "github_oidc_subject_style": style,
         "github_auth_mode": args.auth_mode}
     variables = {"AWS_ACCOUNT_ID": account, "AWS_REGION": args.region,
         "PROJECT_NAME": args.project_name, "TF_ENVIRONMENT": args.environment,
@@ -218,8 +219,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
     parser.add_argument("--project-name", default="stocklane-dev")
-    parser.add_argument("--environment", choices=["dev", "test", "uat", "production"], default="dev")
-    parser.add_argument("--capacity-profile", choices=["demo", "production"], default="demo")
+    parser.add_argument("--environment", choices=["dev", "staging", "prod"], default="dev")
     parser.add_argument("--region", default=REGION)
     parser.add_argument("--expected-account", default="")
     parser.add_argument("--hosted-zone-id", required=True)

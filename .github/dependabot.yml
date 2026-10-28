@@ -13,5 +13,8 @@ updates:
     directory: /services/vision
     schedule: {interval: weekly}
   - package-ecosystem: terraform
-    directory: /infra/aws
+    directories:
+      - /infra/terraform/environments/dev
+      - /infra/terraform/environments/staging
+      - /infra/terraform/environments/prod
     schedule: {interval: weekly}

@@ -128,7 +128,7 @@ def test_wrapper_fails_when_training_fails(tmp_path):
 
 
 def test_github_training_role_can_run_processing_jobs():
-    source = (ROOT / 'infra/aws/ml-observability.tf').read_text()
+    source = (ROOT / 'infra/terraform/modules/cicd/main.tf').read_text()
     assert '"sagemaker:CreateProcessingJob", "sagemaker:DescribeProcessingJob", "sagemaker:StopProcessingJob"' in source
     assert 'processing-job/${var.name}-*' in source
 

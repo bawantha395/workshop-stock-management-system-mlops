@@ -60,10 +60,13 @@ def test_renderer_defaults_bedrock_region_to_empty(tmp_path):
 
 
 def test_terraform_scopes_invoke_permission_to_the_bedrock_region():
-    source = (ROOT / 'infra/aws/ai-config.tf').read_text()
+    source = (ROOT / 'infra/terraform/modules/ml/main.tf').read_text()
     assert 'bedrock:${local.bedrock_region}::foundation-model/${var.bedrock_model_id}' in source
     assert re.search(r'bedrock_region\s+=\s+var\.bedrock_region != "" \? var\.bedrock_region : var\.region', source)
-    assert 'bedrock_region               = local.bedrock_region' in (ROOT / 'infra/aws/outputs.tf').read_text()
+    outputs = (ROOT / 'infra/terraform/environments/dev/outputs.tf').read_text()
+    assert re.search(r'bedrock_region\s+= module\.ml\.bedrock_region', outputs)
+    vision = (ROOT / 'infra/terraform/modules/workload-identity/main.tf').read_text()
+    assert '"bedrock:InvokeModel"], Resource = var.bedrock_invoke_arn' in vision
 
 
 def test_workload_boundary_allows_only_foundation_model_invoke_outside_home_region():

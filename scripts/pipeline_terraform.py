@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from botocore.exceptions import ClientError
-from pipeline_common import ROOT, check_account, check_eks_nodegroup_role, client, settings, terraform_inputs, write_private
+from pipeline_common import ROOT, check_account, check_eks_nodegroup_role, client, settings, terraform_dir, terraform_inputs, write_private
 from pipeline_nodegroup import check_change_approval, check_worker_quota, prepare_nodegroup_recovery
 
 WORK = ROOT / "artifacts" / "terraform"
@@ -22,7 +22,8 @@ def run(args, **kwargs):
 
 
 def tf(*args, capture=False):
-    command = ["terraform", "-chdir=infra/aws", *args]
+    directory = terraform_dir(settings()["environment"]).relative_to(ROOT)
+    command = ["terraform", "-chdir=" + directory.as_posix(), *args]
     if capture:
         return subprocess.check_output(command, cwd=ROOT)
     run(command)
@@ -89,7 +90,7 @@ def prepare(c, readonly_lock=False):
         for value in [data["budget_email"], *data["operator_cidrs"]]:
             escaped = value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print("::add-mask::" + escaped, flush=True)
-    write_private(ROOT / "infra/aws/pipeline.auto.tfvars.json", data)
+    write_private(terraform_dir(c["environment"]) / "pipeline.auto.tfvars.json", data)
     backend = WORK / "backend.hcl"
     backend.write_text("\n".join([
         "bucket = " + json.dumps(c["bucket"]), "key = " + json.dumps(c["key"]),
@@ -148,7 +149,7 @@ def plan(c, adopt_existing_nodegroup=False):
     version = response.get("VersionId")
     if not version or version == "null":
         raise RuntimeError("Saved plans require S3 versioning")
-    provider_lock = (ROOT / "infra/aws/.terraform.lock.hcl").read_bytes()
+    provider_lock = (terraform_dir(c["environment"]) / ".terraform.lock.hcl").read_bytes()
     lock_response = client("s3", c).put_object(Bucket=c["bucket"], Key=prefix + "/terraform.lock.hcl",
         Body=provider_lock, ServerSideEncryption="AES256", IfNoneMatch="*")
     if not lock_response.get("VersionId") or lock_response["VersionId"] == "null":
@@ -206,7 +207,7 @@ def apply(c, args):
         VersionId=metadata["lock_version"])["Body"].read()
     if hashlib.sha256(lock).hexdigest() != metadata["lock_sha256"]:
         raise RuntimeError("Provider lock checksum mismatch")
-    lock_path = ROOT / "infra/aws/.terraform.lock.hcl"
+    lock_path = terraform_dir(c["environment"]) / ".terraform.lock.hcl"
     lock_path.write_bytes(lock)
     inputs = prepare(c, readonly_lock=True)
     digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()

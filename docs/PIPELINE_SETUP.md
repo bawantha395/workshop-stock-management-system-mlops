@@ -67,7 +67,7 @@ flowchart TD
 ## 1. Upload this complete update and pass CI
 
 Merge the ZIP contents into your existing Git checkout, keeping its Git
-metadata. Include the new `.github/workflows/`, `infra/ci/`, `infra/aws/`,
+metadata. Include the new `.github/workflows/`, `infra/ci/`, `infra/terraform/`,
 `scripts/`, `deploy/codebuild/` and tests. Commit and push to the existing
 repository. Do not nest a second project folder inside the repository.
 
@@ -122,7 +122,6 @@ python3 scripts/bootstrap_pipeline.py \
   --repository bawantha395/workshop-stock-management-system-mlops \
   --project-name stocklane-dev \
   --environment dev \
-  --capacity-profile demo \
   --auth-mode access-key \
   --region ap-southeast-2 \
   --expected-account 721274598579 \
@@ -270,9 +269,9 @@ no Spot Fleet, account upgrade or SCP changes are attempted. See
 [FIRST_APPLY_FIX.md](FIRST_APPLY_FIX.md) to adopt the node group left by
 the cancelled apply and review a create-before-destroy replacement.
 
-This is a prototype capacity profile. `infra/ci/capacity-production.json`
-retains three AZs/NATs/workers, replicated application capacity and Multi-AZ
-RDS.
+Sizes live in `infra/terraform/environments/<env>/terraform.tfvars`: dev and
+staging are small and disposable, prod keeps three AZs/NATs/workers,
+replicated application capacity and Multi-AZ RDS.
 
 **Free plan does not make the stack free.** EKS, workers, NAT, RDS, Redis,
 ALB, storage and build minutes consume eligible credits. AWS quotas and

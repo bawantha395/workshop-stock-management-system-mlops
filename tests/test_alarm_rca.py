@@ -10,7 +10,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'infra/aws/lambda/alarm_rca/alarm_rca.py'
+SOURCE = ROOT / 'infra/terraform/modules/observability/lambda/alarm_rca/alarm_rca.py'
 
 
 def load():
@@ -171,5 +171,5 @@ def test_committed_package_matches_source():
     def contents(data):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             return {name: archive.read(name) for name in archive.namelist()}
-    committed = (ROOT / 'infra/aws/lambda/alarm-rca.zip').read_bytes()
+    committed = (ROOT / 'infra/terraform/modules/observability/lambda/alarm-rca.zip').read_bytes()
     assert contents(committed) == contents(package()), 'Run python scripts/build_alarm_rca.py and commit the zip'

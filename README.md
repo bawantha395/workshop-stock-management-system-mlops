@@ -120,7 +120,7 @@ mlops/                     Training, evaluation, serving contract and promotion
 models/                    Model preparation instructions; generated weights ignored
 infra/ci/                  Pipeline IAM trust, state backend and capacity profiles
 infra/bootstrap/           Optional manual Terraform state bootstrap
-infra/aws/                 AWS resources and IAM roles
+infra/terraform/           Terraform modules + dev/staging/prod environments
 deploy/docker/             Runtime and training images
 deploy/codebuild/          Private VPC platform bootstrap build and client-tool locks
 deploy/local/              PostgreSQL roles/schemas and reverse proxy

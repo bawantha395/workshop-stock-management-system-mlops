@@ -3,16 +3,18 @@ import json
 import os
 
 from botocore.exceptions import ClientError
-from pipeline_common import ROOT, client
+from pipeline_common import client, terraform_dir
 
-ADDRESS = "aws_eks_node_group.main"
+MODULE = "module.eks"
+ADDRESS = MODULE + ".aws_eks_node_group.main"
 LEGACY_NAME = "cpu-workers"
 
 
-def managed_resources(state, resource_type, name=None, *, root_only=True):
+def managed_resources(state, resource_type, name=None, *, module=MODULE):
+    """Instances of one resource type; module=None searches every module."""
     return [instance["attributes"]
             for resource in state.get("resources", [])
-            if resource.get("mode") == "managed" and (not root_only or not resource.get("module"))
+            if resource.get("mode") == "managed" and (module is None or resource.get("module") == module)
             and resource.get("type") == resource_type
             and (name is None or resource.get("name") == name)
             for instance in resource.get("instances", [])
@@ -20,7 +22,7 @@ def managed_resources(state, resource_type, name=None, *, root_only=True):
 
 
 def prepare_nodegroup_recovery(c, adopt=False):
-    generated = ROOT / "infra/aws/pipeline-recovery.tf"
+    generated = terraform_dir(c["environment"]) / "pipeline-recovery.tf"
     generated.unlink(missing_ok=True)
     state = json.loads(client("s3", c).get_object(
         Bucket=c["bucket"], Key=c["key"], ExpectedBucketOwner=c["account"])["Body"].read())
@@ -38,11 +40,11 @@ def prepare_nodegroup_recovery(c, adopt=False):
         return
 
     legacy_id = c["project"] + ":" + LEGACY_NAME
-    if any(item.get("id") == legacy_id for item in managed_resources(state, "aws_eks_node_group", root_only=False)):
+    if any(item.get("id") == legacy_id for item in managed_resources(state, "aws_eks_node_group", module=None)):
         raise RuntimeError("The existing node group is tracked at another address; review a state move instead of importing it twice")
     clusters = managed_resources(state, "aws_eks_cluster", "main")
     roles = managed_resources(state, "aws_iam_role", "nodes")
-    subnets = {item.get("id") for item in managed_resources(state, "aws_subnet", "private")}
+    subnets = {item.get("id") for item in managed_resources(state, "aws_subnet", "private", module="module.network")}
     expected_cluster = f"arn:aws:eks:{c['region']}:{c['account']}:cluster/{c['project']}"
     expected_role = f"arn:aws:iam::{c['account']}:role/{c['project']}-nodes"
     expected_group = f"arn:aws:eks:{c['region']}:{c['account']}:nodegroup/{c['project']}/{LEGACY_NAME}/"
@@ -85,7 +87,7 @@ def check_change_approval(summary, allow_deletions=False, allow_nodegroup_replac
     if allow_nodegroup_replacement and all(
             item["address"] == ADDRESS and item["actions"] == ["create", "delete"] for item in deletions):
         return
-    raise RuntimeError("Plan includes deletes/replacements without approval. The node-group-only approval permits only create-before-destroy replacement of aws_eks_node_group.main; review all other changes separately.")
+    raise RuntimeError("Plan includes deletes/replacements without approval. The node-group-only approval permits only create-before-destroy replacement of " + ADDRESS + "; review all other changes separately.")
 
 
 def check_worker_quota(c, inputs, document):

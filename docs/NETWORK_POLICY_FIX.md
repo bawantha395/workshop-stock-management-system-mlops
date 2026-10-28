@@ -29,9 +29,9 @@ deploy/kubernetes/apps/base/shared/kustomization.yaml
 deploy/kubernetes/apps/base/shared/workshop-inventory-networkpolicy.yaml
 scripts/render_cloud.py
 scripts/run_platform_bootstrap.py
-infra/aws/variables.tf
-infra/aws/compute.tf
-infra/aws/outputs.tf
+infra/terraform/environments/dev/variables.tf
+infra/terraform/environments/dev/compute.tf
+infra/terraform/environments/dev/outputs.tf
 tests/test_kustomize.py
 docs/NETWORK_POLICY_FIX.md
 ```

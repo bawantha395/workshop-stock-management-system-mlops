@@ -1,3 +1,6 @@
+> **Outdated.** Written for the old single-folder `infra/aws` layout. Use the
+> pipeline and [infra/README.md](../infra/README.md); this guide will be replaced.
+
 > Optional operator reference. The default automated path is [PIPELINE_SETUP.md](PIPELINE_SETUP.md).
 
 # Deploy the AWS production profile
@@ -42,23 +45,23 @@ terraform -chdir=infra/bootstrap plan -var='region=eu-west-1' -var='state_bucket
 terraform -chdir=infra/bootstrap apply bootstrap.tfplan
 ```
 
-Copy `infra/aws/backend.hcl.example` to a local backend file and insert the
+Copy `infra/terraform/environments/dev/backend.hcl.example` to a local backend file and insert the
 bucket/region. S3 native lock files are enabled. Never upload state or binary
 plans as public GitHub artifacts; state contains generated secret values.
 
 ## 3. Review and provision resources
 
-Copy `infra/aws/terraform.tfvars.example` to `infra/aws/terraform.tfvars` and fill
+Copy `infra/terraform/environments/dev/terraform.tfvars.example` to `infra/terraform/environments/dev/terraform.tfvars` and fill
 your repository, existing operator IAM ARN, current public IP/32, owned API
 hostname, Route 53 zone and budget email. If an account-wide GitHub OIDC
 provider already exists, supply its ARN instead of creating a duplicate.
 
 ```bash
-terraform -chdir=infra/aws init -backend-config=backend.hcl
-terraform -chdir=infra/aws plan -out=production.tfplan
-terraform -chdir=infra/aws apply production.tfplan
+terraform -chdir=infra/terraform/environments/dev init -backend-config=backend.hcl
+terraform -chdir=infra/terraform/environments/dev plan -out=production.tfplan
+terraform -chdir=infra/terraform/environments/dev apply production.tfplan
 mkdir -p deploy/generated
-terraform -chdir=infra/aws output -json > deploy/generated/aws.outputs.json
+terraform -chdir=infra/terraform/environments/dev output -json > deploy/generated/aws.outputs.json
 ```
 
 Plan/apply are operator actions in this first release. GitHub performs static

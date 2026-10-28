@@ -6,7 +6,7 @@ from pathlib import Path
 
 APP_PREFIXES = ("apps/", "services/", "packages/", "models/", "mlops/", "deploy/docker/",
                 "scripts/render_cloud.py", "scripts/build_release.py", "scripts/bootstrap_database.py")
-INFRA_PREFIXES = ("infra/aws/", "infra/ci/", "deploy/codebuild/")
+INFRA_PREFIXES = ("infra/terraform/", "infra/ci/", "deploy/codebuild/")
 PLATFORM_PREFIXES = ("deploy/kubernetes/", "deploy/codebuild/", "scripts/bootstrap_eks.py",
                      "scripts/run_platform_bootstrap.py", "scripts/pipeline_platform.py")
 

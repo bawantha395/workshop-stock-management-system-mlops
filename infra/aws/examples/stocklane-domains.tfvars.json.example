@@ -1,9 +1,0 @@
-{
-  "web_domain": "stocklane.bawantha-rathnayake.tech",
-  "argocd_domain": "argocd-stocklane.bawantha-rathnayake.tech",
-  "grafana_domain": "grafana-stocklane.bawantha-rathnayake.tech",
-  "admin_allowed_cidrs": ["REPLACE_WITH_YOUR_PUBLIC_IP/32"],
-  "bedrock_model_id": "amazon.nova-lite-v1:0",
-  "bedrock_model_arn": "",
-  "bedrock_daily_request_limit": 50
-}

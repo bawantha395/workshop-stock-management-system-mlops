@@ -30,7 +30,6 @@ python3 scripts/bootstrap_pipeline.py \
   --repository bawantha395/workshop-stock-management-system-mlops \
   --project-name stocklane-dev \
   --environment dev \
-  --capacity-profile demo \
   --auth-mode access-key \
   --region ap-southeast-2 \
   --expected-account 721274598579 \

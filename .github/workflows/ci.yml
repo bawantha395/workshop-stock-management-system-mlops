@@ -115,8 +115,17 @@ jobs:
         with:
           terraform_version: '1.13.5'
       - run: terraform fmt -check -recursive infra
-      - run: terraform -chdir=infra/aws init -backend=false -input=false
-      - run: terraform -chdir=infra/aws validate
+      - name: Validate every environment
+        run: |
+          for env in dev staging prod; do
+            terraform -chdir=infra/terraform/environments/$env init -backend=false -input=false
+            terraform -chdir=infra/terraform/environments/$env validate
+          done
+      - name: Plan every environment against mocked AWS
+        run: |
+          for env in dev staging prod; do
+            terraform -chdir=infra/terraform/environments/dev test -var-file=../$env/terraform.tfvars
+          done
   automation:
     runs-on: ubuntu-latest
     steps:

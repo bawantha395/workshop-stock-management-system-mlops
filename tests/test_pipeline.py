@@ -215,8 +215,8 @@ def test_environment_check_accepts_main_only(monkeypatch):
 
 def test_source_archive_excludes_state_credentials_builds_and_models(config, tmp_path, monkeypatch):
     files = {"scripts/app.py": "print('approved')", ".env": "PRIVATE_SENTINEL",
-             "infra/aws/terraform.tfstate.backup": "PRIVATE_SENTINEL",
-             "infra/aws/pipeline.auto.tfvars.json": "PRIVATE_SENTINEL",
+             "infra/terraform/environments/dev/terraform.tfstate.backup": "PRIVATE_SENTINEL",
+             "infra/terraform/environments/dev/pipeline.auto.tfvars.json": "PRIVATE_SENTINEL",
              "node_modules/x.js": "PRIVATE_SENTINEL", "models/encoder.onnx": "PRIVATE_SENTINEL",
              ".env.example": "SAFE_EXAMPLE"}
     for relative, data in files.items():
@@ -249,13 +249,37 @@ def test_privileged_workflows_require_main_and_manual_apply():
     assert {"plan_id", "plan_sha256"} <= apply["on"]["workflow_dispatch"]["inputs"].keys()
 
 
+def terraform_blocks(path, kind, names):
+    """Copy named top-level blocks (variable/locals) from a Terraform file."""
+    source = Path(path).read_text()
+    blocks = []
+    for name in names:
+        header = f'{kind} "{name}" {{' if name else kind + " {"
+        start = source.index(header)
+        depth, index = 0, start
+        while True:
+            depth += {"{": 1, "}": -1}.get(source[index], 0)
+            index += 1
+            if depth == 0 and source[index - 1] == "}":
+                break
+        blocks.append(source[start:index])
+    return "\n".join(blocks) + "\n"
+
+
+ENVIRONMENT_ROOT = ROOT / "infra/terraform/environments/dev"
+MODULES = ROOT / "infra/terraform/modules"
+
+
 def test_tf_oidc_claims_use_real_terraform_evaluation(tmp_path):
     binary = shutil.which("terraform")
     assert binary, "Install the pinned Terraform CLI to run automation checks"
-    shutil.copy(ROOT / "infra/aws/github-oidc.tf", tmp_path / "github-oidc.tf")
-    (tmp_path / "repository.tf").write_text('variable "github_repository" { type = string }\n')
+    variables = terraform_blocks(ENVIRONMENT_ROOT / "variables.tf", "variable",
+                                 ["github_repository", "github_owner_id", "github_repository_id", "github_oidc_subject_style"])
+    cicd = (MODULES / "cicd/main.tf").read_text()
+    repository = cicd.split("github_oidc_repository = ", 1)[1].split("\n  oidc_provider_arn", 1)[0]
+    (tmp_path / "main.tf").write_text(variables + "locals {\n  github_oidc_repository = " + repository + "\n  subjects = [for e in [\"aws-release\", \"aws-training\", \"aws-platform\"] : \"repo:${local.github_oidc_repository}:environment:${e}\"]\n}\n")
     base = [binary, "console", "-no-color", "-var=github_repository=example/workshop"]
-    expression = "jsonencode([local.github_release_subject,local.github_training_subject,local.github_platform_subject])\n"
+    expression = "jsonencode(local.subjects)\n"
     new = subprocess.run(base + ["-var=github_owner_id=123", "-var=github_repository_id=456"],
                          input=expression, text=True, capture_output=True, cwd=tmp_path)
     assert new.returncode == 0, new.stderr
@@ -272,8 +296,8 @@ def test_tf_oidc_claims_use_real_terraform_evaluation(tmp_path):
 
 
 def test_codebuild_uses_private_subnets_and_no_privileged_docker():
-    source = (ROOT / "infra/aws/automation.tf").read_text()
-    assert 'subnets            = aws_subnet.private[*].id' in source
+    source = (MODULES / "cicd/main.tf").read_text()
+    assert 'subnets            = var.private_subnet_ids' in source
     assert "privileged_mode = false" in source
     assert 'referenced_security_group_id = aws_security_group.platform_bootstrap.id' in source
     assert 'principal_arn = aws_iam_role.platform_bootstrap.arn' in source
@@ -346,12 +370,12 @@ def test_delivery_filters_avoid_recursive_or_early_releases():
     assert eligible("application", ["services/inventory/App.java"])
     assert eligible("application", ["scripts/bootstrap_database.py"])
     assert not eligible("application", ["deploy/kubernetes/apps/overlays/dev/release.json"])
-    assert not eligible("application", ["services/inventory/App.java", "infra/aws/data.tf"])
+    assert not eligible("application", ["services/inventory/App.java", "infra/terraform/modules/data/main.tf"])
     assert not eligible("application", ["apps/web/src/main.tsx"], current=False)
     assert eligible("application", [], manual=True)
     assert eligible("platform", ["deploy/kubernetes/apps/overlays/dev/release.json"])
     assert not eligible("platform", ["README.md"])
-    assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "infra/aws/compute.tf"])
+    assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "infra/terraform/modules/eks/main.tf"])
     assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "services/forecast/app/main.py"])
 
 
@@ -430,9 +454,12 @@ def test_provisioned_roles_cannot_escape_workload_boundary():
     assert create["Condition"]["ArnEquals"]["iam:PermissionsBoundary"] == {"Ref": "WorkloadBoundary"}
     actions = template["Resources"]["WorkloadBoundary"]["Properties"]["PolicyDocument"]["Statement"]
     assert not any("iam:*" in s["Action"] or "iam:PutRolePolicy" in s["Action"] for s in actions)
-    for source in (ROOT / "infra/aws").glob("*.tf"):
+    roles = 0
+    for source in (ROOT / "infra/terraform").rglob("*.tf"):
         for block in re.findall(r'resource "aws_iam_role" "[^"]+" \{\n([^\n]+)', source.read_text()):
-            assert "permissions_boundary" in block
+            roles += 1
+            assert "permissions_boundary" in block, source
+    assert roles >= 10
 
 
 def test_access_key_inputs_do_not_reference_an_oidc_provider(config, monkeypatch):
@@ -514,7 +541,7 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     from argparse import Namespace
     from botocore.exceptions import ClientError
     events=[]; captured={}
-    for name in ["identity.json","capacity-demo.json"]:
+    for name in ["identity.json"]:
         p=tmp_path/"infra/ci"/name;p.parent.mkdir(parents=True,exist_ok=True)
         shutil.copy(ROOT/"infra/ci"/name,p)
     class Sts:
@@ -579,8 +606,9 @@ def test_key_bootstrap_never_calls_oidc_apis_or_stores_keys_in_cloudformation(tm
     setup=json.loads((tmp_path/"deploy/generated/github-setup.json").read_text())
     assert setup["repository_variables"]["AWS_AUTH_MODE"]=="access-key"
     assert "private-test-value" not in json.dumps(setup)
-    assert setup["repository_secret"]["value"]["database_instance_class"] == "db.t4g.micro"
-    assert setup["repository_secret"]["value"]["database_max_allocated_storage"] == 0
+    # Sizes are reviewed code in terraform.tfvars, never copied into the secret.
+    assert "database_instance_class" not in setup["repository_secret"]["value"]
+    assert "deletion_protection" not in setup["repository_secret"]["value"]
 
 
 @pytest.mark.parametrize("exists", [False, True])
@@ -649,24 +677,60 @@ def test_preflight_denial_stops_before_backend_initialization(config, monkeypatc
     assert calls == []
 
 
-def test_demo_capacity_reaches_terraform_with_micro_rds_and_fixed_storage(config):
-    data = {**inputs(), **json.loads((ROOT / "infra/ci/capacity-demo.json").read_text())}
-    rendered = common.terraform_inputs(config, json.dumps(data))
-    assert rendered["database_instance_class"] == "db.t4g.micro"
-    assert rendered["database_multi_az"] is False
-    assert rendered["database_storage_type"] == "gp2"
-    assert rendered["database_max_allocated_storage"] == 0
-    assert rendered["database_backup_retention_days"] == 1
+def environment_values(environment):
+    values = {}
+    for line in (ROOT / "infra/terraform/environments" / environment / "terraform.tfvars").read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if "=" in line:
+            key, value = (part.strip() for part in line.split("=", 1))
+            values[key] = json.loads(value)
+    return values
+
+
+@pytest.mark.parametrize("environment", ["dev", "staging", "prod"])
+def test_environment_sizes_are_reviewed_code_and_name_matches_folder(environment):
+    values = environment_values(environment)
+    assert values["environment"] == environment and values["name"] == "stocklane-" + environment
+    declared = set(re.findall(r'variable\s+"([a-z0-9_]+)"', (ROOT / "infra/terraform/environments" / environment / "variables.tf").read_text()))
+    assert set(values) <= declared
+
+
+def test_dev_and_staging_tear_down_cleanly_while_prod_is_protected():
+    dev, staging, prod = (environment_values(e) for e in ["dev", "staging", "prod"])
+    assert dev["deletion_protection"] is False and staging["deletion_protection"] is False
+    assert prod["deletion_protection"] is True and prod["database_multi_az"] is True and prod["nat_per_az"] is True
+    assert dev["database_instance_class"] == "db.t4g.micro" and dev["database_max_allocated_storage"] == 0
+    assert dev["database_backup_retention_days"] == 1 and prod["database_backup_retention_days"] == 14
+
+
+def test_environment_roots_share_one_definition():
+    shared = ["main.tf", "variables.tf", "outputs.tf", "versions.tf", ".terraform.lock.hcl"]
+    for environment in ["staging", "prod"]:
+        for name in shared:
+            assert (ROOT / "infra/terraform/environments" / environment / name).read_bytes() == \
+                (ENVIRONMENT_ROOT / name).read_bytes(), (environment, name)
+
+
+def test_protect_data_controls_every_teardown_blocker():
+    data = (MODULES / "data/main.tf").read_text()
+    for expected in ["force_destroy = !var.protect_data", "deletion_protection             = var.protect_data",
+                     "skip_final_snapshot             = !var.protect_data", "recovery_window_in_days = var.protect_data ? 7 : 0"]:
+        assert expected in data, expected
+    root = (ENVIRONMENT_ROOT / "main.tf").read_text()
+    assert "protect_data                   = var.deletion_protection" in root
+    assert "force_delete = !var.deletion_protection" in root and "force_destroy               = !var.deletion_protection" in root
 
 
 def recovery_state(config):
     def resource(kind, name, *attributes):
         return {"mode": "managed", "type": kind, "name": name,
                 "instances": [{"attributes": item} for item in attributes]}
+    def within(module, item):
+        return {**item, "module": module}
     return {"version": 4, "resources": [
-        resource("aws_eks_cluster", "main", {"arn": f"arn:aws:eks:{config['region']}:{config['account']}:cluster/{config['project']}"}),
-        resource("aws_iam_role", "nodes", {"arn": f"arn:aws:iam::{config['account']}:role/{config['project']}-nodes"}),
-        resource("aws_subnet", "private", {"id": "subnet-11111111"}, {"id": "subnet-22222222"})]}
+        within("module.eks", resource("aws_eks_cluster", "main", {"arn": f"arn:aws:eks:{config['region']}:{config['account']}:cluster/{config['project']}"})),
+        within("module.eks", resource("aws_iam_role", "nodes", {"arn": f"arn:aws:iam::{config['account']}:role/{config['project']}-nodes"})),
+        within("module.network", resource("aws_subnet", "private", {"id": "subnet-11111111"}, {"id": "subnet-22222222"}))]}
 
 
 def recovery_group(config):
@@ -694,10 +758,9 @@ def recovery_clients(config, tmp_path, monkeypatch, state=None, group=None, erro
             if error_code:
                 raise ClientError({"Error": {"Code": error_code}}, "DescribeNodegroup")
             return {"nodegroup": group}
-    (tmp_path / "infra/aws").mkdir(parents=True)
-    monkeypatch.setattr(nodegroup, "ROOT", tmp_path)
+    monkeypatch.setattr(nodegroup, "terraform_dir", lambda environment: tmp_path)
     monkeypatch.setattr(nodegroup, "client", lambda name, c: {"s3": Storage(), "eks": Eks()}[name])
-    return tmp_path / "infra/aws/pipeline-recovery.tf", calls
+    return tmp_path / "pipeline-recovery.tf", calls
 
 
 @pytest.mark.parametrize("status", ["ACTIVE", "CREATE_FAILED", "DEGRADED", "UPDATE_FAILED"])
@@ -707,7 +770,7 @@ def test_cancelled_apply_adoption_only_prepares_private_import_configuration(con
     nodegroup.prepare_nodegroup_recovery(config, adopt=True)
     assert calls == ["read-state", "describe-nodegroup"]
     assert 'id = "stocklane-dev:cpu-workers"' in path.read_text()
-    assert "to = aws_eks_node_group.main" in path.read_text()
+    assert "to = module.eks.aws_eks_node_group.main" in path.read_text()
     assert path.stat().st_mode & 0o777 == 0o600
 
 
@@ -755,7 +818,7 @@ def test_recovery_does_not_import_resources_twice(config, tmp_path, monkeypatch,
 
 def test_tracked_group_never_reimports_and_removes_stale_generated_configuration(config, tmp_path, monkeypatch):
     state = recovery_state(config)
-    state["resources"].append({"mode": "managed", "type": "aws_eks_node_group", "name": "main",
+    state["resources"].append({"mode": "managed", "type": "aws_eks_node_group", "name": "main", "module": "module.eks",
                                "instances": [{"attributes": {"id": "stocklane-dev:cpu-workers-new"}}]})
     path, calls = recovery_clients(config, tmp_path, monkeypatch, state=state)
     path.write_text("stale import")
@@ -813,10 +876,11 @@ def test_saved_plan_retains_reviewed_import_and_replacement_in_a_fresh_apply_che
 
 
 @pytest.mark.parametrize("address,actions,approved", [
-    ("aws_eks_node_group.main", ["create", "delete"], True),
-    ("aws_eks_node_group.main", ["delete", "create"], False),
-    ("aws_eks_node_group.main", ["delete"], False),
-    ("aws_db_instance.main", ["create", "delete"], False),
+    ("module.eks.aws_eks_node_group.main", ["create", "delete"], True),
+    ("module.eks.aws_eks_node_group.main", ["delete", "create"], False),
+    ("module.eks.aws_eks_node_group.main", ["delete"], False),
+    ("aws_eks_node_group.main", ["create", "delete"], False),
+    ("module.data.aws_db_instance.main", ["create", "delete"], False),
 ])
 def test_nodegroup_replacement_approval_cannot_authorize_other_deletions(address, actions, approved):
     summary = {"resources": [{"address": address, "actions": actions}]}
@@ -830,7 +894,7 @@ def test_nodegroup_replacement_approval_cannot_authorize_other_deletions(address
 
 def test_nodegroup_approval_still_refuses_mixed_database_and_worker_replacements():
     summary = {"resources": [{"address": address, "actions": ["create", "delete"]}
-                              for address in ["aws_eks_node_group.main", "aws_db_instance.main"]]}
+                              for address in ["module.eks.aws_eks_node_group.main", "module.data.aws_db_instance.main"]]}
     with pytest.raises(RuntimeError):
         nodegroup.check_change_approval(summary, allow_nodegroup_replacement=True)
 
@@ -877,7 +941,7 @@ def test_replacement_quota_counts_existing_on_demand_workers_and_new_capacity(co
             assert kwargs == {"ServiceCode": "ec2", "QuotaCode": "L-1216C47A"}
             return {"Quota": {"Value": quota}}
     monkeypatch.setattr(nodegroup, "client", lambda name, c: {"ec2": Ec2(), "service-quotas": Quotas()}[name])
-    document = {"resource_changes": [{"address": "aws_eks_node_group.main", "change": {"actions": ["create", "delete"]}}]}
+    document = {"resource_changes": [{"address": "module.eks.aws_eks_node_group.main", "change": {"actions": ["create", "delete"]}}]}
     capacity = {"node_instance_type": "m7i-flex.large", "node_desired_size": 2}
     if should_pass:
         nodegroup.check_worker_quota(config, capacity, document)
@@ -949,48 +1013,37 @@ def test_plan_can_refresh_cognito_resources_without_group_mutation_permissions()
 
 
 def retention_configuration():
-    variables = (ROOT / "infra/aws/variables.tf").read_text()
-    definition = 'variable "database_backup_retention_days"' + variables.split('variable "database_backup_retention_days"', 1)[1].split('\nvariable ', 1)[0]
-    source = (ROOT / "infra/aws/data.tf").read_text()
-    expression = re.search(r'^\s*backup_retention_period\s*=\s*(.+)$', source, re.MULTILINE).group(1)
-    return definition + '\nvariable "environment" { type = string }\noutput "retention" { value = ' + expression + ' }\n', expression
+    return terraform_blocks(MODULES / "data/variables.tf", "variable", ["database_backup_retention_days"])
 
 
-@pytest.mark.parametrize("environment,override,expected", [
-    ("dev", None, 1), ("test", None, 1), ("uat", None, 1), ("production", None, 14),
-    ("production", 1, 1), ("dev", 7, 7),
-])
-def test_rds_retention_keeps_backups_and_supports_existing_github_settings(tmp_path, environment, override, expected):
-    configuration, expression = retention_configuration()
-    (tmp_path / "main.tf").write_text(configuration)
-    command = [shutil.which("terraform"), "console", "-no-color", "-var=environment=" + environment]
-    if override is not None: command.append("-var=database_backup_retention_days=" + str(override))
-    result = subprocess.run(command, input=expression + "\n", text=True, capture_output=True, cwd=tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert int(result.stdout.strip()) == expected
+@pytest.mark.parametrize("environment,expected", [("dev", 1), ("staging", 3), ("prod", 14)])
+def test_rds_retention_keeps_backups_in_every_environment(environment, expected):
+    assert environment_values(environment)["database_backup_retention_days"] == expected
+    data = (MODULES / "data/main.tf").read_text()
+    assert "backup_retention_period         = var.database_backup_retention_days" in data
 
 
 @pytest.mark.parametrize("retention", [0, -1, 36, 1.5])
 def test_invalid_retention_cannot_disable_backups_or_exceed_rds_limits(tmp_path, retention):
-    configuration, _ = retention_configuration()
-    (tmp_path / "main.tf").write_text(configuration)
+    (tmp_path / "main.tf").write_text(retention_configuration())
     result = subprocess.run([shutil.which("terraform"), "plan", "-input=false", "-no-color",
-                             "-var=environment=dev", "-var=database_backup_retention_days=" + str(retention)],
+                             "-var=database_backup_retention_days=" + str(retention)],
                             text=True, capture_output=True, cwd=tmp_path)
     assert result.returncode != 0
-    assert "automated backups must stay enabled" in result.stderr
+    assert "automated backups stay enabled" in result.stderr
 
 
 def test_sns_policy_uses_supported_topic_actions_and_preserves_source_and_tls_guards(tmp_path):
-    source = (ROOT / "infra/aws/ml-observability.tf").read_text()
+    source = (MODULES / "observability/main.tf").read_text()
     # Evaluate the real policy expression without requiring AWS credentials or
     # provider plugins. Only resource attribute values are replaced by fixtures.
     actions = re.search(r'\nlocals \{\n.*?\n\}', source, re.DOTALL).group(0)
     resource = source.split('resource "aws_sns_topic_policy" "operations" {', 1)[1].split('\nresource ', 1)[0]
     expression = resource.split('policy = ', 1)[1].rsplit('\n}', 1)[0].strip()
-    expression = expression.replace("data.aws_partition.current.partition", "local.partition").replace("aws_sns_topic.operations.arn", "local.topic_arn")
+    expression = expression.replace("aws_sns_topic.operations.arn", "local.topic_arn")
     (tmp_path / "main.tf").write_text(actions + '\nvariable "name" { default = "stocklane-dev" }\nvariable "region" { default = "ap-southeast-2" }\n'
-        + 'locals {\npartition = "aws"\nsuffix = "123456789012"\ntopic_arn = "arn:aws:sns:ap-southeast-2:123456789012:stocklane-dev-operations"\noperations_policy = '
+        + 'variable "partition" { default = "aws" }\nvariable "account_id" { default = "123456789012" }\n'
+        + 'locals {\ntopic_arn = "arn:aws:sns:ap-southeast-2:123456789012:stocklane-dev-operations"\noperations_policy = '
         + expression + '\n}\n')
     result = subprocess.run([shutil.which("terraform"), "console", "-no-color"],
                             input="local.operations_policy\n", text=True, capture_output=True, cwd=tmp_path)

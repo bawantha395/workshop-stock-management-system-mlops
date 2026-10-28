@@ -11,9 +11,8 @@
       "Type": "String",
       "AllowedValues": [
         "dev",
-        "test",
-        "uat",
-        "production"
+        "staging",
+        "prod"
       ],
       "Default": "dev"
     },

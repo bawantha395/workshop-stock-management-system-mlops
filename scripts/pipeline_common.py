@@ -11,7 +11,15 @@ from botocore.exceptions import ClientError
 
 ROOT = Path(__file__).resolve().parents[1]
 REGION = "ap-southeast-2"
-ENVIRONMENTS = {"dev", "test", "uat", "production"}
+ENVIRONMENTS = {"dev", "staging", "prod"}
+TERRAFORM = ROOT / "infra" / "terraform"
+
+
+def terraform_dir(environment):
+    """Root module of one environment: infra/terraform/environments/<env>."""
+    if environment not in ENVIRONMENTS:
+        raise ValueError("Unknown environment: " + str(environment))
+    return TERRAFORM / "environments" / environment
 EKS_NODEGROUP_ROLE = "AWSServiceRoleForAmazonEKSNodegroup"
 
 
@@ -85,7 +93,7 @@ def terraform_inputs(c, raw):
     if not isinstance(data, dict):
         raise ValueError("TFVARS_JSON must be an object")
     declared = set()
-    for source in (ROOT / "infra/aws").glob("*.tf"):
+    for source in terraform_dir(c["environment"]).glob("*.tf"):
         declared.update(re.findall(r'variable\s+"([A-Za-z0-9_]+)"\s*\{', source.read_text()))
     unknown = set(data) - declared
     if unknown:

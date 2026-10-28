@@ -30,7 +30,7 @@ in `tests/`. Each service has its own dependency manifest.
 | `infra/ci/` | One-time GitHub trust, pipeline-owned S3 backend and capacity profiles. |
 | `deploy/codebuild/` | Private VPC platform bootstrap buildspec and tool checksums. |
 | `infra/bootstrap/` | Optional manual backend bootstrap; pipelines use `infra/ci/state.json`. |
-| `infra/aws/` | AWS root configuration, resource files, example variables and IAM policies. See [infra/README.md](../infra/README.md). |
+| `infra/terraform/` | Terraform modules and the dev, staging and prod environments. See [infra/README.md](../infra/README.md). |
 | `deploy/docker/` | Java, vision, web, operations and training Dockerfiles. |
 | `deploy/kubernetes/apps/` | Application bases and environment-specific Kustomize overlays. |
 | `deploy/kubernetes/platform/` | EKS controllers, secret-store integration, encrypted EBS StorageClass and Fluent Bit. |

@@ -5,8 +5,8 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'infra/aws/lambda/alarm_rca'
-TARGET = ROOT / 'infra/aws/lambda/alarm-rca.zip'
+SOURCE = ROOT / 'infra/terraform/modules/observability/lambda/alarm_rca'
+TARGET = ROOT / 'infra/terraform/modules/observability/lambda/alarm-rca.zip'
 
 
 def package():

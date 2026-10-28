@@ -1,38 +1,74 @@
-# AWS infrastructure
+# Infrastructure
 
-Use [the pipeline setup guide](../docs/PIPELINE_SETUP.md) for deployment. Create
-the pipeline trust once in CloudShell; GitHub Actions then owns backend
-creation and reviewed Terraform plan/apply operations in Sydney.
+Two layers. The **foundation** is created once per environment and is never
+destroyed; the **environment** is everything Terraform builds and can be
+destroyed and recreated in one pipeline run.
 
-| Path | Responsibility |
-| --- | --- |
-| `ci/identity.json` | One-time OIDC or restricted CI user trust, separate CI roles and workload boundary. |
-| `ci/state.json` | Pipeline-owned private, encrypted, versioned Terraform state bucket. |
-| `ci/capacity-*.json` | Explicit demo/production capacity selections used by the setup helper. |
-| `bootstrap/main.tf` | Optional manual state bootstrap; do not mix with the pipeline-owned backend. |
-| `aws/versions.tf` | Terraform/provider constraints and backend declaration. |
-| `aws/variables.tf` | Account, environment, capacity and security inputs. |
-| `aws/network.tf` | VPC, subnets, routing and network controls. |
-| `aws/compute.tf` | EKS, ECR, deployment access and Pod Identity. |
-| `aws/automation.tf` | Private CodeBuild platform bootstrap, source/output storage and delivery roles. |
-| `aws/github-oidc.tf` | Authentication-mode inputs, immutable GitHub claims and workload boundary input. |
-| `aws/data.tf` | Databases, cache, object storage, queues, encryption and secrets. |
-| `aws/web-auth.tf` | Frontend delivery, certificates and Cognito authentication. |
-| `aws/ml-observability.tf` | ML platform resources, monitoring and budget configuration. |
-| `aws/outputs.tf` | Values consumed by reviewed release configuration and bootstrap tooling. |
-| `aws/policies/` | Controller IAM policy and upstream provenance. |
-| `aws/*.example` | Backend and Terraform-variable templates. |
+```
+infra/
+├── ci/                         FOUNDATION (CloudFormation, once per environment)
+│   ├── state.json              private, versioned Terraform state bucket
+│   └── identity.json           GitHub/CI roles + permissions boundary for every role Terraform creates
+│
+└── terraform/                  ENVIRONMENT (Terraform)
+    ├── modules/                reusable building blocks, one per AWS concern
+    │   ├── network/            VPC, public/private subnets, NAT, S3 endpoint
+    │   ├── data/               KMS, S3 buckets, SQS, PostgreSQL, Redis, secrets
+    │   ├── registry/           ECR repositories
+    │   ├── eks/                cluster, managed nodes, core add-ons
+    │   ├── workload-identity/  one IAM role per Kubernetes service account (Pod Identity)
+    │   ├── edge/               CloudFront, ACM certificates, Route 53 records
+    │   ├── auth/               Cognito user pool and clients
+    │   ├── ml/                 SageMaker roles + Model Registry, Bedrock model access
+    │   ├── observability/      logs, alarms, SNS alerts, budget, alarm root-cause Lambda
+    │   └── cicd/               GitHub deploy roles, automation bucket, private CodeBuild runner
+    │
+    └── environments/
+        ├── dev/                main.tf composes the modules; terraform.tfvars = small, disposable
+        ├── staging/            same main.tf; production-like but smaller, disposable
+        └── prod/               same main.tf; 3 AZs, NAT per AZ, Multi-AZ DB, deletion protection
+```
 
-`bootstrap/` and `aws/` are independently initialized Terraform roots. The main
-AWS stack is organized into files in one root; these are not reusable child
-modules. The `environment` input supports `dev`, `test`, `uat` and `production`.
-Separate deployments need separate backend state and reviewed account/network
-configuration. Do not reuse one state file for different environments.
+## How an environment is defined
 
-The pipeline helper generates the repository configuration and `TFVARS_JSON`
-secret. Plans and state stay in private S3. Actual `*.tfvars`, generated
-configuration, state, plans and credentials are ignored by Git.
+`environments/<env>/main.tf`, `variables.tf`, `outputs.tf` and `versions.tf` are
+identical in every environment (a test enforces this). Only two things differ:
 
-The legacy `.tfvars.example` files use a production capacity profile; the
-pipeline helper defaults to `ci/capacity-demo.json`. Selecting a development
-Kustomize overlay alone does not resize AWS resources or make the stack free.
+| What | Where | Example |
+| --- | --- | --- |
+| Size and protection | `environments/<env>/terraform.tfvars` (committed) | node type, DB class, `deletion_protection` |
+| Account-specific values | `TFVARS_JSON` GitHub secret, written to `pipeline.auto.tfvars.json` at run time | admin ARN, your IP, domains, alert email |
+| State | `state/<env>/terraform.tfstate` in that environment's state bucket | — |
+
+`deletion_protection = false` (dev, staging) makes teardown a single
+`terraform destroy`: no final DB snapshot, buckets and images emptied, secrets
+deleted immediately. `true` (prod) turns all of that protection back on.
+
+## Module dependencies
+
+```
+network ─┬─ data ─┬─ registry ── ml
+         │        ├─ edge ── auth
+         └─ eks ──┴─ workload-identity, observability, cicd
+```
+
+Modules only talk through inputs and outputs. For example, `network` publishes
+its private subnet IDs only after the NAT routes exist, so EKS nodes, RDS and
+CodeBuild never start without internet access.
+
+## Running it
+
+The pipeline runs Terraform (see [docs/PIPELINE_SETUP.md](../docs/PIPELINE_SETUP.md)).
+Locally, for checks only:
+
+```bash
+terraform fmt -check -recursive infra/terraform
+terraform -chdir=infra/terraform/environments/dev init -backend=false
+terraform -chdir=infra/terraform/environments/dev validate
+```
+
+A new environment needs its own foundation: run `scripts/bootstrap_pipeline.py`
+with `--environment staging --project-name stocklane-staging` (or `prod`).
+
+`bootstrap/` is an optional manual alternative for the state bucket only; the
+pipeline uses `ci/state.json`.
