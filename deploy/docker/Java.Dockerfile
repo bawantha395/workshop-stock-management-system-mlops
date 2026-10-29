@@ -2,7 +2,6 @@ FROM maven:3.9.11-amazoncorretto-21 AS build
 ARG SERVICE
 WORKDIR /build
 COPY pom.xml ./
-COPY packages ./packages
 COPY services/inventory ./services/inventory
 COPY services/workshop ./services/workshop
 RUN mvn -B -ntp -pl services/${SERVICE} -am package -DskipTests && cp services/${SERVICE}/target/${SERVICE}-0.1.0.jar /app.jar

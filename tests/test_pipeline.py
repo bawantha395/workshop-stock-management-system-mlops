@@ -1082,3 +1082,9 @@ def test_sns_policy_uses_supported_topic_actions_and_preserves_source_and_tls_gu
     assert cloudwatch["Action"] == "sns:Publish"
     assert cloudwatch["Condition"]["StringEquals"]["aws:SourceAccount"] == "123456789012"
     assert cloudwatch["Condition"]["ArnLike"]["aws:SourceArn"].endswith(":alarm:stocklane-dev-*")
+
+
+def test_release_installs_the_onnx_export_dependency_before_downloading_the_model():
+    steps = workflow("_release.yml")["jobs"]["release"]["steps"]
+    step = next(s for s in steps if "download_model.py" in s.get("run", ""))
+    assert "pip install onnx==" in step["run"]

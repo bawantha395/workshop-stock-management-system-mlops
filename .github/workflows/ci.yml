@@ -140,7 +140,7 @@ jobs:
       - run: python scripts/install_actionlint.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: actionlint -color=false
       - run: cfn-lint -i W2001 -t infra/ci/identity.json infra/ci/state.json
-      - run: pytest tests/test_pipeline.py tests/test_teardown.py -q
+      - run: pytest tests/test_pipeline.py tests/test_teardown.py tests/test_backend_structure.py -q
   security:
     runs-on: ubuntu-latest
     steps:

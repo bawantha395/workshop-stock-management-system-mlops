@@ -46,8 +46,7 @@ flowchart LR
 
 ```text
 apps/web/                 React frontend
-services/                 inventory, workshop (Java) · vision, forecast (Python)
-packages/platform-java/   shared Java security, errors, idempotency
+services/                 inventory, workshop (Spring Boot) · vision, forecast (FastAPI)
 mlops/                    SageMaker jobs, evaluation, promotion
 edge/                     optional fixed-camera capture agent
 infra/
@@ -110,6 +109,37 @@ DNS records), then runs a reviewed `terraform destroy`, then **checks that
 nothing billable is left**. Only the state bucket, CI roles and hosted zone stay.
 
 Setup and usage: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+
+## Spring Boot service structure
+
+There are two Spring Boot microservices, `services/inventory` and
+`services/workshop`. Each one is **self-contained** (its own `pom.xml`, security,
+exception handling, migrations, Docker image and database schema) and has the
+same layered layout:
+
+```text
+services/<service>/src/main
+├── java/com/stocklane/<service>/
+│   ├── <Service>Application     Spring Boot entry point
+│   ├── controller/              REST endpoints and role checks (@PreAuthorize)
+│   ├── service/                 business rules, transactions, calls to other services and AWS
+│   ├── repository/              all SQL (JdbcTemplate), one class per table group
+│   ├── dto/                     request bodies (Java records)
+│   ├── config/                  SecurityConfig: Cognito JWT, service tokens, CORS
+│   └── exception/               ConflictException (409), NotFoundException (404), GlobalExceptionHandler
+└── resources/                   application.yml, db/migration (Flyway SQL)
+```
+
+Requests go `controller → service → repository → PostgreSQL`. The two services
+call each other only over HTTP and an SQS-backed outbox (inventory events update
+workshop job allocations). Routing between services is done by the ALB ingress,
+so there is no separate API-gateway service.
+
+`service/Commands` (idempotent requests: the same `Idempotency-Key` returns the
+same result) and the `config` and `exception` classes are copied into both
+services so that each can be built and deployed on its own. A test
+(`tests/test_backend_structure.py`) keeps the copies identical and keeps SQL out
+of controllers and services.
 
 ## Design decisions worth explaining
 

@@ -47,7 +47,9 @@ jobs:
       - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: echo "$RUNNER_TEMP/stocklane-tools" >> "$GITHUB_PATH"
       - name: Download the checksum-pinned baseline model
-        run: python scripts/download_model.py
+        run: |
+          pip install onnx==1.23.2
+          python scripts/download_model.py
       - uses: ./.github/actions/aws-credentials
         with:
           role: github-release
