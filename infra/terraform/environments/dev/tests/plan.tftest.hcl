@@ -13,7 +13,19 @@ mock_provider "aws" {
       vpc_config = { cluster_security_group_id = "sg-12345678" }
     }
   }
-  mock_resource "aws_acm_certificate" { defaults = { arn = "arn:aws:acm:ap-southeast-2:123456789012:certificate/x" } }
+  # Real Terraform leaves the whole validation set unknown in a mocked plan, which
+  # breaks for_each on the DNS validation records; give it one known entry.
+  mock_resource "aws_acm_certificate" {
+    defaults = {
+      arn = "arn:aws:acm:ap-southeast-2:123456789012:certificate/x"
+      domain_validation_options = [{
+        domain_name           = "mock.example.com"
+        resource_record_name  = "_mock.example.com."
+        resource_record_type  = "CNAME"
+        resource_record_value = "_mock.acm-validations.aws."
+      }]
+    }
+  }
   mock_resource "aws_iam_openid_connect_provider" { defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" } }
   mock_resource "aws_s3_bucket" { defaults = { arn = "arn:aws:s3:::bucket" } }
   mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:ap-southeast-2:123456789012:key/x" } }
@@ -34,7 +46,17 @@ mock_provider "aws" {
 }
 mock_provider "aws" {
   alias = "us_east_1"
-  mock_resource "aws_acm_certificate" { defaults = { arn = "arn:aws:acm:us-east-1:123456789012:certificate/x" } }
+  mock_resource "aws_acm_certificate" {
+    defaults = {
+      arn = "arn:aws:acm:us-east-1:123456789012:certificate/x"
+      domain_validation_options = [{
+        domain_name           = "mock.example.com"
+        resource_record_name  = "_mock.example.com."
+        resource_record_type  = "CNAME"
+        resource_record_value = "_mock.acm-validations.aws."
+      }]
+    }
+  }
 }
 mock_provider "random" {
   mock_resource "random_password" { defaults = { result = "Abcdefghijklmnopqrstuvwxyz0123456789ABCD" } }
