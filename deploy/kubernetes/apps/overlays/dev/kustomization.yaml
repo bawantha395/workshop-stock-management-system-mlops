@@ -28,19 +28,19 @@ patches:
 images:
 - name: stocklane/inventory
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory
-  digest: sha256:d723780ae37f6c28cba5a8a39211b9a05860584254e4a55170b3e99b6d158879
+  digest: sha256:32e99f9876cb8f3ed87bfba738f40b989fbec4b0c025029c5ac0e7556a5fdc74
 - name: stocklane/workshop
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop
-  digest: sha256:963346db8d7961f4ef9bdbd51001703ad51a3f9418e81a60e831b7a25063bf1e
+  digest: sha256:a404bee697722162642a75010dc593e76793848eb5d214d3feb01bed9417caf2
 - name: stocklane/vision
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision
-  digest: sha256:4a71e7ff5e921217a43781cbf9746e5e36fdd1a00693cf09433e323868de6bc9
+  digest: sha256:8c887b4ea63362b7e4c7ad508b9e18d1f7f46ba1796bb99e7fe41cbb67f241a3
 - name: stocklane/forecast
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/forecast
-  digest: sha256:67f3ca09dd63a83540126fb9903fbfeebc3ce42a2aa9c846d74e7e3c0c04f405
+  digest: sha256:7b4aad63789e90f8c60ad9c098a9f3b479a22afeea1126b066c260f1180f6186
 - name: stocklane/operations
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
-  digest: sha256:49efd837aec186896507853f0273682de7c774c6c9bf98aa208b0a881ec8792e
+  digest: sha256:74db876dbc53e9c734b5776f1b60387686ae16a7609c83bff87445906d283879
 labels:
 - pairs:
     stocklane.io/environment: dev
