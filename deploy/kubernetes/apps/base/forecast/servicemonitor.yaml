@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: forecast
+  labels:
+    stocklane.io/monitoring: enabled
+spec:
+  selector:
+    matchLabels:
+      app: forecast
+  endpoints:
+  - port: http
+    path: /metrics
+    authorization:
+      type: Bearer
+      credentials:
+        name: forecast-secrets
+        key: INTERNAL_TOKEN

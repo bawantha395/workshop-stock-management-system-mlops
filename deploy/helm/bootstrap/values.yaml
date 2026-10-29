@@ -1,7 +1,0 @@
-# Written per environment by scripts/render_cloud.py (deploy/helm/values/<environment>.yaml).
-bootstrap:
-  image: stocklane/operations:unreleased
-  region: REPLACE_AWS_REGION
-  databaseHost: REPLACE_DATABASE_HOST
-  masterSecretArn: REPLACE_MASTER_SECRET_ARN
-  databaseSecrets: "{}"

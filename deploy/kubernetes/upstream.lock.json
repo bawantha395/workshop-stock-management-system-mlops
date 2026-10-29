@@ -1,0 +1,330 @@
+{
+  "components": {
+    "argocd": {
+      "version": "v3.5.6",
+      "sources": [
+        {
+          "component": "argocd",
+          "source": "https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.6/manifests/install.yaml",
+          "sha256": "846c644bc81ce5557dd9048757a9c7353378f25c5eb811c77d32a9e907823599",
+          "bytes": 1917766
+        }
+      ],
+      "files": {
+        "customresourcedefinition-applications.argoproj.io.yaml": "bce2cd2a430565c6fdc31314374a36f8b4e96e8d992cd4558242f5c8d2ec68c5",
+        "customresourcedefinition-applicationsets.argoproj.io.yaml": "30a696acb41e045660300b8bfea6ee6d9f7a87503a3d7a2fb4496cacff53b642",
+        "customresourcedefinition-appprojects.argoproj.io.yaml": "b946722882027ff9f96768b0777b6529a3aa6d4097e5f5d18a09ef16f7e35803",
+        "serviceaccount-argocd-application-controller.yaml": "49e5cdc7197d3e648a435d2b37fb306d1b1b0246a78171186862c18ea718e1ca",
+        "serviceaccount-argocd-applicationset-controller.yaml": "c9671bc671412f197951616f65add1efefa8d4603351c8eee4ab686a8d0e9d3b",
+        "serviceaccount-argocd-dex-server.yaml": "521945259598dc7d04c3c018b74da46843fdc80d4a14d9e5c399cf0ac5737bd5",
+        "serviceaccount-argocd-notifications-controller.yaml": "51f6ace08617e02511b7624064f223b513dccc6bf795600c9ef505459eed1b85",
+        "serviceaccount-argocd-redis.yaml": "5255fffec5b45d201ad593808dfe12e1f97d732a7b5ea89d54adbe7d404f96fc",
+        "serviceaccount-argocd-repo-server.yaml": "f3b217a179247b8f54bec7bfaa55abdd16726acd6a7ac94726857a170895d9fd",
+        "serviceaccount-argocd-server.yaml": "0d450ddf0aecb76d4f124d63b52f7ccc4bbd9d14ce8487c5877e0e2c4a80e480",
+        "role-argocd-application-controller.yaml": "8614e829e81f024d43d30420c5e0b878c98b2b102524ea8d74765ea531d19550",
+        "role-argocd-applicationset-controller.yaml": "4f7cc81e81fff30fc558dc2d8001914897351ed6e9eda06170b29342178d4084",
+        "role-argocd-dex-server.yaml": "a33e862bf64537ee0427a28c7db0a8a1ee20981fdb96cae8eaea80b9c23572d5",
+        "role-argocd-notifications-controller.yaml": "3d77a476a6e0a3bdb4053bd5c03211f4c909d46aa653f99a468b56dbd91548f9",
+        "role-argocd-redis.yaml": "36457c47186c14f636669a99bdc2572dbb64e50375e3b784099f6b7e272ca5dd",
+        "role-argocd-server.yaml": "0b4ee00c3306822b9704870aa545cfbb60c543f68542539e9d23c5c587c194b0",
+        "clusterrole-argocd-application-controller.yaml": "ae63075dbe50f0ed2053ba9254d433ce5159f3f0b53609ff9be9dcc4f33f1e79",
+        "clusterrole-argocd-applicationset-controller.yaml": "3b273825662e98634207cfca87ae09ca63d0bf29160d6bcbf111e7764ab45500",
+        "clusterrole-argocd-server.yaml": "30819c82e748bb49c6c61a9be35368ba420670f0d2795ef0f1c57502054adcfd",
+        "rolebinding-argocd-application-controller.yaml": "0a49a79212fa9aaacb0f5c55f3869be6b07f7bd9ad57dc71ce82d3871c42a02d",
+        "rolebinding-argocd-applicationset-controller.yaml": "5c72dc38b77368df986b58fa2868f4c5ff39e8ddd21befad077c1d27f745b38b",
+        "rolebinding-argocd-dex-server.yaml": "594d9857333e6b02b8d6bbcdf98bfa37a8a6a581a31cc09b2f3d8eb613f04b92",
+        "rolebinding-argocd-notifications-controller.yaml": "cff409619df17dfe2bcbcbfee520663371ac7be67894785aa2f378f279db7c04",
+        "rolebinding-argocd-redis.yaml": "766d46cc4580c6720723ce5aeaa3842363ece24bbd5463c2e0aadaab9f89aa34",
+        "rolebinding-argocd-server.yaml": "f2cebcdded57ae7695dd3bd660982ec0a6e69bfdbbfec253aab98fc162e2fcab",
+        "clusterrolebinding-argocd-application-controller.yaml": "f0861cea13fbd45ee85dec3de0778d5ff57164da1a404fd3c8d038e953347aa6",
+        "clusterrolebinding-argocd-applicationset-controller.yaml": "4eb9e409e1a47bf694f5fa9c19da74df18f682bcad339cfee24555db10f668e6",
+        "clusterrolebinding-argocd-server.yaml": "0d95e6d82ab30ae08a9836bfa73b507a714492d1b339450932eb843e228d05bf",
+        "configmap-argocd-cm.yaml": "757d9a24cc05941a4a16d4eb66285123a711c2ff54c88024573b5f852e9956c2",
+        "configmap-argocd-cmd-params-cm.yaml": "ba07f6c387adb82d3da8c59f5336bcd945a5379bbc2973d760bd4492d2939ced",
+        "configmap-argocd-gpg-keys-cm.yaml": "1c597b59d8e7164d47ac8a7b075862a500a2804321868c371a8951cff0a97f38",
+        "configmap-argocd-notifications-cm.yaml": "b3a95fb5e215654a60aae255be102a6d7c8ec78dd3f66e02f963e824e47211ab",
+        "configmap-argocd-rbac-cm.yaml": "58fe62757f0068cefba2fce9248684defc3c0a995ceb3521551862a3447e8c0a",
+        "configmap-argocd-ssh-known-hosts-cm.yaml": "0267f6e662ff14d15cda7e578e110dd9815a2e992cfc492837fbfffd8962e306",
+        "configmap-argocd-tls-certs-cm.yaml": "dc412ea6f8bce8457b03075a0ba5bbf3b68811a7eb896e7568f57d5153ab6deb",
+        "secret-argocd-notifications-secret.yaml": "be80c2fdad2500c1c27779654c59063fc441d3f072b50a63f695b4a279acaf4d",
+        "secret-argocd-secret.yaml": "a2201b25c5a18f419af5b984af093d73c288d13adeedd8ffa40d4af56fe66f71",
+        "service-argocd-applicationset-controller.yaml": "243e989704d6063179fd39ac274d5b65819b3a7bb38f0515fbddd9aa0fe48c6b",
+        "service-argocd-dex-server.yaml": "99df2ee7b306cee9a0d6107da012bee3995ea48c9999c89904934f2fbe2e089c",
+        "service-argocd-metrics.yaml": "65c7f4c906a56965a8b6eafb7906455e05d7ea9a99220137c42a1ae19722d101",
+        "service-argocd-notifications-controller-metrics.yaml": "f7d85860513d74f0805d4532972e2dba6748e864864daa7dd137960440e08769",
+        "service-argocd-redis.yaml": "95edcffc392562fde8ac96851576202d6633d122cf0f20665d77b3bab5dcb33a",
+        "service-argocd-repo-server.yaml": "bed126d9156fa77a8f5aad12276724a24f93bd83a3cfd2118472eec94b4cc93b",
+        "service-argocd-server.yaml": "3efb4eab3af2599d49a46e346a7009d2ea5d1ee4b6f787b9f5bd11d27c00dd3d",
+        "service-argocd-server-metrics.yaml": "c852bc65355d129239c4e43a9e336a34349ea9bda5ff05a312500e203f07edad",
+        "deployment-argocd-applicationset-controller.yaml": "6c92590fcd2ff49e8be0065768d74ece0f002871bbb9da69622f9d0cf42d8b28",
+        "deployment-argocd-dex-server.yaml": "947efa1df3157c2497cb03bf98f8aafb994ddb677a3bf74ec1fc26ebddf1e25f",
+        "deployment-argocd-notifications-controller.yaml": "5fa2fff9d73ea12fe8a1bd9cf763a747d5d3b20c134acee55bfd6a1d6e1addea",
+        "deployment-argocd-redis.yaml": "f18bd87a3f8f41b73df0b6ec37b752392364d3a6014a47fe95eb949bd3ed8ffd",
+        "deployment-argocd-repo-server.yaml": "374d023adc2e03363bc33ce73245fb716f56e644e9b0e107d7aca909d97326eb",
+        "deployment-argocd-server.yaml": "7e9dd17f59cf1004b1d0f6db624d559fdc0b76521c64fc3f34b2a89bb7b38b64",
+        "statefulset-argocd-application-controller.yaml": "3abd8ddafce3a06990a4f997e5318e17c1cd3e4325c44bdde90bd00f129b14f6",
+        "networkpolicy-argocd-application-controller-network-policy.yaml": "8b2de0fc882f7dcc66107c97b8eb13ad75968a9e073acddc0c110245a1fcf473",
+        "networkpolicy-argocd-applicationset-controller-network-policy.yaml": "1938eb77a263b16901a0dbde42bcb29406d1685e8d0b27d1a6dc65c786fe3a78",
+        "networkpolicy-argocd-dex-server-network-policy.yaml": "af7d181f9909c42a74456860eefe7eb80819a055706b1f051e1e8491fe2244dd",
+        "networkpolicy-argocd-notifications-controller-network-policy.yaml": "4624aec62b9806a05fd7c6758d6cbcdd9cf30f9b5f662558e19d3dc11d246515",
+        "networkpolicy-argocd-redis-network-policy.yaml": "6da95056ebf9f1a11ae766ead1cd366ae06f112dc309c61e968adcac4076e880",
+        "networkpolicy-argocd-repo-server-network-policy.yaml": "ab57d14e7833a67dca55d55b23ceaae1681359afdc6b30800118d96049db0564",
+        "networkpolicy-argocd-server-network-policy.yaml": "f374362c3093c849ef9d237b46824aa8ab9ba95872158ff04393314214f6a336"
+      }
+    },
+    "prometheus-operator": {
+      "version": "v0.94.2",
+      "sources": [
+        {
+          "component": "prometheus-operator",
+          "source": "https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.94.2/bundle.yaml",
+          "sha256": "045754c91469cccb27d7832168a5b5f0448188bcb3513f74a13c76c9079d654b",
+          "bytes": 4635967
+        }
+      ],
+      "files": {
+        "customresourcedefinition-alertmanagerconfigs.monitoring.coreos.com.yaml": "6cd7a75b51ff01ab7f626b5622fda538ebe72d005cc4e29a6b0a9a755f3270db",
+        "customresourcedefinition-alertmanagers.monitoring.coreos.com.yaml": "4e84fe0167126226c95015745a2112b52abe95dec204a9c33b1610b8e85e620a",
+        "customresourcedefinition-podmonitors.monitoring.coreos.com.yaml": "b9faf78001b9aeed5b10040f08ad19367600280bbb5726dac84dc5a531eb2a76",
+        "customresourcedefinition-probes.monitoring.coreos.com.yaml": "3202573226bf9c3956b8e801bb527750e2cb8a93357ca7ad27d9de0d1549614b",
+        "customresourcedefinition-prometheusagents.monitoring.coreos.com.yaml": "58c485d8852798fdfdf0897b6725e0b0ab9a08e0983908835cb0cb297e90354c",
+        "customresourcedefinition-prometheuses.monitoring.coreos.com.yaml": "ae694aa2239afa72ae173e9cddee4111a1076ff18662e3244f98fd93a73333c0",
+        "customresourcedefinition-prometheusrules.monitoring.coreos.com.yaml": "d006f129a7c2a9eba937ed5266fbcc2bc584770ab3b2a0311069b55ee843b4fe",
+        "customresourcedefinition-scrapeconfigs.monitoring.coreos.com.yaml": "be771553354b73ab680c610c1f6b72cc754e306eba83d99c19827816a9121d7b",
+        "customresourcedefinition-servicemonitors.monitoring.coreos.com.yaml": "b6ec4f867986728ff68f18e7a1c6e723f99b16fb6bd17f6105088beca8f28b50",
+        "customresourcedefinition-thanosrulers.monitoring.coreos.com.yaml": "4788d9f2a8ed9f0e9cb5424bf4a20529a8a2e1d0a2d9875cbef264e186305946",
+        "clusterrolebinding-prometheus-operator.yaml": "85cff9c348f708595cf017930e2282d29638d5ae2df1066a5c0564b987f68573",
+        "clusterrole-prometheus-operator.yaml": "4b5bbe1681c16003594d430f60c5962f5a588dbf7cbdb7d5ae9331286b5998e6",
+        "deployment-prometheus-operator.yaml": "2b3dd4d9cd66a6a2aebd9445d06fd5e26c55551c6e9c92f15bb1e7ca0527103e",
+        "serviceaccount-prometheus-operator.yaml": "ad16d6b9030a2acd61f1e9daa2f1b48d0232895b26be64b56d6b377dcb2aea78",
+        "service-prometheus-operator.yaml": "998a9cbb56adfb9565256fd2b458d8a55c8a5b7ed61364de870c85c838924f05"
+      }
+    },
+    "cert-manager": {
+      "version": "v1.21.3",
+      "sources": [
+        {
+          "component": "cert-manager",
+          "source": "https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml",
+          "sha256": "c04a51295adda2b1a775146751f973e787190778c7f35180861d9678876e5c74",
+          "bytes": 1034826
+        }
+      ],
+      "files": {
+        "namespace-cert-manager.yaml": "90e412d610f98a75e3d3e9d0c5278e9456d9f3d18bd537f7700d1e2ca4aaf7ce",
+        "customresourcedefinition-challenges.acme.cert-manager.io.yaml": "21910945c18b6d0ed535814ac388bb7a7d8e8fcfc3d3a695ea12dd18d48e7f19",
+        "customresourcedefinition-orders.acme.cert-manager.io.yaml": "ef6de54e5a7d7fab3b125103019b5dadd702f4f4984714b44bbab901f7d657f9",
+        "customresourcedefinition-certificaterequests.cert-manager.io.yaml": "39db6bf98b00fcb9355d8b78ac103d20e02df73c6fc898b29f50f0863866d330",
+        "customresourcedefinition-certificates.cert-manager.io.yaml": "163c7c65a10995e50aa1f2240423fb968503f1eb1030614041766a60d21f12f7",
+        "customresourcedefinition-clusterissuers.cert-manager.io.yaml": "0614f9d3c146ea0c19c8ee69c093418aee6de1c9189110d453d3db6e5241d5e4",
+        "customresourcedefinition-issuers.cert-manager.io.yaml": "296bc6bba2467f09d1159469310bffe856d6946c33b7fdb3d45c056d87545469",
+        "serviceaccount-cert-manager-cainjector.yaml": "549213f6cc776db8b27078cd43773eeb3825877ca6f84da60b4d312fdbd27a23",
+        "serviceaccount-cert-manager.yaml": "db485a94931a1dadb0ee01d4869dffac8f55729cbfbd83d76563168fff6affe8",
+        "serviceaccount-cert-manager-webhook.yaml": "e8e1a2bc224917254658ffe004088984b18127e321b2a71d62329813e68a1a96",
+        "clusterrole-cert-manager-cainjector.yaml": "222dfe5e8baac9a0b0258b9ec9a228cb193c075c48a87f9bd6077fbf7c5eddb1",
+        "clusterrole-cert-manager-controller-issuers.yaml": "42547f83e60c9ef92da2f84786e1da4f70d5e22b05c2c431a2895b94ac3e3207",
+        "clusterrole-cert-manager-controller-clusterissuers.yaml": "83b3df6a6a6b2a627d03002aa964416256a1398aa902ecacf841aed01b29c222",
+        "clusterrole-cert-manager-controller-certificates.yaml": "86487f26267977a799d3fb2a51e1cfc543d02b1a22fa383de11527c5917fa78e",
+        "clusterrole-cert-manager-controller-orders.yaml": "9504874826d20408788a462fddd96c4776766325cabc04ebb9cb437ddc25f26f",
+        "clusterrole-cert-manager-controller-challenges.yaml": "12843f8382fc4e737d515eead52694a88d73024403ce4fe0a386a4dd4ac92bef",
+        "clusterrole-cert-manager-controller-ingress-shim.yaml": "8c2ba5a9f88c89517c604e9438172d71f4e984925d5afb87fed5c9a1bab6695d",
+        "clusterrole-cert-manager-cluster-view.yaml": "7b425d599abd2133bac51e69283ccb15177f18a4132bde836875e4580a9e996c",
+        "clusterrole-cert-manager-view.yaml": "acdd1a893e3d240d7b8910f12ed04e5fad051e61c9260c2c5b13f4dddfa23197",
+        "clusterrole-cert-manager-edit.yaml": "a59850946b71785beb2e81a91e8dcb8d1c592526b4992ff2dbfca949ab540fbc",
+        "clusterrole-cert-manager-controller-approve-cert-manager-io.yaml": "ce9438001807d8e695ac09433561ed59d3fdb799088bd57fa030747b5ad75f97",
+        "clusterrole-cert-manager-controller-certificatesigningrequests.yaml": "3d0c671748fe35cf3b9c1f8fad37962df125b2c2aa666e56e8ba9376c1568d1d",
+        "clusterrole-cert-manager-webhook-subjectaccessreviews.yaml": "a471a2141d776ea2fe8af57f403911b9fb373cf0ed89d749275ea782b7505907",
+        "clusterrolebinding-cert-manager-cainjector.yaml": "c66e28588bd08828029496f1802fef7490d1a98fb968132956c6d6bced97fa63",
+        "clusterrolebinding-cert-manager-controller-issuers.yaml": "3d3dda9eecf37b84b6b3beb451fb533f0f3dfcd76aa4a0b6d3dd0ab767874584",
+        "clusterrolebinding-cert-manager-controller-clusterissuers.yaml": "f100d114c22a49b3cbf9736fa0259ea0e84f71e0cb9bf3a5abb103c88a2c47db",
+        "clusterrolebinding-cert-manager-controller-certificates.yaml": "c5f8218efd8fc712d267033ade2516e4525adc35aae6d06ed3c8c3015c27fc74",
+        "clusterrolebinding-cert-manager-controller-orders.yaml": "4df2700bf49bddaf0425995ac37e4b0b207958ad3a622a01861902e5797f501d",
+        "clusterrolebinding-cert-manager-controller-challenges.yaml": "947dd257614d34b6ee4a6630862f0627b86410db0674a9d0a416084c9666692e",
+        "clusterrolebinding-cert-manager-controller-ingress-shim.yaml": "639df56f643d4ac4df608ed4d8698b9a5db304693bc8e92647790fc76647b1c4",
+        "clusterrolebinding-cert-manager-controller-approve-cert-manager-io.yaml": "598b8d84294774740847be9ad8e3cb95be0a3d3cbc033c6250d95a51feaebc17",
+        "clusterrolebinding-cert-manager-controller-certificatesigningrequests.yaml": "646676167bbaba39e6e169ec367ee6b83d45eb0f6ae4af6bf1a111d69f544812",
+        "clusterrolebinding-cert-manager-webhook-subjectaccessreviews.yaml": "dc197193ed9e68f4d6175fc93835a2c21bd2ad8e8a42dfa6dac1c355865dc14e",
+        "role-cert-manager-cainjector-leaderelection.yaml": "24b8b96b0de0b7d70aa46d59058de841d2af1decc272623ace558206b409a9d7",
+        "role-cert-manager-leaderelection.yaml": "be31eb98150978310c199fe964c771244a12cb6892785abd9ccb787efb4db573",
+        "role-cert-manager-webhook-dynamic-serving.yaml": "c0dec3b37d11247510a5b41bb3998ef1d85cf0973d9fa8d902274dc8eedefc21",
+        "rolebinding-cert-manager-cainjector-leaderelection.yaml": "a5a92fd760d9907a9882d56b694f3e1c3486d9b1c353311b42154e3a3987e0a2",
+        "rolebinding-cert-manager-leaderelection.yaml": "a6c3aa173889757201a1f193973f54060375df6d8b29e894e4470ec94499c897",
+        "rolebinding-cert-manager-webhook-dynamic-serving.yaml": "6d800a216aa6987aaa626f26045b7ac428c9e02974a3c72911504ce189331ba1",
+        "service-cert-manager-cainjector.yaml": "d0ebab3fac41e64832e89072218b184f237e10e6d89c1a6fa598a54fc3a5a53c",
+        "service-cert-manager.yaml": "b635710c5069a0ffd1b1b97441b2bf78348312b60de2a802208d13ed09ae158c",
+        "service-cert-manager-webhook.yaml": "cc74d4755aa1db2ab3db84cecdbf5870f4774dc6502c5d6b1047b8c9b95da1c3",
+        "deployment-cert-manager-cainjector.yaml": "3e818beace87ab78cc631fb74c63e7911b38ce5cc9f1549805dc96228033f5d6",
+        "deployment-cert-manager.yaml": "b6d423eb9b6b1f5ede80883b864ebdc16ec75e74b02956195415b89f80d5470f",
+        "deployment-cert-manager-webhook.yaml": "9595abd2627f9a80ccb98762801e73aef923899ce8b7aacd5b732cd37c2c4a22",
+        "mutatingwebhookconfiguration-cert-manager-webhook.yaml": "6de2ece1fc5eca9f54b986c47e2ec777d86992340c373f4872073cfd50d9ac5b",
+        "validatingwebhookconfiguration-cert-manager-webhook.yaml": "1657e61b4a08004d2f485222008714b65f13d01d3ee88445fc7a2748a4363119"
+      }
+    },
+    "aws-load-balancer-controller": {
+      "version": "v3.6.2",
+      "sources": [
+        {
+          "component": "aws-load-balancer-controller",
+          "source": "https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v3.6.2/v3_6_2_full.yaml",
+          "sha256": "60b6eabdeaecc65bf2e4874c975118e2ace739e0be890bbb701dea9798fac98f",
+          "bytes": 85098
+        },
+        {
+          "component": "alb-ingressclass",
+          "source": "https://github.com/kubernetes-sigs/aws-load-balancer-controller/releases/download/v3.6.2/v3_6_2_ingclass.yaml",
+          "sha256": "90b9750cbab4c65372180c1d5efa46024c1a2f6f0d857eaf6755e512a0078384",
+          "bytes": 418
+        }
+      ],
+      "files": {
+        "customresourcedefinition-albtargetcontrolconfigs.elbv2.k8s.aws.yaml": "7d174307eb24623d8aa4d86de1ef7f4a22ddd81f4b2986f578b263c8fdcf8fb1",
+        "customresourcedefinition-globalaccelerators.aga.k8s.aws.yaml": "c7b994c7ca47ccbb358c7c78e4c91e2a1e405f3f7a4cd2d78d4af5d030501943",
+        "customresourcedefinition-ingressclassparams.elbv2.k8s.aws.yaml": "1661b4ef24bc30dfbf7b8de9648b5e15182eb7f2c75fd34942b77347219e7d98",
+        "customresourcedefinition-targetgroupbindings.elbv2.k8s.aws.yaml": "84e64171cc875938c25b54f16ad2c83cdec0010298be9898fd612a48af690d76",
+        "serviceaccount-aws-load-balancer-controller.yaml": "b6acf269378d1ac83030ab089f353005bc9828d9da0d0f69c3bd06f8a0bc4439",
+        "role-aws-load-balancer-controller-leader-election-role.yaml": "cbb8e92c7af2c124d87992a5068ac0fde8fbbf120c922de45f46d4c6ef6f01d5",
+        "clusterrole-aws-load-balancer-controller-role.yaml": "0902a7a6716230ec36260d4539a653224fbd7cbd734607dc86a342dfdc1db9c3",
+        "rolebinding-aws-load-balancer-controller-leader-election-rolebinding.yaml": "b7221f2772966a02df7e2fdb20c26483936c853c17cb79cf6717dbe31bcbc2a3",
+        "clusterrolebinding-aws-load-balancer-controller-rolebinding.yaml": "fc8bdfe1e167000d9670f55bbb3691adb1ff255c4553844401a41ebed44540be",
+        "service-aws-load-balancer-webhook-service.yaml": "fc430bca85079f38030c5f13156939367949626eed71092e601d1022925b85cf",
+        "deployment-aws-load-balancer-controller.yaml": "740b397498bf8ee8e7d41b2790e57ed8465d992c874424e7a5cc0f792a35ce36",
+        "certificate-aws-load-balancer-serving-cert.yaml": "78990820aa3790b3b6aa3f807e679b84afed5ac733c71e2145ab8119708e497a",
+        "issuer-aws-load-balancer-selfsigned-issuer.yaml": "6661301bb14341ab38e5b09f0b13fb077ebe86b95c80a4ba2d43b14b7364b732",
+        "mutatingwebhookconfiguration-aws-load-balancer-webhook.yaml": "c3f1c21b8003cde4cbe2e486933f644fea238ae8d33e1963a582f8089e24d45d",
+        "validatingwebhookconfiguration-aws-load-balancer-webhook.yaml": "a298b8f29129e1bfa2d32064b21af90098619369c8432b9117a169b2be031cca",
+        "ingressclassparams-alb.yaml": "c5c4544353c6d205ed3409561af7b477d53200e05576f39780aea6af2bb96e0d",
+        "ingressclass-alb.yaml": "4eacba7ffd1c8ea247f0b955dd230865b9c3736c0a53b41cb956a39673d86112"
+      }
+    },
+    "external-secrets": {
+      "version": "2.14.0",
+      "sources": [
+        {
+          "component": "external-secrets",
+          "source": "https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.14.0/external-secrets-2.14.0.tgz",
+          "chart_sha256": "0a6d9e91b1ff50adfdbf24b50b582babfa7c5b7df42b21974ca4b3fb88ee5e34",
+          "sha256": "0748c7e6ad4afc277fa9f135a0a8765eaead960f205c60b53839237bac8b10e0",
+          "version": "2.14.0",
+          "export": "helm template external-secrets (upstream chart only, exported once; deployment uses Kustomize)"
+        }
+      ],
+      "files": {
+        "serviceaccount-external-secrets-cert-controller.yaml": "8a345195a88342613eab31c9af70e61bee6eb9ccabc2c7c872fa9168ba8ad504",
+        "serviceaccount-external-secrets.yaml": "a4681d7a84ae4ac7c9a274c6efe0e0b355ea03e034ef1a7127e1449c601c8a69",
+        "serviceaccount-external-secrets-webhook.yaml": "1b2a39ca73a470015a3185682fc345e3cc54e47f22620a90e917bdaa02bfab07",
+        "secret-external-secrets-webhook.yaml": "ce17b39ab40d06f318b0c4a366740a09fd85a1844b046ce0f26966182605be18",
+        "customresourcedefinition-acraccesstokens.generators.external-secrets.io.yaml": "68497e9e8b9c772fc89808b93f25bab6f32a0d38aafde9ba158001c48156c4ae",
+        "customresourcedefinition-beyondtrustworkloadcredentialsdynamicsecrets.generators.external-secrets.io.yaml": "a1e076039d87ed42b6a1415ff3178ed4c08aa448fe75bee49a335a2ad004ddeb",
+        "customresourcedefinition-cloudsmithaccesstokens.generators.external-secrets.io.yaml": "81be1c6b41ca4a666404d9071e6b2c4da77d0ccdbef0da394c6ad0862fd43ddf",
+        "customresourcedefinition-clusterexternalsecrets.external-secrets.io.yaml": "3295f3b8885b56b23795eee5bae1daf761e1bbb66105832f591e653d24348e39",
+        "customresourcedefinition-clustergenerators.generators.external-secrets.io.yaml": "18c73dc3fcb126b8d1df05fabb512030bd2d321258ce6bf10cf93f9c8440f340",
+        "customresourcedefinition-clusterpushsecrets.external-secrets.io.yaml": "9398cbce0f48852266817a204cb89e52bbc6574e2fcf48bcbf1b93e096b2dd83",
+        "customresourcedefinition-clustersecretstores.external-secrets.io.yaml": "d3c1f2b0c658678764978596631653fbc355d95d76f7136eeac8d7bffac3aec0",
+        "customresourcedefinition-ecrauthorizationtokens.generators.external-secrets.io.yaml": "35be12d77e13cdcbaeb5249b74b70c9c9a11ec0a5b7a4fc2aa2fe54b5ab6135f",
+        "customresourcedefinition-externalsecrets.external-secrets.io.yaml": "059ef536b151957d58610510950e550ba9ff73cb9c0ba6c28b98abf607e416a5",
+        "customresourcedefinition-fakes.generators.external-secrets.io.yaml": "3fb34c8497c14053399f6d4eacee06569ae59fe5d27b8c62e5ae4f30ae4e0c95",
+        "customresourcedefinition-gcraccesstokens.generators.external-secrets.io.yaml": "411f32ebfc4dab5fec72cfdcb69fafd8feda8a2ca858c26e676f11f963f1b9b2",
+        "customresourcedefinition-generatorstates.generators.external-secrets.io.yaml": "10f492b8a0beef8b144534a2bd9d4ccf46d10c2224d1aa27f44c93045256d6ba",
+        "customresourcedefinition-githubaccesstokens.generators.external-secrets.io.yaml": "17a180ed4debff9ce4d4e98c2a7c07f5e3e90e35d22346661b86b45d3bbf182a",
+        "customresourcedefinition-gitlabdeploytokens.generators.external-secrets.io.yaml": "61bd0f253620ea0956f3e1547808054ce61de7ec59e79f187e1bd6860c23b05e",
+        "customresourcedefinition-grafanas.generators.external-secrets.io.yaml": "c35c3451ac95d5ee3961381f496868a916caf8b9fd1a2db3ae8f0caece6606c6",
+        "customresourcedefinition-mfas.generators.external-secrets.io.yaml": "545b611279072e5a400f28edf34be57900e951f4c4821aa4f490670e9d759da2",
+        "customresourcedefinition-passwords.generators.external-secrets.io.yaml": "fa9595ae9286257839b4057fad1b78147112adf92c067878250bb986abbd2ea9",
+        "customresourcedefinition-pushsecrets.external-secrets.io.yaml": "3e86982bb03462f683167dd19992f8803d0153b3ee4667f56f85b4b92a30ae66",
+        "customresourcedefinition-quayaccesstokens.generators.external-secrets.io.yaml": "53af64d39e3a968f877c813a748d6cd97a0ade24fd577555b046defe8c218af9",
+        "customresourcedefinition-secretstores.external-secrets.io.yaml": "b03d3db8460a6b43ebea822452d28bc0de716e19fb5708083efa97d72c3aff29",
+        "customresourcedefinition-sshkeys.generators.external-secrets.io.yaml": "05d5b3bf621d9e86420fb05a9e68d0adedafc5d06584ebf1f8bce23e31901b74",
+        "customresourcedefinition-stssessiontokens.generators.external-secrets.io.yaml": "64b68265d72fd2181b9840f4c8a78a8b09a9c61fba4882a07c463c47e3031478",
+        "customresourcedefinition-uuids.generators.external-secrets.io.yaml": "58d45e9ee4c48b65d7f58a2cbf867eb93c197b7d42ab797f7b7810374fc374c6",
+        "customresourcedefinition-vaultdynamicsecrets.generators.external-secrets.io.yaml": "b7889057a7f2205ac2ea501ca26a905cbd78c3489a31fc7805a7b7c913fe568a",
+        "customresourcedefinition-webhooks.generators.external-secrets.io.yaml": "e8aa051f7b484aaad9c648c40eb73893e27d9bc6a71e47195666ab3853f2ad7c",
+        "clusterrole-external-secrets-cert-controller.yaml": "00058cc215ee7b8ca916c562f35b22a7b319a329fd4633b37856eb30253d7ea6",
+        "clusterrole-external-secrets-controller.yaml": "e0a447ca4bd07c9cb1ee978e166e0659ecddf6b9f2890d1b1ed9244b36605914",
+        "clusterrole-external-secrets-view.yaml": "d5d17c41675f1f612028656da7140d2ee2136c93d8785d69af16894394a4d8c3",
+        "clusterrole-external-secrets-edit.yaml": "312d3b61df1552ccc24210f65827b0875f6b8168fedb485b3d3ec5a4208a19d5",
+        "clusterrole-external-secrets-servicebindings.yaml": "bee3d0222ced51c44465d6d7a948ff32d9cccfa0a8b0b12ce3e18210a506694d",
+        "clusterrolebinding-external-secrets-cert-controller.yaml": "4747e55388a7f30dbbe68cef56529d1c540e97741204741e93b60ae1fd5f502c",
+        "clusterrolebinding-external-secrets-controller.yaml": "d5ec7580da25c932e363a2e319b340bb6256d1e557e6aca6bdf37a03df3341dd",
+        "role-external-secrets-leaderelection.yaml": "68e3bcfe881a21f5eaa6cfd031b9688069e63d80205f8449a3ef4d877a7e9618",
+        "rolebinding-external-secrets-leaderelection.yaml": "02f653ec07e7d9bbcd63e9236aff654ce4c04854b32d8d1ec31b6992c242c969",
+        "service-external-secrets-webhook.yaml": "6d6fba204a939974eb03c9564f9d9bebe8020050aa0730607bba7bc77f7c6f60",
+        "deployment-external-secrets-cert-controller.yaml": "e84f983f239ebe2ee1362378b84aa9386a91935058b2b110798e2fc895ad129a",
+        "deployment-external-secrets.yaml": "204d5bb61c07942a7cd45bfbd0fb4046199cb505e645f604ace936cb5542bbcf",
+        "deployment-external-secrets-webhook.yaml": "f82ea03f7d895293aa83448b004434c16c3c67f9e4f592b1c44afaf2daddfec7",
+        "validatingwebhookconfiguration-secretstore-validate.yaml": "ed325543ded59102698810c69b7d1cd35480ec1514f201575ed8aae7c54afa02",
+        "validatingwebhookconfiguration-externalsecret-validate.yaml": "b500a95d4739c212584a3842b5e6e4c574969d2615e82c8adddc94ab145691a1"
+      }
+    },
+    "metrics-server": {
+      "version": "v0.9.0",
+      "sources": [
+        {
+          "component": "metrics-server",
+          "source": "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/high-availability.yaml",
+          "sha256": "1e0105fc58cce1875900bd4de2d12391aa78f2ba471c04cc105168a643020ee7",
+          "bytes": 4871
+        }
+      ],
+      "files": {
+        "serviceaccount-metrics-server.yaml": "bb4c8c8b89c1a9c8ad54264eb37ee334d19403751c5767cfe5948cf0599de4c6",
+        "clusterrole-system-aggregated-metrics-reader.yaml": "65f5a62d3695c1c99380c62a68915cfbf8a9bce7157c96a4a78e7290d1f140e9",
+        "clusterrole-system-metrics-server.yaml": "fd1cdef1194f89d07132b1d8f44299db3d26ead94b438188b026de91d42d50d9",
+        "rolebinding-metrics-server-auth-reader.yaml": "8e5801675e4b16bea091f289764c59a3a1b22ea7a0d1987c1216e34b0379e2ae",
+        "clusterrolebinding-metrics-server-system-auth-delegator.yaml": "e9fd526e8f1c272740fa1578dbc7eed1e5fff9d30ec122b10ad01979dd369304",
+        "clusterrolebinding-system-metrics-server.yaml": "c56c0445b32d601cebac80a79c70cc7e8c1185d5a1f40cd552eac4e9ea71aae9",
+        "service-metrics-server.yaml": "1aaa34464ca31d519f0eacf7042ac4765de7b65f833e37be6ac351ed51e0ff62",
+        "deployment-metrics-server.yaml": "3eb117d0ff7b555b7aa4bf7b0c50ed7885c6bad4b9198ced3e32a7e37eb39a17",
+        "poddisruptionbudget-metrics-server.yaml": "88ac21283d144493f472ff031f4fe7333c08ae3e5a52f25e1f29224c2b2d7d86",
+        "apiservice-v1beta1.metrics.k8s.io.yaml": "f3f28e4ee41b4bf710f2a1e651984a8dfde53f0d260942cac637df8b60d6182b"
+      }
+    },
+    "kube-state-metrics": {
+      "version": "v2.20.0",
+      "sources": [
+        {
+          "component": "kube-state-metrics-deployment",
+          "source": "https://raw.githubusercontent.com/kubernetes/kube-state-metrics/v2.20.0/examples/standard/deployment.yaml",
+          "sha256": "08d57682c0117bda50b8e894be1669001e49ce0ff3e60c11fccc6f56dfbc9f2e",
+          "bytes": 1585
+        },
+        {
+          "component": "kube-state-metrics-service",
+          "source": "https://raw.githubusercontent.com/kubernetes/kube-state-metrics/v2.20.0/examples/standard/service.yaml",
+          "sha256": "efa9813fb6a6a2d11b509cf4f2eb0ab044935b4153b425e697d4b31c7f6f42a4",
+          "bytes": 460
+        },
+        {
+          "component": "kube-state-metrics-serviceaccount",
+          "source": "https://raw.githubusercontent.com/kubernetes/kube-state-metrics/v2.20.0/examples/standard/service-account.yaml",
+          "sha256": "91f24588ac4f8944b9211fccefdce9ee70434676e8a4a55a14d69bc7f68ae0a5",
+          "bytes": 271
+        },
+        {
+          "component": "kube-state-metrics-clusterrole",
+          "source": "https://raw.githubusercontent.com/kubernetes/kube-state-metrics/v2.20.0/examples/standard/cluster-role.yaml",
+          "sha256": "4447544443859be7f70deca48e4cb75d30b0b7da090cb9e914c9c08f97f7e62c",
+          "bytes": 2495
+        },
+        {
+          "component": "kube-state-metrics-clusterrolebinding",
+          "source": "https://raw.githubusercontent.com/kubernetes/kube-state-metrics/v2.20.0/examples/standard/cluster-role-binding.yaml",
+          "sha256": "afd513a9dba5ffe1a4128e4f612788dcccc314fb58afaef7a627c506229570df",
+          "bytes": 425
+        }
+      ],
+      "files": {
+        "deployment-kube-state-metrics.yaml": "9b6be4bf77f1b7fae50c764814ca7d8211fe70b0781a7e9c1211a1a275a74fa0",
+        "service-kube-state-metrics.yaml": "d401896aec6713dc92c4f9037af226a5d0fe70b8703754e526ebe84860de38a4",
+        "serviceaccount-kube-state-metrics.yaml": "f941b9fe278252b807f9b2855a7a2df56dc75d4d8c30afada0d8e0b5daf3e295",
+        "clusterrole-kube-state-metrics.yaml": "8296e790516c2a96640903583279fffd87dce6a58ba3a294e96c44da27944395",
+        "clusterrolebinding-kube-state-metrics.yaml": "eb4e503c2bca432278072531255b25a96af2a038a5ff033083c4962f8c49343a"
+      }
+    }
+  },
+  "images": {
+    "prometheus": "quay.io/prometheus/prometheus:v3.15.1",
+    "alertmanager": "quay.io/prometheus/alertmanager:v0.34.1",
+    "grafana": "grafana/grafana:13.2.4",
+    "fluent-bit": "public.ecr.aws/aws-observability/aws-for-fluent-bit:3.5.4"
+  }
+}

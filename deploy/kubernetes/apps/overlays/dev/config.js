@@ -1,0 +1,1 @@
+window.STOCKLANE_CONFIG = {"authMode": "cognito", "authority": "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_flNc3H9kV", "clientId": "5e3g95pok2v5n410s6h8t8dd89", "scope": "openid email profile", "apiBase": "https://api.stocklane.bawantha-rathnayake.tech", "logoutUrl": "https://stocklane-dev-721274598579.auth.ap-southeast-2.amazoncognito.com/logout"};

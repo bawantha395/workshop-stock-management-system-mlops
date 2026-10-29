@@ -1,6 +1,0 @@
-apiVersion: v2
-name: bootstrap
-description: "One-off database initialisation job and its configuration (run by the operator before Argo CD takes over)"
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

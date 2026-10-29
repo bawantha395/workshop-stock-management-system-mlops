@@ -1,6 +1,0 @@
-apiVersion: v2
-name: argocd
-description: "Argo CD (pinned upstream manifests, namespace argocd) with the health check that lets the root application wait for its children"
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

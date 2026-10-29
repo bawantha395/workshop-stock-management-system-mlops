@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workshop
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        stocklane.io/config-sha256: 004b4ff7a33d93a5b87aa8a67d0c1aaf2033154afc2069150c8b468b8264668c

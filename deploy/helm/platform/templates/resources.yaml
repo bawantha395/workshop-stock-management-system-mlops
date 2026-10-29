@@ -1,5 +1,0 @@
-{{- /* Vendored upstream manifests, one resource per file, with the namespace set. See files/ and crds/. */ -}}
-{{- range $path, $_ := .Files.Glob "files/*.yaml" }}
----
-{{ $.Files.Get $path }}
-{{- end }}

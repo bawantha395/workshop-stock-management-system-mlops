@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Initial operator bootstrap using only kubectl + Helm (as a renderer), then Argo CD.
-Requires reviewed Terraform outputs and the release values committed under deploy/helm.
+"""Initial operator bootstrap using only kubectl + Kustomize, then Argo CD.
+Requires reviewed Terraform outputs and a merged, configured release overlay.
 """
 import argparse
 import json
@@ -9,7 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 import yaml
-from helm_utils import ROOT, HELM, build, environment
+from kustomize_utils import ROOT, KUBERNETES, build, environment
 
 # bcrypt hash of the password "admin" (a public value, not a secret). Used only when
 # the environment sets demo_admin_credentials (dev and staging), never for prod.
@@ -29,9 +29,10 @@ def bootstrap(a):
     def run(args, **kw): return subprocess.run(args, env=env, check=True, **kw)
     actual = json.loads(subprocess.check_output(['aws', 'sts', 'get-caller-identity'], env=env))['Account']
     if actual != c['account_id']: raise RuntimeError('AWS account does not match Terraform outputs')
+    overlay = KUBERNETES / 'apps/overlays' / target
     # Validate platform/controller manifests as well as application configuration
     # before contacting Kubernetes, including when invoked directly in CodeBuild.
-    run(['python3', str(ROOT / 'scripts/validate_helm.py'), '--environment', target, '--configured'])
+    run(['python3', str(ROOT / 'scripts/validate_kustomize.py'), '--environment', target, '--configured'])
     run(['aws', 'eks', 'update-kubeconfig', '--region', c['region'], '--name', c['cluster_name'], '--kubeconfig', env['KUBECONFIG']])
     def apply(docs):
         if docs: run(['kubectl', 'apply', '--server-side', '--field-manager=argocd-controller', '-f', '-'], input=yaml.safe_dump_all(docs).encode())
@@ -43,7 +44,7 @@ def bootstrap(a):
             if doc['kind'] in ['Deployment', 'StatefulSet']:
                 kind = doc['kind'].lower(); ns = doc['metadata'].get('namespace', 'default')
                 run(['kubectl', '-n', ns, 'rollout', 'status', kind + '/' + doc['metadata']['name'], '--timeout=300s'])
-    core = build('platform', target)
+    core = build(KUBERNETES / 'platform/overlays' / target)
     apply([d for d in core if d['kind'] == 'Namespace'])
     apply([d for d in core if d['kind'] == 'CustomResourceDefinition']); crds(core)
     deferred = {'Certificate', 'Issuer', 'ClusterIssuer', 'ClusterSecretStore'}
@@ -53,7 +54,7 @@ def bootstrap(a):
     rollout([d for d in core if d['kind'] == 'Deployment' and d['metadata'].get('namespace') != 'cert-manager'])
     apply([d for d in core if d['kind'] == 'ClusterSecretStore'])
     run(['kubectl', 'wait', '--for=condition=Ready', 'clustersecretstore/aws-secrets', '--timeout=180s'])
-    argo = build('argocd', target)
+    argo = build(KUBERNETES / 'argocd/base')
     apply([d for d in argo if d['kind'] in {'Namespace', 'CustomResourceDefinition'}]); crds(argo)
     apply([d for d in argo if d['kind'] not in {'Namespace', 'CustomResourceDefinition'}]); rollout(argo)
     if c.get('demo_admin_credentials') is True and target != 'prod':
@@ -61,10 +62,10 @@ def bootstrap(a):
         run(['kubectl', '-n', 'argocd', 'patch', 'secret', 'argocd-secret', '--type=merge', '-p', json.dumps(demo_admin_patch())])
         subprocess.run(['kubectl', '-n', 'argocd', 'delete', 'secret', 'argocd-initial-admin-secret', '--ignore-not-found'], env=env, check=False)
         print('Argo CD admin password set to the demo value (admin)')
-    operator = build('monitoring-operator', target)
+    operator = build(KUBERNETES / 'monitoring-operator/overlays' / target)
     apply([d for d in operator if d['kind'] in {'Namespace', 'CustomResourceDefinition'}]); crds(operator)
     apply([d for d in operator if d['kind'] not in {'Namespace', 'CustomResourceDefinition'}]); rollout(operator)
-    monitoring = build('monitoring', target); apply(monitoring)
+    monitoring = build(KUBERNETES / 'monitoring/overlays' / target); apply(monitoring)
     run(['kubectl', '-n', 'monitoring', 'wait', '--for=condition=Ready', 'externalsecret/grafana-admin', '--timeout=180s'])
     rollout([d for d in monitoring if d['kind'] == 'Deployment'])
     if c.get('demo_admin_credentials') is True and target != 'prod':
@@ -74,11 +75,11 @@ def bootstrap(a):
         print('Grafana admin password set to the demo value (admin)' if reset.returncode == 0 else 'Could not reset the Grafana admin password: ' + (reset.stderr or reset.stdout).strip()[-300:])
     # Admin namespaces exist only after Argo CD and monitoring bootstrap.
     apply([d for d in core if d['kind'] == 'Ingress'])
-    resources = build('stocklane', target)
+    resources = build(overlay)
     apply([d for d in resources if d['kind'] in {'Namespace', 'ServiceAccount', 'ConfigMap', 'ExternalSecret', 'NetworkPolicy'}])
     for name in ['inventory', 'workshop', 'vision', 'forecast']:
         run(['kubectl', '-n', namespace, 'wait', '--for=condition=Ready', 'externalsecret/' + name + '-secrets', '--timeout=180s'])
-    jobs = build('bootstrap', target)
+    jobs = build(KUBERNETES / 'bootstrap/overlays' / target)
     # A completed initialisation is retained; password rotation is a separate operator procedure.
     existing = subprocess.run(['kubectl', '-n', namespace, 'get', 'job/database-bootstrap', '-o', 'json'], env=env, capture_output=True)
     if existing.returncode:
@@ -86,7 +87,7 @@ def bootstrap(a):
         run(['kubectl', '-n', namespace, 'wait', '--for=condition=Complete', 'job/database-bootstrap', '--timeout=300s'])
     elif not json.loads(existing.stdout).get('status', {}).get('succeeded'):
         raise RuntimeError('A previous database-bootstrap job exists but did not complete. Inspect it before retrying.')
-    apply([yaml.safe_load((HELM / 'root' / (target + '.yaml')).read_text())])
+    apply([yaml.safe_load((KUBERNETES / 'argocd/root' / (target + '.yaml')).read_text())])
     print('Argo CD root application created for', target)
     print('Kubeconfig:', env['KUBECONFIG'])
     print('After the API ingress is ready, run scripts/configure_api_dns.py.')

@@ -1,6 +1,0 @@
-apiVersion: v2
-name: stocklane
-description: "The Stocklane application services (inventory, workshop, vision, forecast), their secrets, network rules and the model-index hook"
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

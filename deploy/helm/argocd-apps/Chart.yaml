@@ -1,6 +1,0 @@
-apiVersion: v2
-name: argocd-apps
-description: "The Argo CD projects and applications of one environment (app of apps); the root application points here"
-type: application
-version: 1.0.0
-appVersion: "1.0.0"

@@ -1,0 +1,10 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: stocklane-monitoring-operator
+  namespace: argocd
+spec:
+  source:
+    path: deploy/kubernetes/monitoring-operator/overlays/staging
+  destination:
+    namespace: monitoring

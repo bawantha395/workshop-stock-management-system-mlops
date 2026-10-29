@@ -4,11 +4,11 @@ import argparse,hashlib,io,json,os,re,subprocess,tarfile
 from pathlib import Path
 import boto3
 from render_cloud import render
-from helm_utils import HELM, environment
+from kustomize_utils import KUBERNETES, environment, build as kustomize_build
 ROOT=Path(__file__).resolve().parents[1]
 
-def reviewed_model(release_dir,bucket,s3=None):
-    path=release_dir/'release.json'
+def reviewed_model(overlay,bucket,s3=None):
+    path=overlay/'release.json'
     if not path.exists():return None
     value=json.loads(path.read_text())['model']
     if not value['uri'].startswith('s3://'+bucket+'/releases/') or not re.fullmatch(r'[a-f0-9]{64}',value['sha256']):
@@ -25,13 +25,13 @@ def reviewed_model(release_dir,bucket,s3=None):
 
 def build(a):
     c=json.loads(Path(a.config).read_text());c=c.get('deployment',{}).get('value',c)
-    target,namespace=environment(c);release_dir=HELM/'releases'/target
+    target,namespace=environment(c);overlay=KUBERNETES/'apps/overlays'/target
     region=c['region'];s3=boto3.client('s3',region_name=region)
     if boto3.client('sts').get_caller_identity()['Account']!=c['account_id']:raise RuntimeError('AWS account mismatch')
     commit=subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()
     expected=os.environ.get('STOCKLANE_SOURCE_SHA') or os.environ.get('GITHUB_SHA')
     if expected and expected!=commit:raise RuntimeError('Checked-out source does not match the reviewed commit')
-    retained=reviewed_model(release_dir,c['model_bucket'],s3) if not a.model_package else None
+    retained=reviewed_model(overlay,c['model_bucket'],s3) if not a.model_package else None
     if retained and retained.get('packageArn'):
         description=boto3.client('sagemaker',region_name=region).describe_model_package(ModelPackageName=retained['packageArn'])
         if description['ModelApprovalStatus']!='Approved':raise RuntimeError('The retained model package is no longer approved')
@@ -58,13 +58,13 @@ def build(a):
         data=buffer.getvalue();digest=hashlib.sha256(data).hexdigest();key='releases/baseline/'+digest+'.tar.gz'
         s3.put_object(Bucket=c['model_bucket'],Key=key,Body=data,IfNoneMatch='*')
         model={'uri':'s3://'+c['model_bucket']+'/'+key,'sha256':digest,'version':'baseline-human-review'}
-    render(c,images,model['uri'],model['sha256'],platform=True)
+    render(c,images,model['uri'],model['sha256'],overlay,platform=True)
     if model.get('packageArn'):
-        release_path=release_dir/'release.json';release=json.loads(release_path.read_text())
+        release_path=overlay/'release.json';release=json.loads(release_path.read_text())
         release['model']['packageArn']=model['packageArn'];release_path.write_text(json.dumps(release,indent=2)+'\n')
-    subprocess.run(['python','scripts/validate_helm.py','--environment',target,'--configured'],cwd=ROOT,check=True)
+    subprocess.run(['python','scripts/validate_kustomize.py','--environment',target,'--configured'],cwd=ROOT,check=True)
     # Stage the frontend privately. Publication follows the reviewed GitOps merge.
-    public=ROOT/'apps/web/public/config.js';public.write_text((release_dir/'config.js').read_text())
+    public=ROOT/'apps/web/public/config.js';public.write_text((overlay/'config.js').read_text())
     subprocess.run(['npm','ci'],cwd=ROOT/'apps/web',check=True);subprocess.run(['npm','run','build'],cwd=ROOT/'apps/web',check=True)
     prefix='releases/frontend/'+tag
     files=[]
@@ -74,9 +74,9 @@ def build(a):
         s3.put_object(Bucket=c['model_bucket'],Key=prefix+'/'+relative,Body=data)
         files.append({'path':relative,'sha256':checksum})
     frontend={'sourceBucket':c['model_bucket'],'sourcePrefix':prefix,'targetBucket':c['web_bucket'],'distributionId':c['cloudfront_distribution_id'],'region':c['region'],'accountId':c['account_id'],'release':tag,'files':files}
-    (release_dir/'frontend_release.json').write_text(json.dumps(frontend,indent=2)+'\n')
-    (work/'summary.md').write_text('Builds immutable service images and prepares the AWS GitOps values.\n\nModel bundle: '+model['version']+'\n\nValidation: CI checks must pass before merging. Argo CD builds compatible reference vectors before rollout.\n')
-    print('Release rendered: images pushed, GitOps values and frontend bundle prepared.')
+    (overlay/'frontend_release.json').write_text(json.dumps(frontend,indent=2)+'\n')
+    (work/'summary.md').write_text('Builds immutable service images and prepares the AWS GitOps overlay.\n\nModel bundle: '+model['version']+'\n\nValidation: CI checks must pass before merging. Argo CD builds compatible reference vectors before rollout.\n')
+    print('Release rendered: images pushed, GitOps overlay and frontend bundle prepared.')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--config',required=True);p.add_argument('--model-package',default='');build(p.parse_args())

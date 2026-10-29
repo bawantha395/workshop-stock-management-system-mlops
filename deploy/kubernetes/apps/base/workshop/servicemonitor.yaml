@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: workshop
+  labels:
+    stocklane.io/monitoring: enabled
+spec:
+  selector:
+    matchLabels:
+      app: workshop
+  endpoints:
+  - port: http
+    path: /actuator/prometheus
+    authorization:
+      type: Bearer
+      credentials:
+        name: workshop-secrets
+        key: INTERNAL_TOKEN

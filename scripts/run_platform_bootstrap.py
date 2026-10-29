@@ -11,7 +11,7 @@ from pathlib import Path
 import boto3
 
 from bootstrap_eks import bootstrap
-from helm_utils import HELM, environment, load_yaml
+from kustomize_utils import KUBERNETES, environment, load_yaml
 
 
 def teardown(c):
@@ -83,7 +83,7 @@ def main(args):
     target, namespace = environment(c)
     env = os.environ.copy()
     env["KUBECONFIG"] = str(Path("deploy/generated/kubeconfig").resolve())
-    root = load_yaml(HELM / "root" / (target + ".yaml"))
+    root = load_yaml(KUBERNETES / "argocd/root" / (target + ".yaml"))
     deadline = time.monotonic() + 20 * 60
     def kubectl(*command):
         return subprocess.run(["kubectl", *command], env=env, capture_output=True, text=True, timeout=90)

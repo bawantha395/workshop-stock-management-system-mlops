@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-load-balancer-controller
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: controller
+        args:
+        - --ingress-class=alb
+        - --enable-shield=false
+        - --enable-waf=false
+        - --enable-wafv2=false
+        - --cluster-name=stocklane-dev
+        - --aws-region=ap-southeast-2
+        - --aws-vpc-id=vpc-007c3ba9d9e71fd10

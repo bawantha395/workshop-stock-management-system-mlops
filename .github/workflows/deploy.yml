@@ -2,10 +2,10 @@
 #
 #   test ─► plan ─► apply ─► release ─► platform ─► frontend ─► summary
 #
-#   test      ci.yml: unit tests, Terraform validate + mocked plan, Helm chart checks
+#   test      ci.yml: unit tests, Terraform validate + mocked plan, Kustomize checks
 #   plan      Terraform plan saved privately (infra/terraform/environments/<env>)
 #   apply     apply exactly that plan (about 25 minutes: EKS, RDS, CloudFront)
-#   release   build images to ECR, render the Helm values, commit them (GitOps)
+#   release   build images to ECR, render the Kustomize overlay, commit it (GitOps)
 #   platform  private CodeBuild installs Argo CD + controllers; Argo CD syncs the
 #             release commit; HTTPS API probe
 #   frontend  publish the React app to S3 + CloudFront

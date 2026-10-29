@@ -47,7 +47,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r services/vision/requirements-dev.txt PyYAML==6.0.3 fakeredis==2.40.0 scikit-learn==1.9.1 openpyxl==3.1.5
-      - run: python scripts/install_helm.py --directory "$RUNNER_TEMP/stocklane-tools"
+      - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: python scripts/download_model.py
       - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_automation.py tests/test_sagemaker_jobs.py tests/test_ai_lifecycle.py tests/test_alarm_rca.py tests/test_bedrock_region.py -q
       - run: python -m compileall -q scripts mlops
@@ -74,20 +74,17 @@ jobs:
         env:
           TEST_DATABASE_DSN: postgresql://postgres:postgres@127.0.0.1:5432/stocklane
         run: pytest tests/test_database_bootstrap.py -q
-  helm:
+  kustomize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: {python-version: '3.12'}
       - run: pip install -r scripts/requirements.txt pytest==9.1.1
-      - run: python scripts/install_helm.py --directory "$RUNNER_TEMP/stocklane-tools"
-      - run: python scripts/install_helm.py --tool kubeconform --directory "$RUNNER_TEMP/stocklane-tools"
-      - run: helm version --short
-      - run: python scripts/validate_helm.py
-      - run: pytest tests/test_helm.py -q
-        env:
-          STOCKLANE_REQUIRE_HELM: "1"
+      - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
+      - run: python scripts/install_kustomize.py --tool kubeconform --directory "$RUNNER_TEMP/stocklane-tools"
+      - run: python scripts/validate_kustomize.py
+      - run: pytest tests/test_kustomize.py tests/test_monitoring.py -q
   infrastructure:
     runs-on: ubuntu-latest
     steps:

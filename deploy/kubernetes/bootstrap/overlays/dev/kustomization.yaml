@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: stocklane-dev
+resources:
+- ../../base
+- configmap.yaml
+images:
+- name: stocklane/operations
+  newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
+  digest: sha256:49efd837aec186896507853f0273682de7c774c6c9bf98aa208b0a881ec8792e

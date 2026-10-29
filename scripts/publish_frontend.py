@@ -5,7 +5,7 @@ import boto3
 parser=argparse.ArgumentParser()
 parser.add_argument('--environment',choices=['dev','staging','prod'],default='dev')
 a=parser.parse_args()
-c=json.loads((Path('deploy/helm/releases')/a.environment/'frontend_release.json').read_text())
+c=json.loads((Path('deploy/kubernetes/apps/overlays')/a.environment/'frontend_release.json').read_text())
 if boto3.client('sts').get_caller_identity()['Account']!=c['accountId']:raise RuntimeError('AWS account mismatch')
 s3=boto3.client('s3',region_name=c['region'])
 for file in c['files']:

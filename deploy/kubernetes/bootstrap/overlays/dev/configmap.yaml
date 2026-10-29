@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-bootstrap-config
+data:
+  AWS_REGION: ap-southeast-2
+  DATABASE_HOST: stocklane-dev.c3sqoikicx91.ap-southeast-2.rds.amazonaws.com
+  MASTER_SECRET_ARN: arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:rds!db-a893d8d9-b65b-4aef-a9c5-0caf2c6c49b0-01kXTJ
+  DATABASE_SECRETS: '{"inventory": "arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:stocklane-dev/inventory/database-4refm6",
+    "vision": "arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:stocklane-dev/vision/database-iaxEHZ", "workshop":
+    "arn:aws:secretsmanager:ap-southeast-2:721274598579:secret:stocklane-dev/workshop/database-Cs8yM9"}'

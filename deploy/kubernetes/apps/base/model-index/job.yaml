@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prepare-model-index
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: vision-index
+    spec:
+      serviceAccountName: vision
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: vision
+        image: stocklane/vision:unreleased
+        envFrom: &id001
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: vision-secrets
+        env:
+        - name: DATABASE_SCHEMA
+          value: vision
+        - name: PYTHONPATH
+          value: /app
+        - name: REDIS_URL
+          value: rediss://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/0?ssl_cert_reqs=required&ssl_check_hostname=true
+        resources:
+          requests:
+            cpu: 200m
+            memory: 384Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: model
+          mountPath: /models
+        command:
+        - python
+        - /app/tools/reindex.py
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: model
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: vision
+      initContainers:
+      - name: fetch-model
+        image: stocklane/vision:unreleased
+        command:
+        - python
+        - /app/tools/fetch_model.py
+        envFrom: *id001
+        volumeMounts:
+        - name: model
+          mountPath: /models
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      restartPolicy: Never
