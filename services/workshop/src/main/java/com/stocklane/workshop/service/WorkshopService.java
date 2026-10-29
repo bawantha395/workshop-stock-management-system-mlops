@@ -63,6 +63,8 @@ public class WorkshopService {
    // Ordinary stock movements are acknowledged and deduplicated, but are not
    // repair-job allocations. Inventory remains the stock ledger authority.
    if(Set.of("OPENING","RECEIPT","STOCK_OUT").contains(p.get("kind")))return;
+   // A part taken back from a person at the storeroom counter belongs to no repair job.
+   if("RETURN".equals(p.get("kind"))&&p.get("job_id")==null)return;
    if(!Set.of("ISSUE","RETURN").contains(p.get("kind")))throw new IllegalArgumentException("Unexpected stock movement kind");
    allocationRepository.insertFromEvent(p);
   });}catch(DuplicateKeyException duplicate){var seen=processedEventRepository.findById(id);if(seen.isEmpty()||!hash.equals(seen.get().get("payload_hash")))throw duplicate;}

@@ -177,5 +177,6 @@ Tests and tool setup: [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
 | [infra/README.md](infra/README.md) | Terraform modules and environments |
 | [docs/KUSTOMIZE.md](docs/KUSTOMIZE.md) | Kubernetes layout, overlays, Argo CD |
 | [docs/MLOPS.md](docs/MLOPS.md) | SageMaker, Model Registry, Bedrock |
+| [docs/REAL_DATA.md](docs/REAL_DATA.md) | Training on real public data (UCI sales, Kaggle car-part photos) |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Stock rules, alerts, recovery drills |
 | [docs/WAREHOUSE_UX.md](docs/WAREHOUSE_UX.md), [docs/STOCK_ANALYSIS.md](docs/STOCK_ANALYSIS.md), [docs/DEMAND_FORECASTING.md](docs/DEMAND_FORECASTING.md) | Application features |

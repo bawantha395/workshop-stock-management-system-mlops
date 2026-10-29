@@ -22,8 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class InventoryService {
  private final ProductRepository productRepository;private final MovementRepository movementRepository;private final JobGateRepository gateRepository;private final OutboxRepository outboxRepository;
- private final Commands commands;private final StringRedisTemplate redis;private final CaptureVerifier captures;
- public InventoryService(ProductRepository productRepository,MovementRepository movementRepository,JobGateRepository gateRepository,OutboxRepository outboxRepository,Commands c,StringRedisTemplate redis,CaptureVerifier captures){this.productRepository=productRepository;this.movementRepository=movementRepository;this.gateRepository=gateRepository;this.outboxRepository=outboxRepository;this.commands=c;this.redis=redis;this.captures=captures;}
+ private final Commands commands;private final StringRedisTemplate redis;private final CaptureVerifier captures;private final PeopleService people;
+ public InventoryService(ProductRepository productRepository,MovementRepository movementRepository,JobGateRepository gateRepository,OutboxRepository outboxRepository,Commands c,StringRedisTemplate redis,CaptureVerifier captures,PeopleService people){this.productRepository=productRepository;this.movementRepository=movementRepository;this.gateRepository=gateRepository;this.outboxRepository=outboxRepository;this.commands=c;this.redis=redis;this.captures=captures;this.people=people;}
 
  public List<Map<String,Object>> products(){return productRepository.findActive();}
  public List<Map<String,Object>> movements(){return movementRepository.findRecent();}
@@ -50,7 +50,10 @@ public class InventoryService {
   if(m.sourceCaptureId()!=null)try{UUID.fromString(m.sourceCaptureId());}catch(Exception e){throw new IllegalArgumentException("Invalid capture event ID");}
   captures.verify(m);
   if(m.note()!=null&&m.note().length()>500)throw new IllegalArgumentException("Note is too long");
-  boolean job=Set.of("ISSUE","RETURN").contains(m.kind());
+  boolean counterReturn="RETURN".equals(m.kind())&&m.jobId()==null;
+  boolean job="ISSUE".equals(m.kind())||"RETURN".equals(m.kind())&&!counterReturn;
+  if(m.receiverId()!=null&&!"STOCK_OUT".equals(m.kind())&&!counterReturn)throw new IllegalArgumentException("Only a counter handover or its return names a receiver");
+  String receiver="STOCK_OUT".equals(m.kind())&&m.receiverId()!=null?people.active(m.receiverId()).get("id").toString():null;
   if(job){var gate=gate(m.jobId(),true);if(!"OPEN".equals(gate.get("state")))throw new ConflictException("This job is frozen for invoicing; stock changes are blocked");}
   Map<String,Object> product=product(m.productId(),true);
   if(Boolean.TRUE.equals(product.get("archived")))throw new ConflictException("This product is archived");
@@ -58,8 +61,9 @@ public class InventoryService {
   if("UNIT".equals(product.get("unit"))&&m.quantity().stripTrailingZeros().scale()>0)throw new IllegalArgumentException("Sealed units require a whole number");
   BigDecimal price=(BigDecimal)product.get("selling_price");
   if("RETURN".equals(m.kind())){
-   var issues=movementRepository.findIssue(m.issueId(),m.jobId(),m.productId());
-   if(issues.isEmpty())throw new ConflictException("Select the original issue for this return");
+   var issues=counterReturn?movementRepository.findHandover(m.issueId(),m.productId()):movementRepository.findIssue(m.issueId(),m.jobId(),m.productId());
+   if(issues.isEmpty())throw new ConflictException(counterReturn?"Select the part this person received":"Select the original issue for this return");
+   if(counterReturn)receiver=Objects.toString(issues.get().get("receiver_id"),null);
    var issue=issues.get();BigDecimal returned=movementRepository.returnedQuantity(m.issueId());
    if(m.quantity().add(returned).compareTo((BigDecimal)issue.get("quantity"))>0)throw new ConflictException("Return exceeds the outstanding issued quantity");
    price=(BigDecimal)issue.get("unit_price");
@@ -69,7 +73,7 @@ public class InventoryService {
   if(balance.signum()<0)throw new ConflictException("Insufficient stock for this issue");
   productRepository.updateQuantity(m.productId(),balance);
   String id=UUID.randomUUID().toString();
-  movementRepository.insert(id,m.productId(),m.kind(),m.quantity(),price,m.jobId(),m.issueId(),Commands.actor(),Objects.toString(m.note(),""),Instant.now().toString(),m.sourceCaptureId());
+  movementRepository.insert(id,m.productId(),m.kind(),m.quantity(),price,m.jobId(),m.issueId(),Commands.actor(),Objects.toString(m.note(),""),Instant.now().toString(),m.sourceCaptureId(),receiver);
   if(job)gateRepository.incrementRevision(m.jobId());
   Map<String,Object> result=new LinkedHashMap<>(movementRepository.getById(id));result.put("sku",product.get("sku"));result.put("name",product.get("name"));result.put("unit",product.get("unit"));result.put("balance",balance);
   event("STOCK_MOVED",result);return result;
@@ -89,6 +93,14 @@ public class InventoryService {
  }
  public Object captureMovement(String capture){return movementRepository.findByCapture(capture).orElse(null);}
  public Object movementById(String id){return movementRepository.findById(id).orElseThrow(()->new NotFoundException("Movement not found"));}
+ /** Parts handed to one person at the counter in the last 30 days, with what is still out. */
+ public List<Map<String,Object>> handovers(String receiverId){
+  people.active(receiverId);
+  var rows=movementRepository.handovers(receiverId,Instant.now().minus(Duration.ofDays(30)).toString());
+  List<Map<String,Object>> open=new ArrayList<>();
+  for(var row:rows){BigDecimal out=((BigDecimal)row.get("quantity")).subtract((BigDecimal)row.get("returned"));if(out.signum()>0){var copy=new LinkedHashMap<>(row);copy.put("outstanding",out);open.add(copy);}}
+  return open;
+ }
  public List<Map<String,Object>> archivedProducts(){return productRepository.findArchived();}
  public Map<String,Object> edit(String key,String id,ProductEdit p){return commands.execute(key,"edit-product:"+id,p,()->{
   product(id,true);required(p.name(),"Name");required(p.category(),"Category");required(p.brand(),"Manufacturer");positiveOrZero(p.reorderLevel());

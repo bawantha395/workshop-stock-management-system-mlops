@@ -7,7 +7,7 @@ def promote(package_arn,region,destination):
     package=sm.describe_model_package(ModelPackageName=package_arn)
     if package.get('CustomerMetadataProperties',{}).get('syntheticData')=='true':raise RuntimeError('Synthetic demo packages cannot be promoted to the live application')
     if package.get('CustomerMetadataProperties',{}).get('benchmarkOnly')=='true':raise RuntimeError('Public benchmark packages cannot be promoted as workshop models')
-    if package['ModelApprovalStatus']!='Approved':raise RuntimeError('Human approval in Model Registry is required')
+    if package['ModelApprovalStatus']!='Approved':raise RuntimeError('Model Registry approval is required (automatic gate or a reviewer)')
     uri=package['InferenceSpecification']['Containers'][0]['ModelDataUrl'];bucket,key=uri[5:].split('/',1)
     archive=s3.get_object(Bucket=bucket,Key=key)['Body'].read();digest=hashlib.sha256(archive).hexdigest()
     if digest!=package['CustomerMetadataProperties']['artifactSha256']:raise RuntimeError('Registered artifact checksum mismatch')

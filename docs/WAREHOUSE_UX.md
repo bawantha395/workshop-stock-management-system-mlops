@@ -94,3 +94,13 @@ Test camera denial: close the scanner and use photo/scanner input.
 Register a new item inside a receipt: catalogue quantity must remain zero until
 that receipt is confirmed. Check the generated QR identifies the same item.
 A mechanic must not see owner edit/archive controls.
+
+## Storeroom counter
+
+The counter screen is for the one moment that matters: a part leaving the storeroom.
+
+- **Give a part.** Scan the part's QR label, or take a photo, or search. Set the quantity, then tap the name of the person taking it, or scan their QR card. The stock-out records who received it, who gave it and when.
+- **Take a part back.** Tap the person. The app lists what they still have out from the last 30 days. Tap the part and the quantity.
+- **People.** The owner adds the people who collect parts and prints each person a QR card.
+- **Self-learning.** When a part is identified by photo and confirmed, that photo becomes a reference image straight away, and it's included in the next weekly photo-model training.
+

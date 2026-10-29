@@ -1,5 +1,8 @@
 name: Train and publish stock forecast
 on:
+  # Every night at 02:00 Asia/Colombo (20:30 UTC), after the app exports its history at 01:30.
+  schedule:
+    - cron: '30 20 * * *'
   workflow_dispatch:
     inputs:
       environment:
@@ -15,47 +18,70 @@ on:
 permissions:
   contents: read
   id-token: write
-concurrency:
-  group: stock-forecast-training-${{ inputs.environment }}
-  cancel-in-progress: false
 env:
   AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
   AWS_REGION: ap-southeast-2
   AWS_DEFAULT_REGION: ap-southeast-2
   AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
-  PROJECT_NAME: stocklane-${{ inputs.environment }}
-  TF_ENVIRONMENT: ${{ inputs.environment }}
 jobs:
   train:
     if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      # Scheduled runs cover every environment; environments that are not deployed are skipped.
+      matrix:
+        environment: ${{ fromJSON(github.event_name == 'schedule' && '["dev","staging","prod"]' || format('["{0}"]', inputs.environment)) }}
+    concurrency:
+      group: stock-forecast-training-${{ matrix.environment }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: aws-training
     timeout-minutes: 50
+    env:
+      PROJECT_NAME: stocklane-${{ matrix.environment }}
+      TF_ENVIRONMENT: ${{ matrix.environment }}
+      SCHEDULED: ${{ github.event_name == 'schedule' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: {python-version: '3.12'}
       - uses: ./.github/actions/aws-credentials
+        id: aws
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         with:
           role: github-training
-          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
-          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+          access-key-id: ${{ matrix.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || matrix.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ matrix.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || matrix.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
       - run: pip install boto3==1.43.118
-      - run: python scripts/pipeline_common.py --output artifacts/aws.json
-      - name: Train, evaluate and optionally publish forecast
+      - name: Check the environment is deployed
+        id: deployed
         env:
-          PUBLISH_FORECAST: ${{ inputs.publish }}
+          AWS_READY: ${{ steps.aws.outcome }}
+        run: |
+          if [ "$AWS_READY" = "success" ] && python scripts/pipeline_common.py --output artifacts/aws.json; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ "$SCHEDULED" = "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$TF_ENVIRONMENT is not deployed (or has no credentials); nightly forecast skipped."
+          else
+            exit 1
+          fi
+      - name: Train, evaluate and publish forecast
+        if: steps.deployed.outputs.ready == 'true'
+        env:
+          # Nightly runs always publish: the per-item quality gate decides ML or baseline.
+          PUBLISH_FORECAST: ${{ github.event_name == 'schedule' || inputs.publish }}
         run: |
           args=()
           if [ "$PUBLISH_FORECAST" = "true" ]; then args+=(--publish); fi
           python mlops/run_forecast.py --config artifacts/aws.json "${args[@]}"
       - name: Publish forecast summary
-        if: success()
+        if: success() && steps.deployed.outputs.ready == 'true'
         run: |
           python - <<'PYCODE'
           import json,os
           report=json.load(open('artifacts/forecast-report.json'))
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-              f.write('## Stock forecast result\n\n```json\n'+json.dumps(report,indent=2)+'\n```\n')
+              f.write('## Stock forecast result ('+os.environ['TF_ENVIRONMENT']+')\n\n```json\n'+json.dumps(report,indent=2)+'\n```\n')
               f.write('Only trained_ml rows are accepted ML. Weekday baselines and insufficient history are labelled separately. No stock was changed.\n')
           PYCODE

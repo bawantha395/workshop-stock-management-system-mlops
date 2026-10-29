@@ -42,6 +42,21 @@ flowchart LR
    bundle to the release prefix, and the release commit pins it. Roll back by
    deploying a previously approved ARN — no retraining.
 
+## Hands-off operation (no manual steps)
+
+| When | What happens by itself |
+|---|---|
+| Every night at 01:30 (Asia/Colombo) | The inventory service exports the stock history to S3 (`ForecastExportService`). |
+| Every night at 02:00 | **Train and publish stock forecast** runs for every deployed environment. Environments that aren't deployed are skipped. The per-item gate decides between ML and the weekday baseline, and the result is published. If the run fails, yesterday's forecast stays. |
+| On login | The owner's home page shows **Reorder this week**: items to order, the most urgent first, plus a purchase-list download. |
+| Every Sunday at 01:00 | The vision service exports every photo a person confirmed (new items and parts identified by photo at the storeroom counter) as a reviewed dataset (`app/dataset_export.py`). This starts once there are at least 60 photos, with 15 photos across 3 items in each split. |
+| Every Sunday at 02:30 | **Train reviewed workshop model** trains on that export for every deployed environment, but only if the photos changed (`mlops/workshop_dataset.py`). |
+| After a photo-model training | `mlops/auto_promote.py` approves the new version only if it passed the gate **and** beats the model being served (higher test F1, with precision of at least 98%). Otherwise it's rejected with the reason. An approved version is released through GitOps: **Release approved model** commits the overlay, then Argo CD rolls it out. This applies in every environment. |
+| Adding a new item from a label photo | Textract reads the label text first. The LLM only suggests the missing fields, and similar stocked items suggest the category, shelf and unit. The mechanic taps **Accept all**. |
+
+GitHub pauses scheduled workflows after 60 days without commits. A push re-enables them.
+The `aws-training` GitHub environment must not have required reviewers, or the nightly run would wait for an approval.
+
 ## Guard rails
 
 - Synthetic or public-benchmark artifacts can never reach the live app: the

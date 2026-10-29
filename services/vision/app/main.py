@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import asyncio
 import hashlib
 import json
@@ -23,6 +24,8 @@ from .encoder import Encoder
 from .qr import product_qr
 from .bedrock import propose, PROMPT_VERSION, BedrockUnavailable, failure
 from . import textract
+from . import dataset_export
+DRAFT_FIELDS=('name','brand','partNumber','category','grade','capacity')
 
 log = logging.getLogger('stocklane.vision')
 
@@ -94,10 +97,27 @@ def create_app(settings=None):
             try:reconcile_vectors()
             except Exception:log.exception('Versioned reference reconciliation will retry')
 
+    def weekly_export(now=None):
+        """Sundays from 01:00 Asia/Colombo: one replica (Redis lock per week) exports confirmed photos."""
+        if not (s.training_export and s.model_bucket):return None
+        local=(now or datetime.now(timezone.utc)).astimezone(ZoneInfo('Asia/Colombo'))
+        if local.weekday()!=6 or local.hour<1:return None
+        week='stocklane:training-export:'+local.strftime('%G-%V')
+        try:
+            if not cache.set(week,'1',nx=True,ex=8*86400):return None
+        except redis.RedisError:return None
+        return dataset_export.export(store,boto3.client('s3',region_name=s.aws_region),s.model_bucket)
+
+    def export_worker():
+        while not stop.wait(3600):
+            try:weekly_export()
+            except Exception:log.exception('Weekly training dataset export failed; it retries next week')
+
     @asynccontextmanager
     async def lifespan(app):
         await asyncio.to_thread(reconcile_vectors)
         reconciler=threading.Thread(target=reconcile_worker,daemon=True);reconciler.start()
+        threading.Thread(target=export_worker,daemon=True).start()
         thread=None
         if s.catalogue_queue_url:
             thread=threading.Thread(target=queue_worker,daemon=True);thread.start()
@@ -108,7 +128,7 @@ def create_app(settings=None):
         store.engine.dispose()
 
     app=FastAPI(title='Stocklane Vision',version='0.1.0',lifespan=lifespan,docs_url='/api/vision/docs' if s.environment=='local' else None,openapi_url='/api/vision/openapi.json' if s.environment=='local' else None)
-    app.state.store=store;app.state.embedding=embedding;app.state.consume=consume
+    app.state.store=store;app.state.embedding=embedding;app.state.consume=consume;app.state.weekly_export=weekly_export
     app.add_middleware(CORSMiddleware,allow_origins=[s.web_origin],allow_methods=['GET','POST','PATCH','OPTIONS'],allow_headers=['Authorization','Content-Type','Idempotency-Key','X-Demo-User'])
     from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
     import time,hmac
@@ -294,48 +314,57 @@ def create_app(settings=None):
         try:image=store.image(body.imageId)
         except (ValueError,FileNotFoundError):raise HTTPException(404,'Photo not found') from None
         key='stocklane:draft:'+s.bedrock_model_id+':'+PROMPT_VERSION+':'+body.imageId
-        fields=None;source='manual'
+        fields=None;source='manual';suggestions={}
         try:
             hit=cache.get(key)
             if hit:
-                fields,source=json.loads(hit)
+                cached=json.loads(hit);fields,source=cached[0],cached[1];suggestions=cached[2] if len(cached)>2 else {}
                 draft_events.labels('cache_hit').inc()
         except (redis.RedisError,ValueError):pass
         if fields is None:
-            if s.bedrock_model_id:
+            # 1. Read the label text (Textract): what is printed on the label.
+            fields={}
+            if s.textract_fallback:
+                try:fields=textract.propose(s,image) or {}
+                except Exception as reader_error:log.warning('Label reading failed type=%s',type(reader_error).__name__)
+                if fields:
+                    source=textract.SOURCE;draft_events.labels(source).inc()
+            # 2. Ask the LLM only for what the label text did not give. Its answers are suggestions.
+            problem=None
+            if s.bedrock_model_id and any(name not in fields for name in DRAFT_FIELDS):
+                allowed=True
                 try:
                     day=datetime.now(timezone.utc).strftime('%Y-%m-%d')
                     limit_key='stocklane:bedrock:daily:'+day
                     used=cache.incr(limit_key)
                     if used==1:cache.expire(limit_key,172800)
-                    if used>s.bedrock_daily_request_limit:raise HTTPException(429,'Daily AI suggestion limit reached. Register manually or retry tomorrow UTC.')
-                except redis.RedisError:raise HTTPException(503,'AI usage control is unavailable. Enter the details manually.') from None
-            try:
-                fields,source=propose(s,image)
-                draft_events.labels(source).inc()
-                if source=='bedrock':
-                    bedrock_observation.update(state='invocation_verified',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=None)
-            except Exception as error:
-                problem=error if isinstance(error,BedrockUnavailable) else failure(error)
-                draft_events.labels(problem.code).inc()
-                bedrock_observation.update(state='unavailable',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=problem.code)
-                log.warning('AI drafting unavailable code=%s',problem.code)
-                fields=None
-                if s.textract_fallback:
-                    # Bedrock is unavailable (for example a zero account quota): read the label text instead.
-                    try:fields=textract.propose(s,image) or None
-                    except Exception as fallback_error:log.warning('Textract fallback failed type=%s',type(fallback_error).__name__)
-                if fields is None:
-                    return JSONResponse(status_code=problem.status,
-                        content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
-                        headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
-                source=textract.SOURCE
-                draft_events.labels(source).inc()
-            try:cache.set(key,json.dumps([fields,source]),ex=900)
+                    if used>s.bedrock_daily_request_limit:
+                        if not fields:raise HTTPException(429,'Daily AI suggestion limit reached. Register manually or retry tomorrow UTC.')
+                        allowed=False
+                except redis.RedisError:
+                    if not fields:raise HTTPException(503,'AI usage control is unavailable. Enter the details manually.') from None
+                    allowed=False
+                if allowed:
+                    try:
+                        proposed,_=propose(s,image,fields)
+                        suggestions={k:v for k,v in proposed.items() if k in DRAFT_FIELDS and k not in fields and v}
+                        draft_events.labels('bedrock').inc()
+                        bedrock_observation.update(state='invocation_verified',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=None)
+                        if not fields:source='bedrock'
+                    except Exception as error:
+                        problem=error if isinstance(error,BedrockUnavailable) else failure(error)
+                        draft_events.labels(problem.code).inc()
+                        bedrock_observation.update(state='unavailable',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=problem.code)
+                        log.warning('AI suggestions unavailable code=%s',problem.code)
+            if problem and not fields:
+                return JSONResponse(status_code=problem.status,
+                    content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
+                    headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
+            try:cache.set(key,json.dumps([fields,source,suggestions]),ex=900)
             except redis.RedisError:pass
         row={'id':str(uuid.uuid4()),'image_id':body.imageId,'fields':json.dumps(fields),'source':source,'status':'PENDING','created_at':datetime.now(timezone.utc).isoformat(),'actor':actor,'product_id':None}
         with store.engine.begin() as c:c.execute(insert(store.drafts).values(**row))
-        return dict(row,fields=fields)
+        return dict(row,fields=fields,suggestions=suggestions)
 
     @app.get('/api/vision/drafts')
     def drafts(request:Request):

@@ -20,7 +20,13 @@ def read(s3,bucket,key):
 def execute(c,publish=False):
     s3=boto3.client('s3',region_name=c['region']);sm=boto3.client('sagemaker',region_name=c['region'])
     if boto3.client('sts').get_caller_identity()['Account']!=c['account_id']:raise ValueError('Account mismatch')
-    bucket=c['model_bucket'];pointer=json.loads(read(s3,bucket,'forecast/datasets/latest.json'));key=pointer['key']
+    bucket=c['model_bucket']
+    try:pointer=json.loads(read(s3,bucket,'forecast/datasets/latest.json'))
+    except ClientError as error:
+        if error.response['Error']['Code'] not in {'NoSuchKey','404'}:raise
+        report={'published':False,'status':'no_history','message':'No stock history exported yet. The app exports it every night once stock movements exist.'}
+        Path('artifacts').mkdir(exist_ok=True);Path('artifacts/forecast-report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2));return report
+    key=pointer['key']
     if not key.startswith('forecast/datasets/') or not key.endswith('/history.json'):raise ValueError('Invalid snapshot key')
     raw=read(s3,bucket,key)
     if hashlib.sha256(raw).hexdigest()!=pointer['sha256']:raise ValueError('Snapshot checksum mismatch')

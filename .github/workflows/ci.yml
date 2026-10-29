@@ -46,10 +46,10 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - run: pip install -r services/vision/requirements-dev.txt PyYAML==6.0.3 fakeredis==2.40.0 scikit-learn==1.9.1
+      - run: pip install -r services/vision/requirements-dev.txt PyYAML==6.0.3 fakeredis==2.40.0 scikit-learn==1.9.1 openpyxl==3.1.5
       - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: python scripts/download_model.py
-      - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_operational_readiness.py tests/test_synthetic_guards.py tests/test_public_data.py -q
+      - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_operational_readiness.py tests/test_synthetic_guards.py tests/test_public_data.py tests/test_real_data.py tests/test_automation.py -q
       - run: python -m compileall -q scripts mlops edge
   compose-integration:
     runs-on: ubuntu-latest

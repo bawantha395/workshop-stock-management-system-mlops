@@ -1,0 +1,140 @@
+name: Train photo model on real car-part photos
+# Real photos from the Kaggle dataset "50 Types of Car Parts" (license shown on Kaggle: Apache 2.0).
+# Downloads with your Kaggle API token (repository secrets KAGGLE_USERNAME and KAGGLE_KEY),
+# builds a reviewed dataset with recorded provenance, runs the photo quality gate on the
+# runner first, and only starts SageMaker when that gate passes. A registered model that
+# beats the served one is approved automatically and released through GitOps.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+      kaggle_dataset:
+        description: Kaggle dataset (owner/name)
+        default: gpiosenka/car-parts-40-classes
+        required: true
+      archive_folder:
+        description: Folder inside the archive that holds train/valid/test
+        default: car parts 50
+        required: true
+      license:
+        description: License exactly as shown on the Kaggle dataset page
+        default: Apache 2.0
+        required: true
+      per_class_train:
+        description: Training photos kept per part type (validation and test photos are all kept)
+        default: '20'
+        required: true
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+concurrency:
+  group: aws-training-${{ inputs.environment }}
+  cancel-in-progress: false
+env:
+  AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
+  AWS_REGION: ap-southeast-2
+  AWS_DEFAULT_REGION: ap-southeast-2
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  PROJECT_NAME: stocklane-${{ inputs.environment }}
+  TF_ENVIRONMENT: ${{ inputs.environment }}
+jobs:
+  train:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: aws-training
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - name: Download real car-part photos from Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          DATASET: ${{ inputs.kaggle_dataset }}
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
+            echo "::error::Add repository secrets KAGGLE_USERNAME and KAGGLE_KEY (Kaggle -> Settings -> API -> Create New Token)."
+            exit 1
+          fi
+          if ! [[ "$DATASET" =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$ ]]; then echo "::error::Use owner/name for the Kaggle dataset"; exit 1; fi
+          curl -fsSL --retry 3 --max-filesize 1000000000 -u "$KAGGLE_USERNAME:$KAGGLE_KEY" \
+            -o "$RUNNER_TEMP/car-parts.zip" "https://www.kaggle.com/api/v1/datasets/download/$DATASET"
+          sha256sum "$RUNNER_TEMP/car-parts.zip"
+      - run: pip install -r mlops/requirements.txt onnx==1.23.2
+      - run: python scripts/download_model.py
+      - uses: ./.github/actions/aws-credentials
+        with:
+          role: github-training
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+      - run: python scripts/pipeline_common.py --output artifacts/aws.json
+      - name: Build the reviewed dataset, run the quality gate, upload
+        env:
+          DATASET: ${{ inputs.kaggle_dataset }}
+          ARCHIVE_FOLDER: ${{ inputs.archive_folder }}
+          LICENSE_NAME: ${{ inputs.license }}
+          PER_CLASS_TRAIN: ${{ inputs.per_class_train }}
+        run: |
+          bucket=$(python -c "import json;print(json.load(open('artifacts/aws.json'))['deployment']['value']['model_bucket'])")
+          python mlops/real_data/car_parts_photos.py --archive "$RUNNER_TEMP/car-parts.zip" --root "$ARCHIVE_FOLDER" \
+            --source-url "https://www.kaggle.com/datasets/$DATASET" --license "$LICENSE_NAME" \
+            --per-class-train "$PER_CLASS_TRAIN" --out artifacts/car-parts --upload --bucket "$bucket"
+      - name: Train on SageMaker and register pending approval (only when the local gate passed)
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, sys, boto3
+          from pathlib import Path
+          sys.path.insert(0, "mlops")
+          from stage_encoder import stage
+          summary = json.load(open('artifacts/car-parts/summary.json'))
+          report = {'dataset': {k: summary[k] for k in ('partTypes', 'images', 'bySplit', 'archiveSha256')},
+                    'datasetUri': summary['upload']['datasetUri'], 'localGate': summary['preflight']}
+          if not summary['preflight'].get('qualityGatePassed'):
+              report['sagemaker'] = 'not started: the photo quality gate failed on the runner, so no paid job was run'
+              Path('artifacts/report.json').write_text(json.dumps(report, indent=2)); sys.exit(0)
+          c = json.load(open('artifacts/aws.json'))['deployment']['value']
+          overlay = Path('deploy/kubernetes/apps/overlays') / c['environment']
+          encoder = stage(json.loads((overlay / 'release.json').read_text()), c['model_bucket'], boto3.client('s3', region_name=c['region']))
+          image = json.loads((overlay / 'images.json').read_text())['ml-training']
+          subprocess.run(['python', 'mlops/run_training.py', '--region', c['region'], '--name', c['name'], '--role', c['training_role_arn'],
+              '--image', image, '--dataset', summary['upload']['datasetUri'], '--encoder', encoder,
+              '--output', 's3://' + c['model_bucket'] + '/training', '--group', c['model_package_group'],
+              '--report', 'artifacts/training-report.json'], check=True)
+          report['sagemaker'] = json.load(open('artifacts/training-report.json'))
+          Path('artifacts/report.json').write_text(json.dumps(report, indent=2))
+          PY
+      - name: Approve automatically when it beats the served model
+        id: decide
+        env:
+          TARGET: ${{ inputs.environment }}
+        run: |
+          if [ ! -f artifacts/training-report.json ]; then echo "approved=" >> "$GITHUB_OUTPUT"; exit 0; fi
+          python mlops/auto_promote.py --report artifacts/training-report.json --environment "$TARGET" --output artifacts/decision.json
+      - name: Release the approved model through GitOps
+        if: steps.decide.outputs.approved != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ inputs.environment }}
+          MODEL_PACKAGE: ${{ steps.decide.outputs.approved }}
+        run: gh workflow run release-model.yml --ref main -f environment="$TARGET" -f model_package="$MODEL_PACKAGE"
+      - name: Publish result
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path('artifacts/report.json')
+          text = json.dumps(json.loads(path.read_text()), indent=2) if path.exists() else 'No report: check the failed step above.'
+          decision = Path('artifacts/decision.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('## Real car-part photo training\n\n```json\n' + text + '\n```\n')
+              if decision.exists():
+                  d = json.loads(decision.read_text())
+                  f.write('\n**Decision: ' + d['decision'] + '.** ' + d['reason'] + '\n')
+          PY

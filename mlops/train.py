@@ -13,11 +13,20 @@ from app.encoder import Encoder
 
 from dataset import validate_manifest
 
+def pair_indexes(count,limit=20000,seed=42):
+    """All pairs for small splits; otherwise a fixed-seed uniform sample, so a large split is not
+    represented only by pairs that start with its first few images."""
+    if count*(count-1)//2<=limit:return list(itertools.combinations(range(count),2))
+    rng=np.random.default_rng(seed);chosen=set()
+    while len(chosen)<limit:
+        i,j=(int(v) for v in rng.integers(0,count,2))
+        if i!=j:chosen.add((min(i,j),max(i,j)))
+    return sorted(chosen)
+
 def pairs(rows,vectors):
     features=[];labels=[]
-    for i,j in itertools.combinations(range(len(rows)),2):
+    for i,j in pair_indexes(len(rows)):
         features.append([float(np.dot(vectors[i],vectors[j]))]);labels.append(int(rows[i]['sku']==rows[j]['sku']))
-        if len(labels)>=20000:break
     if len(set(labels))!=2:raise ValueError('Both same-SKU and different-SKU pairs are needed')
     return np.array(features),np.array(labels)
 
@@ -69,8 +78,12 @@ def train(dataset_dir,encoder_dir,output_dir,job_name='local-calibration',demo_m
     print(json.dumps(metrics),flush=True)
     if not metrics['qualityGatePassed'] and not benchmark:raise ValueError('Independent test quality gate failed; this bundle must not be registered or released')
     shutil.copy2(Path(encoder_dir)/'encoder.onnx',output_dir/'encoder.onnx')
-    version=('public-calibrator-' if benchmark else 'demo-calibrator-' if synthetic else 'workshop-calibrator-')+hashlib.sha256((manifest.read_text()+job_name).encode()).hexdigest()[:12]
+    catalogue=provenance.get('dataPurpose')=='reference_catalogue'
+    prefix='public-calibrator-' if benchmark else 'demo-calibrator-' if synthetic else 'catalogue-calibrator-' if catalogue else 'workshop-calibrator-'
+    version=prefix+hashlib.sha256((manifest.read_text()+job_name).encode()).hexdigest()[:12]
+    # workshopCalibrated = calibrated on reviewed real photos (not synthetic, not a benchmark); trainingData says which.
     model=dict(encoder.manifest,version=version,workshopCalibrated=not(synthetic or benchmark),syntheticData=synthetic,benchmarkOnly=benchmark,autoPosting=False)
+    if catalogue:model['trainingData']={k:provenance.get(k) for k in ('source','sourceUrl','license','archiveSha256','dataPurpose')}
     model['calibration']={'coefficient':float(clf.coef_[0][0]),'intercept':float(clf.intercept_[0]),'threshold':chosen}
     (output_dir/'model.json').write_text(json.dumps(model,indent=2))
     return metrics

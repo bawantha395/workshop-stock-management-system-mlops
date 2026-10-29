@@ -64,6 +64,8 @@ resource "aws_iam_role_policy" "vision" {
     { Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = var.queues.events["catalogue"].arn },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${local.media_arn}/images/*" },
     { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${local.models_arn}/releases/*" },
+    # Weekly export of staff-confirmed photos as the next training dataset (self-learning photo model).
+    { Effect = "Allow", Action = ["s3:PutObject"], Resource = "${local.models_arn}/datasets/*" },
     { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = var.kms_key_arn },
     # Label-text fallback when Bedrock is unavailable (Textract has no resource-level permissions).
     { Effect = "Allow", Action = ["textract:DetectDocumentText"], Resource = "*" }

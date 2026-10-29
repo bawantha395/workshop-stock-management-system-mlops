@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     bedrock_daily_request_limit: int = 50
     bedrock_region: str = ''
     textract_fallback: bool = False
+    model_bucket: str = ''
+    training_export: bool = False
     textract_region: str = ''
     aws_region: str = 'eu-west-1'
     catalogue_queue_url: str = ''

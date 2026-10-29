@@ -41,6 +41,9 @@ const Scanner = React.lazy(() =>
   import("./Scanner").then((module) => ({ default: module.Scanner })),
 );
 import { StockAnalysis } from "./StockAnalysis";
+import { ReorderCard } from "./ReorderCard";
+import { Counter, type Mode as CounterMode } from "./Counter";
+import { suggestFields, type Field, type Suggestion } from "./suggestions";
 import {
   emptyTask,
   complete,
@@ -67,7 +70,8 @@ type View =
   | "count"
   | "analysis"
   | "activity"
-  | "review";
+  | "review"
+  | "counter";
 const uid = () => crypto.randomUUID();
 const number = (n: number) =>
   new Intl.NumberFormat("en", { maximumFractionDigits: 3 }).format(Number(n));
@@ -160,6 +164,7 @@ async function apiPhoto(id: string) {
 }
 function App() {
   const [view, setView] = useState<View>("home");
+  const [counterMode, setCounterMode] = useState<CounterMode>("give");
   const [items, setItems] = useState<Item[]>([]),
     [moves, setMoves] = useState<Movement[]>([]),
     [captures, setCaptures] = useState<CaptureEntry[]>([]);
@@ -685,6 +690,7 @@ function App() {
         {(
           [
             ["home", "Workspace", Home],
+            ["counter", "Storeroom counter", ScanLine],
             ["stock", owner ? "Manage catalogue" : "Current stock", Package],
             ["review", "Needs review", Camera],
             ["activity", "Activity", Activity],
@@ -770,6 +776,37 @@ function App() {
               <p className="eyebrow">YOUR STOCK. UNDER CONTROL.</p>
               <h1>What are we doing today?</h1>
               <p>Choose a task. Scan an item. Keep stock accurate.</p>
+            </div>
+            {owner && session && <ReorderCard />}
+            <div className="counter-tiles">
+              <button
+                className="counter-tile give"
+                disabled={!session || busy}
+                onClick={() => {
+                  setCounterMode("give");
+                  navigate("counter");
+                }}
+              >
+                <ArrowUpRight size={30} />
+                <span>
+                  <strong>Give a part</strong>
+                  <small>Scan the part, tap who takes it</small>
+                </span>
+              </button>
+              <button
+                className="counter-tile back"
+                disabled={!session || busy}
+                onClick={() => {
+                  setCounterMode("back");
+                  navigate("counter");
+                }}
+              >
+                <ArrowDownLeft size={30} />
+                <span>
+                  <strong>Take a part back</strong>
+                  <small>Unused parts return to the shelf</small>
+                </span>
+              </button>
             </div>
             <div className="task-tiles">
               <button
@@ -1656,6 +1693,14 @@ function App() {
           </>
         )}
         {view === "analysis" && owner && <StockAnalysis />}
+        {view === "counter" && session && (
+          <Counter
+            items={items}
+            owner={owner}
+            initialMode={counterMode}
+            onChanged={() => void refresh()}
+          />
+        )}
         {view === "activity" && (
           <>
             <div className="stock-title">
@@ -1942,6 +1987,26 @@ function ProductEditor({
     [busy, setBusy] = useState(false);
   const sku = useRef("ITEM-" + uid().slice(0, 8).toUpperCase());
   const command = useCommand();
+  const [suggested] = useState(() =>
+    item ? {} : suggestFields(d as Partial<Record<Field, string>>, (draft?.suggestions || {}) as Partial<Record<Field, string>>, products),
+  );
+  const fieldState: Record<Field, [string, (v: string) => void]> = {
+    name: [name, setName], brand: [brand, setBrand], partNumber: [part, setPart], category: [category, setCategory],
+    grade: [spec, setSpec], capacity: [size, setSize], location: [location, setLocation], unit: [unit, setUnit],
+  };
+  const open = (Object.entries(suggested) as [Field, Suggestion][]).filter(
+    ([field, s]) => fieldState[field][0] !== s.value && (field === "unit" || !fieldState[field][0].trim()),
+  );
+  const acceptAll = () => open.forEach(([field, s]) => fieldState[field][1](s.value));
+  const hint = (field: Field) => {
+    const s = open.find(([f]) => f === field)?.[1];
+    return s ? (
+      <span className="field-suggestion">
+        Suggested: <b>{field === "unit" ? "Measured litres" : s.value}</b> · {s.why}{" "}
+        <button type="button" onClick={() => fieldState[field][1](s.value)}>Use</button>
+      </span>
+    ) : null;
+  };
   const duplicate = products.find(
     (p) =>
       p.id !== item?.id &&
@@ -2048,11 +2113,21 @@ function ProductEditor({
         </h2>
         <p>
           {draft
-            ? "AI suggestions require your review. Unreadable details are left blank."
+            ? "Details read from the label are filled in. Suggestions for the rest are shown under each field."
             : "Use the visible manufacturer and part number where available."}
         </p>
         {imageId && <Photo id={imageId} />}
         <form onSubmit={(e) => void save(e)}>
+          {open.length > 0 && (
+            <div className="suggestion-banner" role="status">
+              <span>
+                <b>{open.length} {open.length === 1 ? "suggestion" : "suggestions"}</b> ready for the empty fields
+              </span>
+              <button type="button" className="button secondary" onClick={acceptAll}>
+                <Check size={16} /> Accept all
+              </button>
+            </div>
+          )}
           {inTask && (
             <p className="stock-help">
               Register the catalogue item here. Its received quantity is
@@ -2062,13 +2137,13 @@ function ProductEditor({
           <div className="stock-form-grid">
             {(
               [
-                ["Item name", name, setName, true],
-                ["Manufacturer / brand", brand, setBrand, true],
-                ["Manufacturer part number", part, setPart, false],
-                ["Category", category, setCategory, true],
-                ["Shelf / location", location, setLocation, false],
+                ["Item name", name, setName, true, "name"],
+                ["Manufacturer / brand", brand, setBrand, true, "brand"],
+                ["Manufacturer part number", part, setPart, false, "partNumber"],
+                ["Category", category, setCategory, true, "category"],
+                ["Shelf / location", location, setLocation, false, "location"],
               ] as const
-            ).map(([label, value, set, required]) => (
+            ).map(([label, value, set, required, field]) => (
               <label className="stock-field" key={label}>
                 {label}
                 <input
@@ -2083,6 +2158,7 @@ function ProductEditor({
                   value={value}
                   onChange={(e) => set(e.target.value)}
                 />
+                {hint(field)}
               </label>
             ))}
             {!item && (
@@ -2098,6 +2174,7 @@ function ProductEditor({
                     </option>
                     <option value="LITRE">Measured litres</option>
                   </select>
+                  {hint("unit")}
                 </label>
                 {!inTask && (
                   <label className="stock-field">
@@ -2123,6 +2200,7 @@ function ProductEditor({
                   value={spec}
                   onChange={(e) => setSpec(e.target.value)}
                 />
+                {hint("grade")}
               </label>
               <label className="stock-field">
                 Size / pack description
@@ -2131,6 +2209,7 @@ function ProductEditor({
                   value={size}
                   onChange={(e) => setSize(e.target.value)}
                 />
+                {hint("capacity")}
               </label>
               <label className="stock-field">
                 Low-stock threshold
@@ -2166,7 +2245,7 @@ function ProductEditor({
               Cancel
             </button>
             <button className="button primary" disabled={busy || !!duplicate}>
-              {busy ? "Saving…" : item ? "Save changes" : "Approve & register"}
+              {busy ? "Saving…" : item ? "Save changes" : open.length ? "Save without suggestions" : "Save item"}
             </button>
           </div>
         </form>

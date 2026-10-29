@@ -107,12 +107,35 @@ def test_the_original_bedrock_error_is_shown_when_the_fallback_cannot_help(tmp_p
         assert client.get('/api/vision/drafts').json() == []
 
 
-def test_bedrock_is_still_preferred_when_it_works(tmp_path, monkeypatch):
+def test_label_text_comes_first_and_the_llm_only_suggests_missing_fields(tmp_path, monkeypatch):
     import app.main as main
-    monkeypatch.setattr(main, 'propose', lambda *args: ({'name': 'From Bedrock'}, 'bedrock'))
-    def not_called(*args):
-        raise AssertionError('Textract must not run when Bedrock answers')
-    monkeypatch.setattr(textract, 'propose', not_called)
+    seen = {}
+    def suggest(settings, image, known):
+        seen['known'] = dict(known)
+        return {'name': 'Castrol GTX 10W-40 1L', 'brand': 'Not Castrol', 'category': 'Engine oil'}, 'bedrock'
+    monkeypatch.setattr(main, 'propose', suggest)
+    monkeypatch.setattr(textract, 'propose', lambda settings, image: {'brand': 'Castrol', 'grade': '10W-40'})
     with make_client(tmp_path, monkeypatch, True) as client:
+        body = client.post('/api/vision/drafts', json={'imageId': photo_id(client)}).json()
+        assert seen['known'] == {'brand': 'Castrol', 'grade': '10W-40'}
+        assert body['source'] == 'textract' and body['fields'] == {'brand': 'Castrol', 'grade': '10W-40'}
+        # Label text is never overwritten; the LLM only fills the gaps, as suggestions.
+        assert body['suggestions'] == {'name': 'Castrol GTX 10W-40 1L', 'category': 'Engine oil'}
+        assert client.get('/api/vision/status').json()['bedrockAccess']['state'] == 'invocation_verified'
+
+
+def test_label_text_still_works_when_the_daily_ai_limit_is_reached(tmp_path, monkeypatch):
+    import app.main as main
+    calls = []
+    monkeypatch.setattr(main, 'propose', lambda *args: calls.append(1) or ({'category': 'Oil filter'}, 'bedrock'))
+    monkeypatch.setattr(textract, 'propose', lambda settings, image: {'brand': 'Toyota'})
+    shared = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(redis.Redis, 'from_url', lambda *args, **kwargs: shared)
+    settings = Settings(environment='local', auth_mode='local', internal_token='x' * 32,
+        database_url='sqlite:///' + str(tmp_path / 'vision.db'), files_root=str(tmp_path / 'photos'),
+        model_dir=str(tmp_path / 'no-model'), bedrock_model_id='amazon.nova-lite-v1:0', textract_fallback=True,
+        bedrock_daily_request_limit=0)
+    with TestClient(create_app(settings)) as client:
         response = client.post('/api/vision/drafts', json={'imageId': photo_id(client)})
-        assert response.status_code == 200 and response.json()['source'] == 'bedrock'
+        assert response.status_code == 200 and response.json()['fields'] == {'brand': 'Toyota'}
+        assert response.json()['suggestions'] == {} and calls == []

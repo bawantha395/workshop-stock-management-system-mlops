@@ -4,8 +4,10 @@ import com.stocklane.inventory.dto.ArchiveInput;
 import com.stocklane.inventory.dto.MovementInput;
 import com.stocklane.inventory.dto.ProductEdit;
 import com.stocklane.inventory.dto.ProductInput;
+import com.stocklane.inventory.dto.SalesHistoryImport;
 import com.stocklane.inventory.service.ForecastHistoryService;
 import com.stocklane.inventory.service.InventoryService;
+import com.stocklane.inventory.service.SalesHistoryImportService;
 import com.stocklane.inventory.service.StockAnalysisService;
 import com.stocklane.inventory.exception.ConflictException;
 import java.math.BigDecimal;
@@ -29,7 +31,7 @@ class InventoryServiceTest {
  String key(){return UUID.randomUUID().toString();}
  BigDecimal n(String s){return new BigDecimal(s);}
  MovementInput move(String kind,String amount,String job,String issue){return new MovementInput(kind,id,n(amount),job,issue,"test",null);}
- @BeforeEach void setup(){db.update("delete from product_audit");db.update("delete from outbox");db.update("delete from movements");db.update("delete from products");db.update("delete from job_gates");db.update("delete from commands");id=inventory.create(key(),new ProductInput("MOB-5W30-4L","Mobil 5W-30 4L","Engine oil","Mobil","5W-30","4L",null,"UNIT",n("50"),n("5000"),n("5"),null,null)).get("id").toString();}
+ @BeforeEach void setup(){db.update("delete from product_audit");db.update("delete from people");db.update("delete from outbox");db.update("delete from movements");db.update("delete from products");db.update("delete from job_gates");db.update("delete from commands");id=inventory.create(key(),new ProductInput("MOB-5W30-4L","Mobil 5W-30 4L","Engine oil","Mobil","5W-30","4L",null,"UNIT",n("50"),n("5000"),n("5"),null,null)).get("id").toString();}
  @Test void receiptRetriesDoNotCreateExtraStock(){String key=key();var m=move("RECEIPT","10",null,null);var first=inventory.move(key,m);var retry=inventory.move(key,m);assertThat(first.get("id")).isEqualTo(retry.get("id"));assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("60");}
  @Test void reusingKeyForDifferentBodyIsRejected(){String k=key();inventory.move(k,move("RECEIPT","10",null,null));assertThatThrownBy(()->inventory.move(k,move("RECEIPT","11",null,null))).isInstanceOf(ConflictException.class);}
  @Test void identicalNewDeliveryGetsANewReceipt(){inventory.move(key(),move("RECEIPT","10",null,null));inventory.move(key(),move("RECEIPT","10",null,null));assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("70");}
@@ -97,5 +99,73 @@ class InventoryServiceTest {
   assertThat(snapshot.get("historyUntil")).isEqualTo(today.toString());
   db.update("update products set quantity=49 where id=?",id);
   assertThatThrownBy(()->forecastHistory.snapshot(today.minusDays(40).toString(),true,"owner")).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Ledger");
+ }
+
+ @Autowired SalesHistoryImportService imports;
+ SalesHistoryImport history(String sku,int days,int opening){
+  var today=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo"));List<SalesHistoryImport.DailySale> sales=new ArrayList<>();
+  for(int i=days;i>=1;i--)if(i%7!=0)sales.add(new SalesHistoryImport.DailySale(today.minusDays(i).toString(),n("2")));
+  var product=new SalesHistoryImport.Product(sku,"Imported item","Gift retail","Online Retail II","UNIT",n("2.55"),n("4"),today.minusDays(days+1).toString(),n(String.valueOf(opening)),sales);
+  return new SalesHistoryImport("UCI Online Retail II","https://doi.org/10.24432/C5CG6D","CC BY 4.0","Dates moved forward in whole weeks",null,List.of(product));
+ }
+ @Test void importedSalesHistoryKeepsDatesReconcilesAndFeedsTheForecastSnapshot(){
+  var result=imports.importHistory(key(),history("UCI-85123A",120,400));
+  String imported=db.queryForObject("select id from products where sku='UCI-85123A'",String.class);
+  assertThat(db.queryForObject("select count(*) from movements where product_id=? and kind='STOCK_OUT'",Integer.class,imported)).isEqualTo(103);
+  assertThat((BigDecimal)inventory.product(imported,false).get("quantity")).isEqualByComparingTo("194");
+  assertThat(db.queryForObject("select action from product_audit where product_id=?",String.class,imported)).isEqualTo("IMPORT");
+  var today=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo"));
+  assertThat(result.get("trackingFrom")).isEqualTo(today.minusDays(120).toString());
+  db.update("update products set created_at=? where id=?",today.minusDays(130).atStartOfDay(java.time.ZoneId.of("Asia/Colombo")).toInstant().toString(),id);
+  db.update("update movements set created_at=? where product_id=?",today.minusDays(130).atStartOfDay(java.time.ZoneId.of("Asia/Colombo")).toInstant().toString(),id);
+  @SuppressWarnings("unchecked") var rows=(List<Map<String,Object>>)forecastHistory.snapshot(today.minusDays(120).toString(),true,"owner").get("products");
+  var row=rows.stream().filter(r->"UCI-85123A".equals(r.get("sku"))).findFirst().orElseThrow();
+  @SuppressWarnings("unchecked") var usage=(List<BigDecimal>)row.get("usage");@SuppressWarnings("unchecked") var stock=(List<Boolean>)row.get("inStock");
+  assertThat(usage).hasSize(120);assertThat(usage.getFirst()).isEqualByComparingTo("2");assertThat(usage.get(1)).isEqualByComparingTo("0");assertThat(stock).allMatch(Boolean::booleanValue);
+ }
+ @Test void salesHistoryImportIsAllOrNothingAndRejectsUnsafeRows(){
+  assertThatThrownBy(()->imports.importHistory(key(),history("MOB-5W30-4L",60,400))).isInstanceOf(ConflictException.class);
+  assertThatThrownBy(()->imports.importHistory(key(),history("UCI-22423",60,10))).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("exceed");
+  var today=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo"));
+  var future=new SalesHistoryImport("UCI Online Retail II",null,"CC BY 4.0",null,null,List.of(new SalesHistoryImport.Product("UCI-1","x","c","b","UNIT",n("1"),n("0"),today.minusDays(5).toString(),n("10"),List.of(new SalesHistoryImport.DailySale(today.toString(),n("1"))))));
+  assertThatThrownBy(()->imports.importHistory(key(),future)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("yesterday");
+  assertThat(db.queryForObject("select count(*) from products where sku like 'UCI-%'",Integer.class)).isZero();
+ }
+ @Test void onlyOwnersCanImportSalesHistory()throws Exception{http.perform(post("/api/inventory/imports/sales-history").header("X-Demo-User","mechanic").header("Idempotency-Key",key()).contentType("application/json").content("{\"source\":\"x\"}")).andExpect(status().isForbidden());}
+
+ @Autowired com.stocklane.inventory.repository.ForecastHistoryRepository historyRepository;
+ @Test void nightlyExportStartsAtTheFirstMovementAndSkipsWithoutStorage(){
+  var snapshots=org.mockito.Mockito.mock(com.stocklane.inventory.service.ForecastSnapshotService.class);
+  var today=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo"));
+  db.update("update movements set created_at=? where product_id=?",today.minusDays(40).atTime(12,0).atZone(java.time.ZoneId.of("Asia/Colombo")).toInstant().toString(),id);
+  var export=new com.stocklane.inventory.service.ForecastExportService(snapshots,historyRepository,true,"models-bucket");
+  assertThat(export.export(today)).isEqualTo(today.minusDays(40).toString());
+  org.mockito.Mockito.verify(snapshots).prepare(today.minusDays(40).toString(),true,"nightly-export");
+  assertThat(new com.stocklane.inventory.service.ForecastExportService(snapshots,historyRepository,true,"").export(today)).isNull();
+  db.update("delete from movements");
+  assertThat(export.export(today)).isNull();
+ }
+
+ @Autowired com.stocklane.inventory.service.PeopleService people;
+ @Test void counterHandoverRecordsWhoReceivedThePartAndCanBeTakenBack(){
+  String nimal=people.add(key(),new com.stocklane.inventory.dto.PersonInput(" Nimal  Perera ")).get("id").toString();
+  assertThat(people.list()).extracting(p->p.get("name")).containsExactly("Nimal Perera");
+  var out=inventory.move(key(),new MovementInput("STOCK_OUT",id,n("3"),null,null,"Given to Nimal Perera",null,nimal));
+  assertThat(out.get("receiver_id")).isEqualTo(nimal);
+  assertThat(inventory.handovers(nimal)).singleElement().satisfies(h->assertThat((BigDecimal)h.get("outstanding")).isEqualByComparingTo("3"));
+  inventory.move(key(),new MovementInput("RETURN",id,n("1"),null,out.get("id").toString(),"Taken back",null,null));
+  assertThat((BigDecimal)inventory.product(id,false).get("quantity")).isEqualByComparingTo("48");
+  assertThat((BigDecimal)inventory.handovers(nimal).getFirst().get("outstanding")).isEqualByComparingTo("2");
+  assertThatThrownBy(()->inventory.move(key(),new MovementInput("RETURN",id,n("3"),null,out.get("id").toString(),"",null,null))).isInstanceOf(ConflictException.class);
+  assertThat(db.queryForObject("select receiver_name from (select pe.name as receiver_name from movements m join people pe on pe.id=m.receiver_id where m.kind='RETURN')",String.class)).isEqualTo("Nimal Perera");
+ }
+ @Test void counterHandoverNeedsAnActivePersonAndOwnersManageTheList()throws Exception{
+  String kamal=people.add(key(),new com.stocklane.inventory.dto.PersonInput("Kamal")).get("id").toString();
+  assertThatThrownBy(()->people.add(key(),new com.stocklane.inventory.dto.PersonInput("kamal"))).isInstanceOf(ConflictException.class);
+  people.remove(kamal);
+  assertThatThrownBy(()->inventory.move(key(),new MovementInput("STOCK_OUT",id,n("1"),null,null,"",null,kamal))).isInstanceOf(ConflictException.class);
+  assertThatThrownBy(()->inventory.move(key(),new MovementInput("RECEIPT",id,n("1"),null,null,"",null,kamal))).isInstanceOf(IllegalArgumentException.class);
+  http.perform(post("/api/inventory/people").header("X-Demo-User","mechanic").header("Idempotency-Key",key()).contentType("application/json").content("{\"name\":\"X\"}")).andExpect(status().isForbidden());
+  http.perform(get("/api/inventory/people").header("X-Demo-User","mechanic")).andExpect(status().isOk());
  }
 }

@@ -1,5 +1,12 @@
 name: Train reviewed workshop model
+# Self-learning photo model. Every Sunday the vision service exports the photos people
+# confirmed (new items and counter handovers); this workflow then trains on them for every
+# deployed environment. A model that passes the quality gate and beats the served model is
+# approved automatically and released through GitOps (Argo CD rolls it out). Otherwise it is
+# rejected with the reason and the served model stays. It can also be run by hand.
 on:
+  schedule:
+    - cron: '0 21 * * 6'   # Sunday 02:30 Asia/Colombo, after the 01:00 photo export
   workflow_dispatch:
     inputs:
       environment:
@@ -8,8 +15,9 @@ on:
         options: [dev, staging, prod]
         default: dev
       dataset_uri:
-        description: Versioned S3 dataset prefix with manifest.csv and reviewed photos
-        required: true
+        description: Optional versioned S3 dataset prefix; empty uses the latest confirmed-photo export
+        required: false
+        default: ''
       encoder_uri:
         description: Optional staged encoder prefix; empty stages the approved release encoder
         required: false
@@ -19,36 +27,68 @@ on:
 permissions:
   contents: read
   id-token: write
-concurrency:
-  group: aws-training-${{ inputs.environment }}
-  cancel-in-progress: false
+  actions: write
 env:
   AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
   AWS_REGION: ap-southeast-2
   AWS_DEFAULT_REGION: ap-southeast-2
   AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
-  PROJECT_NAME: stocklane-${{ inputs.environment }}
-  TF_ENVIRONMENT: ${{ inputs.environment }}
 jobs:
   train:
     if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(github.event_name == 'schedule' && '["dev","staging","prod"]' || format('["{0}"]', inputs.environment)) }}
+    concurrency:
+      group: aws-training-${{ matrix.environment }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: aws-training
     timeout-minutes: 50
+    env:
+      PROJECT_NAME: stocklane-${{ matrix.environment }}
+      TF_ENVIRONMENT: ${{ matrix.environment }}
+      SCHEDULED: ${{ github.event_name == 'schedule' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: {python-version: '3.12'}
       - uses: ./.github/actions/aws-credentials
+        id: aws
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         with:
           role: github-training
-          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
-          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+          access-key-id: ${{ matrix.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || matrix.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ matrix.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || matrix.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
       - run: pip install boto3==1.43.118
-      - run: python scripts/pipeline_common.py --output artifacts/aws.json
-      - name: Train, evaluate and register pending approval
+      - name: Check the environment is deployed
+        id: deployed
+        env:
+          AWS_READY: ${{ steps.aws.outcome }}
+        run: |
+          if [ "$AWS_READY" = "success" ] && python scripts/pipeline_common.py --output artifacts/aws.json; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ "$SCHEDULED" = "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$TF_ENVIRONMENT is not deployed (or has no credentials); weekly photo training skipped."
+          else
+            exit 1
+          fi
+      - name: Choose the dataset
+        id: dataset
+        if: steps.deployed.outputs.ready == 'true'
         env:
           DATASET_URI: ${{ inputs.dataset_uri }}
+        run: |
+          if [ -n "$DATASET_URI" ]; then echo "uri=$DATASET_URI" >> "$GITHUB_OUTPUT"; exit 0; fi
+          python mlops/workshop_dataset.py next --config artifacts/aws.json
+      - name: Train, evaluate and register
+        id: train
+        if: steps.dataset.outputs.uri != ''
+        continue-on-error: ${{ github.event_name == 'schedule' }}
+        env:
+          DATASET_URI: ${{ steps.dataset.outputs.uri }}
           ENCODER_URI: ${{ inputs.encoder_uri }}
           TRAINING_IMAGE: ${{ inputs.training_image }}
         run: |
@@ -67,13 +107,37 @@ jobs:
               '--encoder', encoder, '--output', 's3://' + c['model_bucket'] + '/training',
               '--group', c['model_package_group'], '--report', 'artifacts/training-report.json'], check=True)
           PY
+      - name: Remember that this dataset was trained
+        if: always() && steps.train.outcome != 'skipped' && steps.dataset.outputs.uri != ''
+        env:
+          DATASET_URI: ${{ steps.dataset.outputs.uri }}
+        run: python mlops/workshop_dataset.py mark --config artifacts/aws.json --dataset "$DATASET_URI"
+      - name: Approve automatically when it beats the served model
+        id: decide
+        if: steps.train.outcome == 'success'
+        run: python mlops/auto_promote.py --report artifacts/training-report.json --environment "$TF_ENVIRONMENT" --output artifacts/decision.json
+      - name: Release the approved model through GitOps
+        if: steps.decide.outputs.approved != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODEL_PACKAGE: ${{ steps.decide.outputs.approved }}
+        run: gh workflow run release-model.yml --ref main -f environment="$TF_ENVIRONMENT" -f model_package="$MODEL_PACKAGE"
       - name: Publish training result in summary
-        if: success()
+        if: always() && steps.deployed.outputs.ready == 'true'
+        env:
+          TRAIN_OUTCOME: ${{ steps.train.outcome }}
         run: |
           python - <<'PY'
           import json, os
-          r=json.load(open('artifacts/training-report.json'))
+          from pathlib import Path
+          env=os.environ['TF_ENVIRONMENT']
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-              f.write('## Model awaiting review\n\n`'+r['modelPackageArn']+'`\n\n')
-              f.write('Review validation and test metrics before running **Review SageMaker model**.\n\n```json\n'+json.dumps(r['metrics'],indent=2)+'\n```\n')
+              f.write('## Photo model ('+env+')\n\n')
+              if os.environ['TRAIN_OUTCOME'] in ('','skipped'):
+                  f.write('No new confirmed photos to train on; the served model stays.\n');raise SystemExit
+              if not Path('artifacts/decision.json').exists():
+                  f.write('The new model did not pass the quality gate (or training failed); the served model stays. See the step log.\n');raise SystemExit
+              r=json.load(open('artifacts/training-report.json'));d=json.load(open('artifacts/decision.json'))
+              f.write('**'+d['decision']+'**: '+d['reason']+'\n\n`'+r['modelPackageArn']+'`\n\n```json\n'+json.dumps(r['metrics'],indent=2)+'\n```\n')
+              if d['decision']=='approved':f.write('Release started: **Release approved model** commits it to the GitOps overlay; Argo CD rolls it out.\n')
           PY

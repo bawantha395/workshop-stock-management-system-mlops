@@ -13,5 +13,7 @@ public class ForecastHistoryRepository {
  /** Active items; one extra row is fetched so the caller can detect the 1000-item limit. */
  public List<Map<String,Object>> activeProducts(){return db.queryForList("select id,sku,name,unit,quantity,created_at from products where archived=false order by id limit 1001");}
  /** The whole ledger; one extra row is fetched so the caller can detect the 200000-row limit. */
+ /** Timestamp of the earliest ledger row, or null for an empty ledger. */
+ public String firstMovementAt(){return db.queryForObject("select min(created_at) from movements",String.class);}
  public List<Map<String,Object>> allMovements(){return db.queryForList("select product_id,kind,quantity,created_at from movements order by created_at limit 200001");}
 }

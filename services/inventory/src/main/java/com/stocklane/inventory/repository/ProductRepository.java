@@ -23,6 +23,7 @@ public class ProductRepository {
  public void insert(String id,String sku,String name,String category,String brand,String grade,String capacity,String barcode,String unit,BigDecimal sellingPrice,BigDecimal reorderLevel,String imageId,String createdAt){
   db.update("insert into products(id,sku,name,category,brand,grade,capacity,barcode,unit,quantity,selling_price,reorder_level,image_id,created_at) values(?,?,?,?,?,?,?,?,?,0,?,?,?,?)",id,sku,name,category,brand,grade,capacity,barcode,unit,sellingPrice,reorderLevel,imageId,createdAt);
  }
+ public boolean skuExists(String sku){return db.queryForObject("select count(*) from products where sku=?",Integer.class,sku)>0;}
  public void updateCatalogueKeys(String id,String manufacturerKey,String partNumber,String location){db.update("update products set manufacturer_key=?,part_number=?,location=? where id=?",manufacturerKey,partNumber,location,id);}
  public void updateCatalogue(String id,String name,String category,String brand,String manufacturerKey,String grade,String capacity,String partNumber,String location,BigDecimal reorderLevel){
   db.update("update products set name=?,category=?,brand=?,manufacturer_key=?,grade=?,capacity=?,part_number=?,location=?,reorder_level=? where id=?",name,category,brand,manufacturerKey,grade,capacity,partNumber,location,reorderLevel,id);

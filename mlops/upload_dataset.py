@@ -32,6 +32,8 @@ def upload(directory,bucket,region,s3=None):
         digest=hashlib.sha256(data).hexdigest()
         if digest in seen:raise ValueError('Duplicate image bytes; use independent capture sessions')
         seen.add(digest);files[name]=p;checks[name]=digest
+    if marker.exists():
+        files['dataset-metadata.json']=marker.read_bytes();checks['dataset-metadata.json']=hashlib.sha256(files['dataset-metadata.json']).hexdigest()
     index=json.dumps(checks,sort_keys=True).encode();version=hashlib.sha256(index).hexdigest()
     files['dataset-checksums.json']=index;s3=s3 or boto3.client('s3',region_name=region)
     for name,source in files.items():
