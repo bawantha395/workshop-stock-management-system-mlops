@@ -78,12 +78,15 @@ spec:
           name: BEDROCK_REGION
           value: us-east-1
         - &id024
+          name: TEXTRACT_FALLBACK
+          value: 'true'
+        - &id025
           name: DEPLOYMENT_ENVIRONMENT
           value: dev
-        - &id025
+        - &id026
           name: MODEL_BUCKET
           value: stocklane-dev-models-721274598579
-        - &id026
+        - &id027
           name: BEDROCK_DAILY_REQUEST_LIMIT
           value: '50'
       containers:
@@ -115,6 +118,7 @@ spec:
         - *id024
         - *id025
         - *id026
+        - *id027
         - name: DATABASE_SCHEMA
           value: vision
         - name: PYTHONPATH
