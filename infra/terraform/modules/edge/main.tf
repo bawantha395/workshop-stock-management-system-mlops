@@ -69,11 +69,12 @@ resource "aws_acm_certificate" "web" {
 }
 
 resource "aws_route53_record" "web_certificate" {
-  for_each        = var.web_domain == "" ? {} : { for d in aws_acm_certificate.web[0].domain_validation_options : d.domain_name => d }
+  # Keys are the (known) domain names; only the record values come from the certificate.
+  for_each        = toset(var.web_domain == "" ? [] : [var.web_domain])
   zone_id         = var.route53_zone_id
-  name            = each.value.resource_record_name
-  type            = each.value.resource_record_type
-  records         = [each.value.resource_record_value]
+  name            = one([for d in aws_acm_certificate.web[0].domain_validation_options : d if d.domain_name == each.key]).resource_record_name
+  type            = one([for d in aws_acm_certificate.web[0].domain_validation_options : d if d.domain_name == each.key]).resource_record_type
+  records         = [one([for d in aws_acm_certificate.web[0].domain_validation_options : d if d.domain_name == each.key]).resource_record_value]
   ttl             = 60
   allow_overwrite = true
 }
@@ -105,11 +106,11 @@ resource "aws_acm_certificate" "api" {
 }
 
 resource "aws_route53_record" "api_certificate" {
-  for_each        = { for d in aws_acm_certificate.api.domain_validation_options : d.domain_name => d }
+  for_each        = toset([var.api_domain])
   zone_id         = var.route53_zone_id
-  name            = each.value.resource_record_name
-  type            = each.value.resource_record_type
-  records         = [each.value.resource_record_value]
+  name            = one([for d in aws_acm_certificate.api.domain_validation_options : d if d.domain_name == each.key]).resource_record_name
+  type            = one([for d in aws_acm_certificate.api.domain_validation_options : d if d.domain_name == each.key]).resource_record_type
+  records         = [one([for d in aws_acm_certificate.api.domain_validation_options : d if d.domain_name == each.key]).resource_record_value]
   ttl             = 60
   allow_overwrite = true
 }
@@ -135,11 +136,11 @@ resource "aws_acm_certificate" "admin" {
 }
 
 resource "aws_route53_record" "admin_certificate" {
-  for_each        = length(local.admin_domains) == 0 ? {} : { for d in aws_acm_certificate.admin[0].domain_validation_options : d.domain_name => d }
+  for_each        = toset(local.admin_domains)
   zone_id         = var.route53_zone_id
-  name            = each.value.resource_record_name
-  type            = each.value.resource_record_type
-  records         = [each.value.resource_record_value]
+  name            = one([for d in aws_acm_certificate.admin[0].domain_validation_options : d if d.domain_name == each.key]).resource_record_name
+  type            = one([for d in aws_acm_certificate.admin[0].domain_validation_options : d if d.domain_name == each.key]).resource_record_type
+  records         = [one([for d in aws_acm_certificate.admin[0].domain_validation_options : d if d.domain_name == each.key]).resource_record_value]
   ttl             = 60
   allow_overwrite = true
 }

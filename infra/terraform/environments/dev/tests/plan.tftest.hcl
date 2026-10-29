@@ -14,16 +14,36 @@ mock_provider "aws" {
     }
   }
   # Real Terraform leaves the whole validation set unknown in a mocked plan, which
-  # breaks for_each on the DNS validation records; give it one known entry.
+  # breaks for_each on the DNS validation records; give it one known entry per test domain.
   mock_resource "aws_acm_certificate" {
     defaults = {
       arn = "arn:aws:acm:ap-southeast-2:123456789012:certificate/x"
-      domain_validation_options = [{
-        domain_name           = "mock.example.com"
-        resource_record_name  = "_mock.example.com."
-        resource_record_type  = "CNAME"
-        resource_record_value = "_mock.acm-validations.aws."
-      }]
+      domain_validation_options = [
+        {
+          domain_name           = "app.example.com"
+          resource_record_name  = "_app.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_app.acm-validations.aws."
+        },
+        {
+          domain_name           = "api.example.com"
+          resource_record_name  = "_api.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_api.acm-validations.aws."
+        },
+        {
+          domain_name           = "argocd.example.com"
+          resource_record_name  = "_argocd.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_argocd.acm-validations.aws."
+        },
+        {
+          domain_name           = "grafana.example.com"
+          resource_record_name  = "_grafana.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_grafana.acm-validations.aws."
+        }
+      ]
     }
   }
   mock_resource "aws_iam_openid_connect_provider" { defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" } }
@@ -49,12 +69,32 @@ mock_provider "aws" {
   mock_resource "aws_acm_certificate" {
     defaults = {
       arn = "arn:aws:acm:us-east-1:123456789012:certificate/x"
-      domain_validation_options = [{
-        domain_name           = "mock.example.com"
-        resource_record_name  = "_mock.example.com."
-        resource_record_type  = "CNAME"
-        resource_record_value = "_mock.acm-validations.aws."
-      }]
+      domain_validation_options = [
+        {
+          domain_name           = "app.example.com"
+          resource_record_name  = "_app.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_app.acm-validations.aws."
+        },
+        {
+          domain_name           = "api.example.com"
+          resource_record_name  = "_api.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_api.acm-validations.aws."
+        },
+        {
+          domain_name           = "argocd.example.com"
+          resource_record_name  = "_argocd.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_argocd.acm-validations.aws."
+        },
+        {
+          domain_name           = "grafana.example.com"
+          resource_record_name  = "_grafana.example.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_grafana.acm-validations.aws."
+        }
+      ]
     }
   }
 }
