@@ -1463,6 +1463,14 @@
               }
             },
             {
+              "Sid": "TextractLabelReading",
+              "Effect": "Allow",
+              "Action": [
+                "textract:DetectDocumentText"
+              ],
+              "Resource": "*"
+            },
+            {
               "Sid": "ProjectObjectStorage",
               "Effect": "Allow",
               "Action": [

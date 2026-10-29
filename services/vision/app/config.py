@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     bedrock_model_id: str = ''
     bedrock_daily_request_limit: int = 50
     bedrock_region: str = ''
+    textract_fallback: bool = False
+    textract_region: str = ''
     aws_region: str = 'eu-west-1'
     catalogue_queue_url: str = ''
     match_threshold: float = 0.92

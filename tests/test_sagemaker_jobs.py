@@ -137,3 +137,68 @@ def test_training_image_runs_as_root_so_the_wrapper_can_write_opt_ml():
     dockerfile = (ROOT / 'deploy/docker/Training.Dockerfile').read_text()
     assert 'USER ' not in dockerfile and 'python:3.12' in dockerfile
     assert 'entrypoint.py' in dockerfile
+
+
+def limit_problems(shape, value, path='request'):
+    """Check the published SageMaker length/pattern limits that botocore's validator ignores."""
+    import re
+    problems = []
+    meta = shape.metadata
+    if shape.type_name == 'string' and isinstance(value, str):
+        if 'max' in meta and len(value) > meta['max']:
+            problems.append(f'{path}: {len(value)} characters, maximum {meta["max"]}')
+        if 'pattern' in meta and not re.fullmatch(meta['pattern'], value, re.S):
+            problems.append(f'{path}: does not match {meta["pattern"]}')
+    elif shape.type_name == 'structure':
+        for key, item in value.items():
+            problems += limit_problems(shape.members[key], item, f'{path}.{key}')
+    elif shape.type_name == 'list':
+        if 'max' in meta and len(value) > meta['max']:
+            problems.append(f'{path}: {len(value)} items, maximum {meta["max"]}')
+        for index, item in enumerate(value):
+            problems += limit_problems(shape.member, item, f'{path}[{index}]')
+    elif shape.type_name == 'map':
+        for key, item in value.items():
+            problems += limit_problems(shape.key, key, f'{path} key') + limit_problems(shape.value, item, f'{path}.{key}')
+    return problems
+
+
+def processing_request(monkeypatch, name='stocklane-dev-public-photo-20261029-080928-782f'):
+    monkeypatch.delenv('SAGEMAKER_JOB_TYPE', raising=False)
+    sm = Mock()
+    sm.create_processing_job.return_value = {'ProcessingJobArn': 'arn:processing'}
+    jobs.start(sm, name, ROLE, IMAGE,
+        [('dataset', 's3://owned/benchmarks/public/datasets/' + 'a' * 64 + '/photos/'), ('encoder', 's3://owned/encoders/def/')],
+        's3://owned/benchmarks/public/training', {'task': 'visual_sku', 'benchmark_mode': 'true'}, ['precision', 'recall'])
+    return sm.create_processing_job.call_args.kwargs
+
+
+def test_processing_request_respects_sagemaker_length_limits(monkeypatch):
+    """A 1,160-character entrypoint item was rejected with ValidationException (limit: 256)."""
+    request = processing_request(monkeypatch)
+    assert limit_problems(SCHEMA.operation_model('CreateProcessingJob').input_shape, request) == []
+    assert all(len(item) <= 256 for item in request['AppSpecification']['ContainerEntrypoint'])
+    assert all(len(value) <= 256 for value in request['Environment'].values())
+
+
+def test_packed_entrypoint_runs_the_wrapper_exactly(monkeypatch, tmp_path):
+    request = processing_request(monkeypatch)
+    command = request['AppSpecification']['ContainerEntrypoint'][2]
+    root = tmp_path / 'ml'
+    program = tmp_path / 'program'
+    program.mkdir()
+    (program / 'entrypoint.py').write_text(ENTRYPOINT.format(root=root, code=0))
+    data = root / 'processing' / 'input' / 'dataset'
+    data.mkdir(parents=True)
+    (data / 'rows.txt').write_text('dataset')
+    (root / 'processing' / 'input' / 'encoder').mkdir(parents=True)
+    env = {**os.environ, **request['Environment'], 'STOCKLANE_ML_ROOT': str(root), 'STOCKLANE_PROGRAM_DIR': str(program)}
+    result = subprocess.run([sys.executable, '-c', command], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    with tarfile.open(root / 'processing' / 'output' / 'model.tar.gz') as archive:
+        assert archive.getnames() == ['metrics.json']
+    # The compressed copy is exactly the readable wrapper that the other tests run directly.
+    import base64, zlib
+    parts = sorted((k for k in request['Environment'] if k.startswith('STOCKLANE_WRAPPER_')), key=lambda k: int(k.rsplit('_', 1)[1]))
+    packed = ''.join(request['Environment'][k] for k in parts)
+    assert zlib.decompress(base64.b64decode(packed)).decode() == jobs.WRAPPER

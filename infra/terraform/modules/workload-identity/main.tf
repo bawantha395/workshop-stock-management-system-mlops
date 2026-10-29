@@ -64,7 +64,9 @@ resource "aws_iam_role_policy" "vision" {
     { Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = var.queues.events["catalogue"].arn },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${local.media_arn}/images/*" },
     { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${local.models_arn}/releases/*" },
-    { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = var.kms_key_arn }
+    { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = var.kms_key_arn },
+    # Label-text fallback when Bedrock is unavailable (Textract has no resource-level permissions).
+    { Effect = "Allow", Action = ["textract:DetectDocumentText"], Resource = "*" }
   ], var.bedrock_invoke_arn == "" ? [] : [{ Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.bedrock_invoke_arn }]) })
 }
 

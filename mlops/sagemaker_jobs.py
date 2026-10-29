@@ -16,10 +16,12 @@ processing job:
 Set SAGEMAKER_JOB_TYPE=training to use real training jobs once a training
 instance quota is approved. SAGEMAKER_INSTANCE_TYPE overrides the instance.
 """
+import base64
 import json
 import os
 import signal
 import time
+import zlib
 
 from botocore.exceptions import ClientError
 
@@ -53,6 +55,20 @@ print('Packed',len(list(model.iterdir())),'model file(s) into model.tar.gz',flus
 '''
 
 
+def packed_wrapper():
+    """Return (command, environment) that run WRAPPER within SageMaker's 256-character limits.
+
+    SageMaker limits every ContainerEntrypoint item and every environment value to 256
+    characters, and the wrapper is longer. It is compressed, base64-encoded and spread over
+    a few environment variables; the short command below decodes and runs it.
+    """
+    packed = base64.b64encode(zlib.compress(WRAPPER.encode(), 9)).decode()
+    chunks = [packed[i:i + 240] for i in range(0, len(packed), 240)]
+    command = ("import os,base64,zlib;exec(zlib.decompress(base64.b64decode("
+               "''.join(os.environ['STOCKLANE_WRAPPER_'+str(i)] for i in range(" + str(len(chunks)) + ")))))")
+    return command, {'STOCKLANE_WRAPPER_' + str(i): chunk for i, chunk in enumerate(chunks)}
+
+
 def job_type():
     value = os.environ.get('SAGEMAKER_JOB_TYPE', 'processing').strip().lower()
     if value not in DEFAULTS:
@@ -84,10 +100,12 @@ def start(sm, name, role, image, channels, output_path, hyperparameters=None, me
         if parameters:
             request['HyperParameters'] = parameters
         return kind, sm.create_training_job(**request).get('TrainingJobArn')
+    command, wrapper_environment = packed_wrapper()
     response = sm.create_processing_job(ProcessingJobName=name, RoleArn=role,
-        AppSpecification={'ImageUri': image, 'ContainerEntrypoint': ['python', '-c', WRAPPER]},
+        AppSpecification={'ImageUri': image, 'ContainerEntrypoint': ['python', '-c', command]},
         Environment={'STOCKLANE_CHANNELS': json.dumps([channel for channel, _ in channels]),
-                     'STOCKLANE_HYPERPARAMETERS': json.dumps(parameters), 'TRAINING_JOB_NAME': name},
+                     'STOCKLANE_HYPERPARAMETERS': json.dumps(parameters), 'TRAINING_JOB_NAME': name,
+                     **wrapper_environment},
         ProcessingInputs=[{'InputName': channel, 'S3Input': {'S3Uri': uri,
             'LocalPath': '/opt/ml/processing/input/' + channel, 'S3DataType': 'S3Prefix',
             'S3InputMode': 'File', 'S3DataDistributionType': 'FullyReplicated'}} for channel, uri in channels],

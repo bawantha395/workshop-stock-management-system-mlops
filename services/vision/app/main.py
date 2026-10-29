@@ -22,6 +22,7 @@ from .storage import Store
 from .encoder import Encoder
 from .qr import product_qr
 from .bedrock import propose, PROMPT_VERSION, BedrockUnavailable, failure
+from . import textract
 
 log = logging.getLogger('stocklane.vision')
 
@@ -319,9 +320,17 @@ def create_app(settings=None):
                 draft_events.labels(problem.code).inc()
                 bedrock_observation.update(state='unavailable',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=problem.code)
                 log.warning('AI drafting unavailable code=%s',problem.code)
-                return JSONResponse(status_code=problem.status,
-                    content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
-                    headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
+                fields=None
+                if s.textract_fallback:
+                    # Bedrock is unavailable (for example a zero account quota): read the label text instead.
+                    try:fields=textract.propose(s,image) or None
+                    except Exception as fallback_error:log.warning('Textract fallback failed type=%s',type(fallback_error).__name__)
+                if fields is None:
+                    return JSONResponse(status_code=problem.status,
+                        content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
+                        headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
+                source=textract.SOURCE
+                draft_events.labels(source).inc()
             try:cache.set(key,json.dumps([fields,source]),ex=900)
             except redis.RedisError:pass
         row={'id':str(uuid.uuid4()),'image_id':body.imageId,'fields':json.dumps(fields),'source':source,'status':'PENDING','created_at':datetime.now(timezone.utc).isoformat(),'actor':actor,'product_id':None}

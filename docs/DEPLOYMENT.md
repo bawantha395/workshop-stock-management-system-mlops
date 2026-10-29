@@ -157,11 +157,16 @@ only applied while `main` is still at the commit it was planned from).
 
 ## Try the AI features
 
-1. **Bedrock label suggestions:** in the app choose **Receive stock → register a new
+1. **AI label suggestions:** in the app choose **Receive stock → register a new
    item**, add a photo of a product label and use the AI suggestion. It calls
    `amazon.nova-lite-v1:0` in `us-east-1` (`bedrock_region`) and is limited to 50
-   uncached requests per day. If it says suggestions are not enabled, check Bedrock
-   model access and quotas in us-east-1.
+   uncached requests per day. If Bedrock is unavailable (for example the account has
+   no Bedrock quota yet), the app **falls back to Amazon Textract**, which reads the
+   printed text and fills in name, brand, part number, category, grade and capacity.
+   Fields it cannot read are left blank and a person reviews every draft. The fallback
+   is on by default (`TEXTRACT_FALLBACK`) and the status endpoint still reports the
+   real Bedrock problem. The first time you use it, re-run the CloudShell bootstrap
+   (without `--create-access-key`) so the IAM boundary allows `textract:DetectDocumentText`.
 2. **SageMaker models:** run **Train real-data ML models** (`train-public-data`) on
    the environment, or tick `train` when you deploy. The jobs appear under
    SageMaker → Processing jobs, and the results appear as *pending* versions in the

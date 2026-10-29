@@ -74,7 +74,7 @@ a production-quality model.
 
 | Step | Where | What it proves |
 | --- | --- | --- |
-| Label suggestion | App → register item → AI suggestion | Bedrock call from EKS with Pod Identity, no API key |
+| Label suggestion | App → register item → AI suggestion | Bedrock call from EKS with Pod Identity, no API key; falls back to Textract text reading when Bedrock is unavailable |
 | Train | Actions → *Train real-data ML models* | SageMaker jobs from CI, quality gates, nothing left running |
 | Registry | SageMaker → Model Registry | Versioned, reviewable models in `PendingManualApproval` |
 | Release gate | `mlops/review_model.py`, `promote.py` | Benchmark and synthetic models cannot reach production |
