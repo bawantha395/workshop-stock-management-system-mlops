@@ -549,6 +549,24 @@
                   }
                 },
                 {
+                  "Sid": "ReadProjectCognitoUsers",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cognito-idp:AdminGetUser",
+                    "cognito-idp:AdminListGroupsForUser"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
                   "Sid": "IamDiscovery",
                   "Effect": "Allow",
                   "Action": [

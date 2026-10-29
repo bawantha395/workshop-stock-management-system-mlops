@@ -1019,11 +1019,17 @@ def test_plan_can_refresh_cognito_resources_without_group_mutation_permissions()
         return False
     pool = "arn:aws:cognito-idp:ap-southeast-2:123456789012:userpool/ap-southeast-2_Example"
     # Read APIs used to refresh every Cognito resource in web-auth.tf.
+    # AdminGetUser/AdminListGroupsForUser refresh the Terraform-managed OWNER user and its group.
     for action in ["DescribeUserPool", "DescribeUserPoolClient", "DescribeUserPoolDomain",
-                   "DescribeResourceServer", "GetUserPoolMfaConfig", "GetGroup", "ListTagsForResource"]:
+                   "DescribeResourceServer", "GetUserPoolMfaConfig", "GetGroup", "ListTagsForResource",
+                   "AdminGetUser", "AdminListGroupsForUser"]:
         assert allowed("cognito-idp:" + action, pool), action
-    for action in ["CreateGroup", "UpdateGroup", "DeleteGroup", "AdminAddUserToGroup", "AdminGetUser"]:
+    # The plan role stays read-only: it can never create, change or delete groups or users.
+    for action in ["CreateGroup", "UpdateGroup", "DeleteGroup", "AdminAddUserToGroup", "AdminCreateUser",
+                   "AdminDeleteUser", "AdminSetUserPassword", "AdminUpdateUserAttributes",
+                   "AdminRemoveUserFromGroup", "AdminDisableUser"]:
         assert not allowed("cognito-idp:" + action, pool), action
+    assert not allowed("cognito-idp:AdminGetUser", pool.replace("123456789012", "999999999999"))
     assert not allowed("cognito-idp:GetGroup", pool.replace("123456789012", "999999999999"))
     assert not allowed("cognito-idp:GetGroup", pool.replace("ap-southeast-2", "us-east-1"))
     assert not allowed("cognito-idp:GetGroup", pool, region="us-east-1")
