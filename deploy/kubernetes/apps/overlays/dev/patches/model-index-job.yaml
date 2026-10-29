@@ -81,15 +81,12 @@ spec:
           name: TEXTRACT_FALLBACK
           value: 'true'
         - &id025
-          name: TRAINING_EXPORT
-          value: 'true'
-        - &id026
           name: DEPLOYMENT_ENVIRONMENT
           value: dev
-        - &id027
+        - &id026
           name: MODEL_BUCKET
           value: stocklane-dev-models-721274598579
-        - &id028
+        - &id027
           name: BEDROCK_DAILY_REQUEST_LIMIT
           value: '50'
       containers:
@@ -122,7 +119,6 @@ spec:
         - *id025
         - *id026
         - *id027
-        - *id028
         - name: DATABASE_SCHEMA
           value: vision
         - name: PYTHONPATH

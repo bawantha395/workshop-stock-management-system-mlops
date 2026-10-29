@@ -1,6 +1,6 @@
 # ONE-CLICK DEPLOY: builds a complete Stocklane environment from nothing.
 #
-#   test ─► plan ─► apply ─► release ─► platform ─► frontend ─► (train) ─► summary
+#   test ─► plan ─► apply ─► release ─► platform ─► frontend ─► summary
 #
 #   test      ci.yml: unit tests, Terraform validate + mocked plan, Kustomize checks
 #   plan      Terraform plan saved privately (infra/terraform/environments/<env>)
@@ -9,9 +9,9 @@
 #   platform  private CodeBuild installs Argo CD + controllers; Argo CD syncs the
 #             release commit; HTTPS API probe
 #   frontend  publish the React app to S3 + CloudFront
-#   train     optional: SageMaker Processing jobs -> Model Registry
 #
-# To serve a newly approved model, run Deploy again with its model_package ARN.
+# After deploying, the models look after themselves: the forecast runs every night, the photo
+# model retrains every week and is released through GitOps when it passes its quality gate.
 #
 # Run "Destroy environment" afterwards to stop all charges.
 name: Deploy environment
@@ -23,10 +23,6 @@ on:
         type: choice
         options: [dev, staging, prod]
         default: dev
-      train:
-        description: Also train the ML models on SageMaker after deploying
-        type: boolean
-        default: false
       model_package:
         description: Optional approved Model Registry version ARN to serve; empty keeps the baseline model
         type: string
@@ -91,17 +87,8 @@ jobs:
       ref: ${{ needs.release.outputs.sha }}
     secrets: inherit
 
-  train:
-    needs: frontend
-    if: inputs.train
-    uses: ./.github/workflows/train-public-data.yml
-    with:
-      environment: ${{ inputs.environment }}
-      task: both
-    secrets: inherit
-
   summary:
-    needs: [frontend, train]
+    needs: frontend
     if: always() && needs.frontend.result == 'success'
     runs-on: ubuntu-latest
     permissions: {}
@@ -109,7 +96,6 @@ jobs:
       - name: Print the environment URLs
         env:
           TARGET: ${{ inputs.environment }}
-          TRAINED: ${{ needs.train.result }}
           TFVARS_JSON: ${{ inputs.environment == 'prod' && secrets.TFVARS_JSON_PROD || inputs.environment == 'staging' && secrets.TFVARS_JSON_STAGING || secrets.TFVARS_JSON }}
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
@@ -120,6 +106,5 @@ jobs:
           for label, key in [("App", "web_domain"), ("API", "api_domain"), ("Argo CD", "argocd_domain"), ("Grafana", "grafana_domain")]:
               if d.get(key):
                   print(f"| {label} | https://{d[key]} |")
-          print(f"\nSageMaker training: {os.environ['TRAINED'] or 'skipped'}")
           print("\nWhen you are done, run **Destroy environment** to stop all charges.")
           PY

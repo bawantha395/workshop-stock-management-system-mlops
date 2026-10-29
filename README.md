@@ -1,10 +1,14 @@
 # Stocklane — workshop stock management on AWS
 
-A stock-management system for a vehicle workshop: mechanics receive and take out
-stock by scanning a QR label or taking a photo, owners see stock analysis and a
-usage forecast. It runs as microservices on **Amazon EKS**, is built entirely
-with **Terraform + GitHub Actions + Argo CD**, and has **dev, staging and prod**
-environments that can each be created and destroyed with one pipeline run.
+A stock-management system for a vehicle workshop, built around one problem: **parts go
+missing and nobody knows who took them or when to reorder.** Everything that enters or
+leaves the storeroom is recorded at the *storeroom counter* (received, given to a named
+person, taken back), by scanning a QR label or taking a photo. The owner gets a plain
+stock report and a reorder list that update by themselves.
+
+It runs as microservices on **Amazon EKS**, is built entirely with **Terraform +
+GitHub Actions + Argo CD**, and has **dev, staging and prod** environments that can each
+be created and destroyed with one pipeline run.
 
 ## Architecture
 
@@ -28,7 +32,8 @@ flowchart LR
   EKS --> S3[(S3 photos, models)]
   EKS --> SQS[SQS + DLQ]
   VIS --> BR[Bedrock Nova Lite]
-  SM[SageMaker jobs] --> REG[Model Registry]
+  FJ[Nightly forecast<br/>Chronos-Bolt] --> S3
+  SM[Weekly photo training<br/>SageMaker] --> REG[Model Registry]
   U -. sign in .-> COG[Cognito + MFA]
 ```
 
@@ -38,8 +43,8 @@ flowchart LR
 - **Observability:** Prometheus, Alertmanager → SNS, Grafana dashboards,
   CloudWatch logs and alarms, a budget, and a Lambda that writes a root-cause
   summary when an alarm fires.
-- **AI/MLOps:** photo matching, stock forecasting and Bedrock label reading,
-  with SageMaker jobs, quality gates and a reviewed Model Registry
+- **AI/MLOps:** a pretrained forecasting model, a photo matcher that retrains itself and
+  Bedrock label reading, all with quality gates and no manual approval
   ([docs/MLOPS.md](docs/MLOPS.md)).
 
 ## Repository layout
@@ -47,7 +52,7 @@ flowchart LR
 ```text
 apps/web/                 React frontend
 services/                 inventory, workshop (Spring Boot) · vision, forecast (FastAPI)
-mlops/                    SageMaker jobs, evaluation, promotion
+mlops/                    nightly forecast, weekly photo training, promotion
 infra/
   ci/                     foundation: CI roles + state bucket (CloudFormation, once)
   terraform/modules/      network, data, registry, eks, workload-identity, edge,
@@ -58,7 +63,7 @@ deploy/
                           monitoring, vendored pinned upstream YAML
   docker/                 service and training images
   codebuild/              private in-VPC runner for the cluster bootstrap
-scripts/                  pipeline steps (Python), local dev helpers
+scripts/                  pipeline steps (Python)
 tests/                    pipeline, Terraform, Kustomize and ML safeguards
 .github/workflows/        deploy, destroy, ci + reusable stages (_*.yml) + ML jobs
 ```
@@ -81,7 +86,7 @@ and the pipeline input.
 flowchart LR
   subgraph deploy.yml [Deploy environment]
     direction LR
-    t[test] --> p[plan] --> a[apply] --> r[release] --> k[platform] --> f[frontend] --> m[train?]
+    t[test] --> p[terraform init + plan] --> a[apply] --> r[build + push images<br/>commit overlay] --> k[Argo CD + monitoring] --> f[frontend]
   end
   subgraph destroy.yml [Destroy environment]
     direction LR
@@ -95,13 +100,12 @@ reusable workflow (`_terraform`, `_release`, `_platform`, `_frontend`,
 
 | Stage | What happens |
 | --- | --- |
-| test | `ci.yml`: Java, frontend, Python tests; `terraform validate` + mocked plan for all three environments; Kustomize build and schema checks; actionlint; Trivy |
-| plan | Terraform plan for `infra/terraform/environments/<env>`, saved privately to S3 with an ID and SHA256 |
-| apply | applies **exactly** that saved plan (the hash is checked) |
-| release | builds images to ECR by digest, renders the env's Kustomize overlay, commits it to `main` (GitOps) |
-| platform | private CodeBuild runner inside the VPC installs Argo CD and controllers; Argo CD syncs the release commit; HTTPS probe |
+| test | `ci.yml`: Java, frontend and Python tests; `terraform init -backend=false` + `validate` + a mocked plan for all three environments (checks the code only, touches no AWS); Kustomize build and schema checks; actionlint; Trivy |
+| init + plan | the real `terraform init` against the S3 state, then a plan saved privately with an ID and SHA256 |
+| apply | applies **exactly** that saved plan (the hash is checked). This creates the ECR repositories, so images can only be pushed after it |
+| build + push | builds the four service images, the web app and the photo-training image, pushes them to ECR by digest, renders the Kustomize overlay and commits it to `main` (GitOps) |
+| Argo CD + monitoring | a private CodeBuild runner inside the VPC installs Argo CD; Argo CD syncs the release commit, including Prometheus, Alertmanager and Grafana; HTTPS probe |
 | frontend | publishes the React build to S3 and invalidates CloudFront |
-| train | optional SageMaker jobs that register pending model versions |
 
 Destroy first removes what Kubernetes created in AWS (load balancers, volumes,
 DNS records), then runs a reviewed `terraform destroy`, then **checks that
@@ -158,15 +162,18 @@ of controllers and services.
   snapshots, bucket retention and secret recovery windows so dev/staging destroy
   cleanly; prod keeps all of them.
 
-## Run it locally
+## Models
 
-```bash
-python3 scripts/configure_local.py
-docker compose --profile tools run --rm model-init
-docker compose up --build -d          # http://localhost:4173
-```
+| Model | What it does | How it runs |
+| --- | --- | --- |
+| Stock forecast | Pretrained **Chronos-Bolt** predicts how much of each item will be used | nightly job on a GitHub runner; each item is back-tested and released only if the test error is small; otherwise the reorder level is used |
+| Photo matcher | MobileNetV2 features plus a calibrator trained on photos people confirmed | retrains every Sunday on SageMaker; approved and rolled out by itself only if it beats the served model |
+| Label reading | Textract, then Bedrock tool use, suggests the name, brand and size | on demand, when a new item is photographed |
 
-Tests and tool setup: [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
+## Using it
+
+There is no local setup. Push to `main`, run **Deploy environment**, open the app URL.
+Argo CD and Grafana in dev and staging sign in with `admin` / `admin`.
 
 ## More docs
 
@@ -175,7 +182,6 @@ Tests and tool setup: [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | One-time setup, deploy, destroy, troubleshooting |
 | [infra/README.md](infra/README.md) | Terraform modules and environments |
 | [docs/KUSTOMIZE.md](docs/KUSTOMIZE.md) | Kubernetes layout, overlays, Argo CD |
-| [docs/MLOPS.md](docs/MLOPS.md) | SageMaker, Model Registry, Bedrock |
-| [docs/REAL_DATA.md](docs/REAL_DATA.md) | Training on real public data (UCI sales, Kaggle car-part photos) |
+| [docs/MLOPS.md](docs/MLOPS.md) | Models, nightly forecast, weekly photo training, Bedrock |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Stock rules, alerts, recovery drills |
 | [docs/WAREHOUSE_UX.md](docs/WAREHOUSE_UX.md), [docs/STOCK_ANALYSIS.md](docs/STOCK_ANALYSIS.md), [docs/DEMAND_FORECASTING.md](docs/DEMAND_FORECASTING.md) | Application features |

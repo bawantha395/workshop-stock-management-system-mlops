@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   validQuantity,
   plannedOut,
-  verifyExisting,
   complete,
   emptyTask,
 } from "../src/task.ts";
@@ -39,25 +38,9 @@ test("outgoing draft includes every unsent line for the item, but not recorded l
     5,
   );
 });
-test("capture reuse cannot silently accept another product, amount or direction", () => {
-  const movement = { product_id: "filter", kind: "STOCK_OUT", quantity: 2 };
-  assert.doesNotThrow(() => verifyExisting(movement, line, "OUT"));
-  assert.throws(() =>
-    verifyExisting({ ...movement, product_id: "belt" }, line, "OUT"),
-  );
-  assert.throws(() =>
-    verifyExisting({ ...movement, quantity: 3 }, line, "OUT"),
-  );
-  assert.throws(() => verifyExisting(movement, line, "IN"));
-});
-test("stock recorded is distinct from camera reconciliation and reference indexing", () => {
+test("stock recorded is distinct from reference indexing", () => {
   assert.equal(complete(line), false);
   assert.equal(complete({ ...line, movementId: "m1" }), true);
-  assert.equal(complete({ ...line, movementId: "m1", captureId: "c1" }), false);
-  assert.equal(
-    complete({ ...line, movementId: "m1", captureId: "c1", reconciled: true }),
-    true,
-  );
   assert.equal(complete({ ...line, movementId: "m1", reference: true }), false);
   assert.equal(
     complete({

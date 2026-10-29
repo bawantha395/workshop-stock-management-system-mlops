@@ -4,7 +4,6 @@ from types import SimpleNamespace
 import pytest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'mlops'))
-from review_model import review
 from stage_encoder import stage
 from upload_dataset import upload
 
@@ -31,19 +30,6 @@ def test_dataset_validation_happens_before_any_upload(tmp_path):
     s3=MemoryS3()
     with pytest.raises(ValueError,match='60'):upload(tmp_path,'models','ap-southeast-2',s3)
     assert s3.puts==[]
-
-def test_review_cannot_approve_another_account_or_unready_package():
-    config={'region':'ap-southeast-2','account_id':'123456789012','model_package_group':'stocklane-visual-sku'}
-    class SM:
-        def __init__(self):self.calls=[];self.status='Pending'
-        def describe_model_package(self,**kw):return {'ModelPackageStatus':self.status}
-        def update_model_package(self,**kw):self.calls.append(kw)
-    sm=SM();arn='arn:aws:sagemaker:ap-southeast-2:123456789012:model-package/stocklane-visual-sku/1'
-    with pytest.raises(ValueError):review(arn.replace('123456789012','999999999999'),'Approved',config,sm)
-    with pytest.raises(ValueError,match='ready'):review(arn,'Approved',config,sm)
-    assert not sm.calls
-    sm.status='Completed';review(arn,'Approved',config,sm)
-    assert sm.calls==[{'ModelPackageArn':arn,'ModelApprovalStatus':'Approved'}]
 
 def test_dataset_upload_is_content_addressed_and_has_per_file_checksums(tmp_path):
     rows=['file,sku,session,split']

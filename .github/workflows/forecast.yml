@@ -1,4 +1,4 @@
-name: Train and publish stock forecast
+name: Nightly stock forecast
 on:
   # Every night at 02:00 Asia/Colombo (20:30 UTC), after the app exports its history at 01:30.
   schedule:
@@ -11,7 +11,7 @@ on:
         options: [dev, staging, prod]
         default: dev
       publish:
-        description: Publish forecasts that pass the gate, or explicitly labelled baseline results
+        description: Publish the forecast (items that fail their back-test are left out)
         required: true
         type: boolean
         default: true
@@ -24,7 +24,7 @@ env:
   AWS_DEFAULT_REGION: ap-southeast-2
   AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
 jobs:
-  train:
+  forecast:
     if: github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
@@ -32,11 +32,11 @@ jobs:
       matrix:
         environment: ${{ fromJSON(github.event_name == 'schedule' && '["dev","staging","prod"]' || format('["{0}"]', inputs.environment)) }}
     concurrency:
-      group: stock-forecast-training-${{ matrix.environment }}
+      group: stock-forecast-${{ matrix.environment }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: aws-training
-    timeout-minutes: 50
+    timeout-minutes: 30
     env:
       PROJECT_NAME: stocklane-${{ matrix.environment }}
       TF_ENVIRONMENT: ${{ matrix.environment }}
@@ -52,7 +52,10 @@ jobs:
           role: github-training
           access-key-id: ${{ matrix.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || matrix.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
           secret-access-key: ${{ matrix.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || matrix.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
-      - run: pip install boto3==1.43.118
+      - name: Install the forecasting model runtime (CPU only)
+        run: |
+          pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r mlops/forecast-requirements.txt
       - name: Check the environment is deployed
         id: deployed
         env:
@@ -66,10 +69,10 @@ jobs:
           else
             exit 1
           fi
-      - name: Train, evaluate and publish forecast
+      - name: Forecast with Chronos-Bolt, back-test and publish
         if: steps.deployed.outputs.ready == 'true'
         env:
-          # Nightly runs always publish: the per-item quality gate decides ML or baseline.
+          # Nightly runs always publish: each item's back-test decides whether its forecast is used.
           PUBLISH_FORECAST: ${{ github.event_name == 'schedule' || inputs.publish }}
         run: |
           args=()
@@ -83,5 +86,5 @@ jobs:
           report=json.load(open('artifacts/forecast-report.json'))
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
               f.write('## Stock forecast result ('+os.environ['TF_ENVIRONMENT']+')\n\n```json\n'+json.dumps(report,indent=2)+'\n```\n')
-              f.write('Only trained_ml rows are accepted ML. Weekday baselines and insufficient history are labelled separately. No stock was changed.\n')
+              f.write('Items whose back-test failed, or with too little history, use the reorder-level rule. No stock was changed.\n')
           PYCODE

@@ -9,7 +9,6 @@ spring:
 app:
   auth-mode: local
   internal-token: ${INTERNAL_TOKEN:local-development-service-token-32-characters}
-  vision-read-token: ${VISION_READ_TOKEN:${INTERNAL_TOKEN:local-development-service-token-32-characters}}
   workshop-url: ${WORKSHOP_URL:http://localhost:8082}
   vision-url: ${VISION_URL:http://localhost:8083}
   event-mode: http

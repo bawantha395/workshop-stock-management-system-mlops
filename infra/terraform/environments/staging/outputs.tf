@@ -47,7 +47,6 @@ output "deployment" {
     cognito_issuer           = "https://cognito-idp.${var.region}.amazonaws.com/${module.auth.user_pool_id}"
     cognito_user_pool_id     = module.auth.user_pool_id
     cognito_web_client_id    = module.auth.web_client_id
-    cognito_camera_client_id = module.auth.camera_client_id
     cognito_token_url        = "https://${module.auth.domain}.auth.${var.region}.amazoncognito.com/oauth2/token"
 
     # delivery
@@ -61,7 +60,6 @@ output "deployment" {
     # ML and AI
     training_role_arn            = module.ml.training_role_arn
     model_package_group          = module.ml.vision_model_group.name
-    forecast_model_package_group = module.ml.forecast_model_group.name
     bedrock_model_id             = module.ml.bedrock_model_id
     bedrock_region               = module.ml.bedrock_region
     bedrock_daily_request_limit  = var.bedrock_daily_request_limit

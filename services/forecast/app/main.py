@@ -27,29 +27,36 @@ class Settings(BaseSettings):
     model_bucket:str=''
     aws_region:str='ap-southeast-2'
 
+USABLE={'forecast','not_moving'}
+KNOWN=USABLE|{'needs_more_history','unreliable'}
+
 def projection(model,products,today=None):
-    if model.get('syntheticData'):raise ValueError('Synthetic demo forecasts cannot be served as workshop demand')
-    if model.get('benchmarkOnly'):raise ValueError('Public benchmark results cannot be served as workshop demand')
+    """Join the nightly forecast with live stock. Items without a usable forecast are still listed
+    (with their reorder level) so the app can always give a plain answer."""
     today=today or datetime.now(ZoneInfo('Asia/Colombo')).date()
-    if model.get('schemaVersion')!=1 or model.get('task')!='stock_usage_forecast':raise ValueError('Invalid forecast schema')
-    end=date.fromisoformat(model['historyUntil'])
-    trained=datetime.fromisoformat(model['trainedAt'].replace('Z','+00:00'))
-    if trained>datetime.now(timezone.utc)+timedelta(minutes=5):raise ValueError('Future model timestamp')
-    if end>today or end<today-timedelta(days=7):
-        return {'status':'stale','products':[],'message':'Prepare fresh history and rerun the forecast pipeline; the previous forecast is stale.'}
-    indexed={p['id']:p for p in model['products']};rows=[]
+    state='not_trained';forecasts={};result={}
+    if model:
+        if model.get('schemaVersion')!=1 or model.get('task')!='stock_usage_forecast':raise ValueError('Invalid forecast schema')
+        end=date.fromisoformat(model['historyUntil'])
+        if datetime.fromisoformat(model['generatedAt'].replace('Z','+00:00'))>datetime.now(timezone.utc)+timedelta(minutes=5):raise ValueError('Future model timestamp')
+        if today-timedelta(days=7)<=end<=today:
+            state='fresh';forecasts={p['id']:p for p in model['products']}
+            result.update(generatedAt=model['generatedAt'],historyUntil=model['historyUntil'],datasetSha256=model['datasetSha256'],model=model.get('model'))
+        else:state='stale'
+    rows=[]
     for item in products:
-        row={k:item.get(k) for k in ('id','sku','name','unit')};row['availableNow']=float(item['quantity']);forecast=indexed.get(item['id'])
-        if not forecast or not forecast['daily']:
-            row.update(status='insufficient_history',message=(forecast or {}).get('message','Prepare fresh history for this item.'));rows.append(row);continue
+        row={k:item.get(k) for k in ('id','sku','name','unit')};row['availableNow']=float(item['quantity']);row['reorderLevel']=float(item.get('reorder_level') or 0)
+        forecast=forecasts.get(item['id'])
+        if forecast and forecast['status'] not in KNOWN:raise ValueError('Unknown forecast status')
+        if not forecast or forecast['status'] not in USABLE:
+            row.update(status=forecast['status'] if forecast else 'no_forecast',message=forecast['message'] if forecast else 'No forecast yet; the reorder level is used.');rows.append(row);continue
         selected={date.fromisoformat(d['date']):float(d['quantity']) for d in forecast['daily']}
         days=[today+timedelta(days=i) for i in range(30)]
         if any(d not in selected or not math.isfinite(selected[d]) or selected[d]<0 for d in days):raise ValueError('Incomplete forecast horizon')
-        if forecast['status'] not in {'trained_ml','weekday_baseline'}:raise ValueError('Unknown forecast status')
         next7=sum(selected[d] for d in days[:7]);next30=sum(selected[d] for d in days);topup=max(0,next7-row['availableNow'])
-        row.update(status=forecast['status'],message=forecast['message'],historyDays=forecast['historyDays'],next7=round(next7,3),next30=round(next30,3),suggestedTopUp7=math.ceil(topup) if item['unit']=='UNIT' else math.ceil(topup*1000)/1000,evaluation=forecast.get('evaluation'))
+        row.update(status=forecast['status'],message=forecast['message'],historyDays=forecast['historyDays'],next7=round(next7,3),next30=round(next30,3),suggestedTopUp7=math.ceil(topup) if item['unit']=='UNIT' else math.ceil(topup*1000)/1000)
         rows.append(row)
-    return {'status':'ready','trainedAt':model['trainedAt'],'historyUntil':model['historyUntil'],'datasetSha256':model['datasetSha256'],'products':rows,'message':'Usage estimates; seven-day top-up excludes supplier lead time and safety stock. No stock is changed automatically.'}
+    return {'status':'ready','forecast':state,'products':rows,**result}
 
 def create_app(settings=None,s3=None):
     s=settings or Settings()
@@ -73,22 +80,23 @@ def create_app(settings=None,s3=None):
     @app.get('/api/forecast')
     def forecast(request:Request):
         security.staff(request,owner=True)
-        if not s.model_bucket:return {'status':'not_configured','products':[],'message':'Deploy the model bucket configuration first.'}
         try:
-            with lock:
-                if time.monotonic()>cached['until']:
-                    try:
-                        response=storage().get_object(Bucket=s.model_bucket,Key='forecast/current.json')
-                        with response['Body'] as body:raw=body.read(12*1024*1024+1)
-                        if len(raw)>12*1024*1024:raise ValueError('Forecast artifact too large')
-                        cached.update(value=json.loads(raw),until=time.monotonic()+60)
-                    except ClientError as error:
-                        if error.response['Error']['Code'] not in {'NoSuchKey','404'}:raise
-                        calls.labels('not_trained').inc();return {'status':'not_trained','products':[],'message':'Prepare confirmed history, then run Train and publish stock forecast.'}
-                model=cached['value']
+            model=None
+            if s.model_bucket:
+                with lock:
+                    if time.monotonic()>cached['until']:
+                        try:
+                            response=storage().get_object(Bucket=s.model_bucket,Key='forecast/current.json')
+                            with response['Body'] as body:raw=body.read(12*1024*1024+1)
+                            if len(raw)>12*1024*1024:raise ValueError('Forecast artifact too large')
+                            cached.update(value=json.loads(raw),until=time.monotonic()+60)
+                        except ClientError as error:
+                            if error.response['Error']['Code'] not in {'NoSuchKey','404'}:raise
+                            cached.update(value=None,until=time.monotonic()+60)
+                    model=cached['value']
             response=httpx.get(s.inventory_url+'/internal/catalogue',headers={'X-Internal-Token':s.inventory_read_token or s.internal_token},timeout=8,trust_env=False);response.raise_for_status()
-            result=projection(model,response.json());calls.labels(result['status']).inc()
-            age.set((datetime.now(ZoneInfo('Asia/Colombo')).date()-date.fromisoformat(model['historyUntil'])).days)
+            result=projection(model,response.json());calls.labels(result['forecast']).inc()
+            if model:age.set((datetime.now(ZoneInfo('Asia/Colombo')).date()-date.fromisoformat(model['historyUntil'])).days)
             return result
         except (ValueError,KeyError,TypeError,ClientError,BotoCoreError,httpx.HTTPError):
             calls.labels('error').inc();raise HTTPException(503,'Forecast results are unavailable. Verify the pipeline, S3 permissions and Inventory connectivity.') from None

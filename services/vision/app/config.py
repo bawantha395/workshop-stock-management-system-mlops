@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     auth_mode: str = 'cognito'
     internal_token: str = ''
     inventory_read_token: str = ''
-    vision_read_token: str = ''
     cognito_issuer: str = ''
     cognito_client_ids: str = ''
     web_origin: str = 'http://localhost:4173'
@@ -37,6 +36,6 @@ class Settings(BaseSettings):
             raise RuntimeError('INTERNAL_TOKEN must contain at least 32 characters')
         if self.auth_mode != 'local' and (not self.cognito_issuer or not self.cognito_client_ids):
             raise RuntimeError('Configure Cognito issuer and allowed clients')
-        if self.auth_mode != 'local' and min(len(self.inventory_read_token),len(self.vision_read_token))<32:
-            raise RuntimeError('Configure scoped inventory-read and capture-read capability tokens')
+        if self.auth_mode != 'local' and len(self.inventory_read_token)<32:
+            raise RuntimeError('Configure the scoped inventory-read capability token')
         Path(self.files_root).mkdir(parents=True, exist_ok=True)

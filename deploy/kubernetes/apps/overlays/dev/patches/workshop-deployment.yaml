@@ -7,4 +7,4 @@ spec:
   template:
     metadata:
       annotations:
-        stocklane.io/config-sha256: 016cdc851a93e4ac16ee113323763eba58e6d1bbf16c6c0270ead0b5397ffc5d
+        stocklane.io/config-sha256: 004b4ff7a33d93a5b87aa8a67d0c1aaf2033154afc2069150c8b468b8264668c

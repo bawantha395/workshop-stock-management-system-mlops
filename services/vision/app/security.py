@@ -10,7 +10,7 @@ class Security:
         self.keys = None
         self.expires = 0
 
-    def staff(self, request: Request, capture=False, owner=False):
+    def staff(self, request: Request, owner=False):
         s = self.settings
         if s.auth_mode == 'local':
             if owner and request.headers.get('X-Demo-User') == 'mechanic':
@@ -33,8 +33,7 @@ class Security:
             if owner and 'OWNER' not in groups:
                 raise HTTPException(403, 'Owner access is required')
             if not groups.intersection({'OWNER', 'MECHANIC'}):
-                if not capture or 'stocklane/capture' not in claims.get('scope', '').split():
-                    raise HTTPException(403, 'Staff access is required')
+                raise HTTPException(403, 'Staff access is required')
             return claims.get('sub') or claims['client_id']
         except HTTPException:
             raise
@@ -42,8 +41,7 @@ class Security:
             raise HTTPException(401, 'Session is invalid or expired') from None
 
     def internal(self, request: Request):
-        if self.settings.auth_mode!='local' and (request.method!='GET' or not request.url.path.startswith('/internal/captures/')):
+        if self.settings.auth_mode!='local':
             raise HTTPException(403,'This internal HTTP capability is disabled; events use IAM-authenticated SQS')
-        required=self.settings.internal_token if self.settings.auth_mode=='local' else self.settings.vision_read_token
-        if not hmac.compare_digest(request.headers.get('X-Internal-Token', ''), required):
+        if not hmac.compare_digest(request.headers.get('X-Internal-Token', ''), self.settings.internal_token):
             raise HTTPException(401, 'Invalid service identity')

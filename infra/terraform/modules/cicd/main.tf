@@ -117,7 +117,6 @@ resource "aws_iam_role_policy" "github_training" {
     { Effect = "Allow", Action = ["sagemaker:CreateTrainingJob", "sagemaker:DescribeTrainingJob", "sagemaker:StopTrainingJob"], Resource = "arn:${var.partition}:sagemaker:${var.region}:${var.account_id}:training-job/${var.name}-*" },
     { Effect = "Allow", Action = ["sagemaker:CreateProcessingJob", "sagemaker:DescribeProcessingJob", "sagemaker:StopProcessingJob"], Resource = "arn:${var.partition}:sagemaker:${var.region}:${var.account_id}:processing-job/${var.name}-*" },
     { Effect = "Allow", Action = ["sagemaker:CreateModelPackage", "sagemaker:DescribeModelPackage", "sagemaker:UpdateModelPackage"], Resource = [
-      var.forecast_model_group.arn, "arn:${var.partition}:sagemaker:${var.region}:${var.account_id}:model-package/${var.forecast_model_group.name}/*",
       var.vision_model_group.arn, "arn:${var.partition}:sagemaker:${var.region}:${var.account_id}:model-package/${var.vision_model_group.name}/*"
     ] },
     { Effect = "Allow", Action = "iam:PassRole", Resource = var.training_role_arn, Condition = { StringEquals = { "iam:PassedToService" = "sagemaker.amazonaws.com" } } },

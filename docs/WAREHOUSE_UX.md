@@ -52,7 +52,7 @@ removes local drafts; finish pending operations before doing so.
 
 Each line receives a command ID before submission. That ID and attempted state
 are saved before the HTTP request. Retries retain the ID. Confirmed movement
-IDs, camera reconciliation and reference indexing are tracked separately.
+IDs and reference indexing are tracked separately.
 
 A list is posted as sequential independent ledger transactions, **not one atomic
 batch transaction**. If one fails, preceding lines may already be recorded.

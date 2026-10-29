@@ -55,7 +55,7 @@ def export(store,s3,bucket,now=None):
     for row in rows:files[row['file']]=store.image(row['file'].removeprefix('images/'))
     manifest=io.StringIO();writer=csv.DictWriter(manifest,fieldnames=['file','sku','session','split']);writer.writeheader();writer.writerows(rows)
     files['manifest.csv']=manifest.getvalue().encode()
-    files['dataset-metadata.json']=json.dumps({'synthetic':False,'realData':True,'benchmarkOnly':False,'dataPurpose':'workshop_confirmed',
+    files['dataset-metadata.json']=json.dumps({'dataPurpose':'workshop_confirmed',
         'source':'Stocklane staff-confirmed photos','captureSessionsProvided':False,
         'note':'Every photo was confirmed by a person (new item or counter handover).'},indent=2).encode()
     checks={name:hashlib.sha256(data).hexdigest() for name,data in files.items()}

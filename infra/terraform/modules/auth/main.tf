@@ -1,5 +1,4 @@
 # Cognito user pool for staff sign-in (MFA required, admin-created users only)
-# and a machine client for enrolled workshop cameras.
 
 resource "aws_cognito_user_pool" "main" {
   name                     = var.name
@@ -69,23 +68,3 @@ resource "aws_cognito_user_pool_client" "web" {
   }
 }
 
-resource "aws_cognito_resource_server" "camera" {
-  identifier   = "stocklane"
-  name         = "Workshop capture API"
-  user_pool_id = aws_cognito_user_pool.main.id
-  scope {
-    scope_name        = "capture"
-    scope_description = "Upload capture evidence; no stock or invoice approval"
-  }
-}
-
-resource "aws_cognito_user_pool_client" "camera" {
-  name                                 = "enrolled-workshop-camera"
-  user_pool_id                         = aws_cognito_user_pool.main.id
-  generate_secret                      = true
-  allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_flows                  = ["client_credentials"]
-  allowed_oauth_scopes                 = ["${aws_cognito_resource_server.camera.identifier}/capture"]
-  access_token_validity                = 60
-  token_validity_units { access_token = "minutes" }
-}

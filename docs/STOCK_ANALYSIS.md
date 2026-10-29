@@ -45,8 +45,6 @@ grouping, invalid dates and mechanic denial. Java CI must pass before release.
 
 ## Demand forecasting: implemented separately
 
-The new Forecast microservice, owner history snapshot and SageMaker training /
-quality-gate / publish workflow are implemented. See [DEMAND_FORECASTING.md](DEMAND_FORECASTING.md)
-for deployment and one-run operation. No model has been trained on your workshop
-from this environment. With insufficient data, results are explicitly labelled
-as weekday baselines or more history needed. No automatic stock changes occur.
+The Forecast microservice and the nightly forecast job are implemented. See
+[DEMAND_FORECASTING.md](DEMAND_FORECASTING.md). Items without enough history, or whose
+back-test fails, use the reorder-level rule. No automatic stock changes occur.

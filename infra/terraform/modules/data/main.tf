@@ -128,7 +128,7 @@ resource "random_password" "internal" {
 }
 
 resource "random_password" "capabilities" {
-  for_each = toset(["INVENTORY_READ_TOKEN", "INVENTORY_CONTROL_TOKEN", "VISION_READ_TOKEN"])
+  for_each = toset(["INVENTORY_READ_TOKEN", "INVENTORY_CONTROL_TOKEN"])
   length   = 48
   special  = false
 }

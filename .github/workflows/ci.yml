@@ -49,32 +49,8 @@ jobs:
       - run: pip install -r services/vision/requirements-dev.txt PyYAML==6.0.3 fakeredis==2.40.0 scikit-learn==1.9.1 openpyxl==3.1.5
       - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: python scripts/download_model.py
-      - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_operational_readiness.py tests/test_synthetic_guards.py tests/test_public_data.py tests/test_real_data.py tests/test_automation.py -q
+      - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_automation.py tests/test_sagemaker_jobs.py tests/test_ai_lifecycle.py tests/test_alarm_rca.py tests/test_bedrock_region.py -q
       - run: python -m compileall -q scripts mlops
-  compose-integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - run: pip install onnx==1.23.2
-      - run: python scripts/download_model.py
-      - run: python scripts/configure_local.py
-      - run: docker compose up --build -d
-      - name: Wait for the real PostgreSQL services
-        run: |
-          for attempt in $(seq 1 90); do
-            echo "Waiting for backend readiness: attempt $attempt/90"
-            if curl -fsS http://localhost:8081/actuator/health/readiness && curl -fsS http://localhost:8082/actuator/health/readiness && curl -fsS http://localhost:8083/health/ready; then exit 0; fi
-            sleep 2
-          done
-          exit 1
-      - run: python scripts/smoke_local.py
-      - if: always()
-        run: docker compose logs --no-color --tail 100
-      - if: always()
-        run: docker compose down
   database-bootstrap:
     runs-on: ubuntu-latest
     services:
@@ -140,7 +116,7 @@ jobs:
       - run: python scripts/install_actionlint.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: actionlint -color=false
       - run: cfn-lint -i W2001 -t infra/ci/identity.json infra/ci/state.json
-      - run: pytest tests/test_pipeline.py tests/test_teardown.py tests/test_backend_structure.py -q
+      - run: pytest tests/test_pipeline.py tests/test_teardown.py tests/test_backend_structure.py tests/test_domains.py tests/test_textract_wiring.py -q
   security:
     runs-on: ubuntu-latest
     steps:

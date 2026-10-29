@@ -32,7 +32,6 @@ import {
   type Match,
   type Draft,
   type Movement,
-  type CaptureEntry,
 } from "./api";
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
@@ -49,7 +48,6 @@ import {
   complete,
   validQuantity,
   plannedOut,
-  verifyExisting,
   type Direction,
   type StockTask,
   type TaskLine,
@@ -201,7 +199,6 @@ function App() {
     [draft, setDraft] = useState<Draft | null>(null);
   const [imageId, setImageId] = useState(""),
     [preview, setPreview] = useState(""),
-    [capture, setCapture] = useState<CaptureEntry | null>(null),
     [saveReference, setSaveReference] = useState(false);
   const [aiNote, setAiNote] = useState(""),
     [counterPick, setCounterPick] = useState<Item | null>(null);
@@ -307,7 +304,6 @@ function App() {
     setMatch(null);
     setImageId("");
     setPreview("");
-    setCapture(null);
     setDraft(null);
     setSaveReference(false);
   };
@@ -349,7 +345,6 @@ function App() {
         setQuantity(1);
         setMatch(null);
         setImageId("");
-        setCapture(null);
         setSaveReference(false);
       }
       setError("");
@@ -367,7 +362,6 @@ function App() {
     setMatch(null);
     setDraft(null);
     setImageId("");
-    setCapture(null);
     setSaveReference(false);
     setPreview(URL.createObjectURL(photo));
     try {
@@ -441,17 +435,6 @@ function App() {
     }
     const current = taskRef.current;
     if (
-      capture &&
-      Object.values(current).some((t) =>
-        t.lines.some((line) => line.captureId === capture.id),
-      )
-    ) {
-      setError(
-        "This camera capture is already in a draft. Review the existing line.",
-      );
-      return;
-    }
-    if (
       direction === "OUT" &&
       quantity + plannedOut(current.OUT.lines, active.id) >
         Number(active.quantity)
@@ -469,7 +452,6 @@ function App() {
       part: active.part_number || active.sku,
       unit: active.unit,
       quantity,
-      captureId: capture?.id,
       imageId: imageId || undefined,
       reference: saveReference && !!imageId,
       attempted: false,
@@ -509,16 +491,7 @@ function App() {
         line.attempted = true;
         try {
           if (!line.movementId) {
-            let movement: any = line.captureId
-              ? (
-                  await api<any>(
-                    "/api/inventory/captures/" + line.captureId + "/movement",
-                  )
-                ).movement
-              : null;
-            if (movement) verifyExisting(movement, line, dir);
-            else
-              movement = await api<any>(
+            const movement = await api<any>(
                 "/api/inventory/movements",
                 {
                   method: "POST",
@@ -529,20 +502,12 @@ function App() {
                     jobId: null,
                     issueId: null,
                     note: "Stock " + dir + " · task " + taskRef.current[dir].id,
-                    sourceCaptureId: line.captureId || null,
                   }),
                 },
                 line.key,
               );
             line.movementId = movement.id;
             updateLine(dir, line.id, { movementId: movement.id });
-          }
-          if (line.captureId && !line.reconciled) {
-            await api("/api/vision/captures/" + line.captureId, {
-              method: "PATCH",
-              body: JSON.stringify({ movementId: line.movementId }),
-            });
-            updateLine(dir, line.id, { reconciled: true });
           }
           if (line.reference && line.imageId && !line.referenceSaved) {
             await api("/api/vision/references", {
@@ -1764,7 +1729,6 @@ function App() {
           draft={draft}
           aiNote={edit ? "" : aiNote}
           imageId={edit?.image_id || imageId}
-          capture={null}
           inTask={(inTask || fromCounter.current) && !edit}
           products={items}
           onClose={() => {
@@ -1885,7 +1849,6 @@ function ProductEditor({
   draft,
   aiNote = "",
   imageId,
-  capture,
   inTask = false,
   products,
   onClose,
@@ -1895,7 +1858,6 @@ function ProductEditor({
   draft: Draft | null;
   aiNote?: string;
   imageId: string;
-  capture: CaptureEntry | null;
   inTask?: boolean;
   products: Item[];
   onClose: () => void;
@@ -1911,7 +1873,7 @@ function ProductEditor({
     [location, setLocation] = useState(item?.location || ""),
     [quantity, setQuantity] = useState(0),
     [unit, setUnit] = useState(item?.unit || "UNIT"),
-    [reorder, setReorder] = useState(Number(item?.reorder_level) || 0),
+    [reorder, setReorder] = useState(item ? Number(item.reorder_level) : 5),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const sku = useRef("ITEM-" + uid().slice(0, 8).toUpperCase());
@@ -1980,7 +1942,6 @@ function ProductEditor({
           openingQuantity: quantity,
           sellingPrice: 0,
           imageId: imageId || null,
-          sourceCaptureId: capture?.direction === "IN" ? capture.id : null,
         });
       let message = item
         ? "Catalogue updated. QR identity and stock history retained."
@@ -1996,22 +1957,6 @@ function ProductEditor({
         } catch {
           message +=
             " AI draft resolution is pending; stock was already recorded.";
-        }
-      }
-      if (!item && capture?.direction === "IN") {
-        try {
-          const movement = (
-            await api<any>(
-              "/api/inventory/captures/" + capture.id + "/movement",
-            )
-          ).movement;
-          if (movement)
-            await api("/api/vision/captures/" + capture.id, {
-              method: "PATCH",
-              body: JSON.stringify({ movementId: movement.id }),
-            });
-        } catch {
-          message += " Camera status reconciliation is pending.";
         }
       }
       onSaved(result, message);
@@ -2120,7 +2065,7 @@ function ProductEditor({
                     <input
                       type="number"
                       required
-                      min={capture ? 1 : 0}
+                      min={0}
                       step={unit === "LITRE" ? 0.001 : 1}
                       value={quantity}
                       onChange={(e) => setQuantity(Number(e.target.value))}

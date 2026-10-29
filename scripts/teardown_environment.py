@@ -51,7 +51,7 @@ def project_vpcs(ec2, project):
 def delete_model_versions(c):
     """Model Registry groups only delete when empty; versions are training output."""
     sm = client("sagemaker", c)
-    for group in [c["project"] + "-visual-sku", c["project"] + "-stock-forecast"]:
+    for group in [c["project"] + "-visual-sku"]:
         try:
             pages = sm.get_paginator("list_model_packages").paginate(ModelPackageGroupName=group)
             versions = [p["ModelPackageArn"] for page in pages for p in page["ModelPackageSummaryList"]]

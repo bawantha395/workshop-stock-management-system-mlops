@@ -1,5 +1,5 @@
-"""Bounded SageMaker training (processing or training job) -> independent quality gate -> pending Model Registry.
-Run manually or from the protected aws-training GitHub environment.
+"""Bounded SageMaker training (processing or training job) -> independent quality gate -> Model Registry.
+Runs weekly from the aws-training GitHub environment (train.yml).
 """
 import argparse,hashlib,io,json,tarfile
 from datetime import datetime,timezone
@@ -28,7 +28,7 @@ def run(args):
     with tarfile.open(fileobj=io.BytesIO(archive),mode='r:gz') as tar:
         metrics=json.load(tar.extractfile('metrics.json'))
     if not metrics.get('qualityGatePassed'):raise RuntimeError('Refusing registration of a failed model')
-    package=sm.create_model_package(ModelPackageGroupName=args.group,ModelPackageDescription='Visual encoder and trained pair calibrator; EKS serving; human review remains required',ModelApprovalStatus='PendingManualApproval',
+    package=sm.create_model_package(ModelPackageGroupName=args.group,ModelPackageDescription='Visual encoder and trained pair calibrator; served on EKS; approved automatically when it passes the gate and beats the served model',ModelApprovalStatus='PendingManualApproval',
         InferenceSpecification={'Containers':[{'Image':args.image,'ModelDataUrl':uri}],'SupportedContentTypes':['application/json'],'SupportedResponseMIMETypes':['application/json']},
         CustomerMetadataProperties={'datasetSha256':metrics['datasetSha256'],'encoderSha256':metrics['encoderSha256'],'artifactSha256':hashlib.sha256(archive).hexdigest(),'trainingJob':name,'sagemakerJobType':kind})
     report={'modelPackageArn':package['ModelPackageArn'],'artifactUri':uri,'metrics':metrics,'trainingJob':name,'jobType':kind,'jobArn':arn}

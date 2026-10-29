@@ -13,11 +13,12 @@ def workflow(name):
 
 
 def test_forecast_runs_every_night_for_every_deployed_environment():
-    flow=workflow('forecast.yml');job=flow['jobs']['train']
+    flow=workflow('forecast.yml');job=flow['jobs']['forecast']
     assert flow[True]['schedule']==[{'cron':'30 20 * * *'}]  # 02:00 Asia/Colombo
     assert '["dev","staging","prod"]' in job['strategy']['matrix']['environment']
     text=(ROOT/'.github/workflows/forecast.yml').read_text()
     assert "github.event_name == 'schedule' || inputs.publish" in text and 'nightly forecast skipped' in text
+    assert 'sagemaker' not in text.lower() and 'forecast-requirements.txt' in text  # nothing to train: a pretrained model runs on the runner
     exporter=(ROOT/'services/inventory/src/main/java/com/stocklane/inventory/service/ForecastExportService.java').read_text()
     assert '@Scheduled(cron="${app.forecast.export-cron:0 30 1 * * *}",zone="Asia/Colombo")' in exporter
 
@@ -72,7 +73,7 @@ def test_approved_photo_models_are_released_through_gitops_in_every_environment(
     release=workflow('release-model.yml')
     assert release['jobs']['release']['uses']=='./.github/workflows/_release.yml'
     assert release['concurrency']['group']=='stocklane-aws'  # queues behind Deploy, never races it
-    for name in ('train.yml','train-car-parts.yml'):
+    for name in ('train.yml',):
         text=(ROOT/'.github/workflows'/name).read_text();flow=workflow(name)
         assert 'mlops/auto_promote.py' in text and 'gh workflow run release-model.yml --ref main' in text
         assert flow['permissions']['actions']=='write'

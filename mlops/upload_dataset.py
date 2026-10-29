@@ -14,11 +14,6 @@ def immutable_put(s3,bucket,key,data):
 def upload(directory,bucket,region,s3=None):
     root=Path(directory).resolve()
     marker=root/'dataset-metadata.json'
-    metadata=json.loads(marker.read_text()) if marker.exists() else {}
-    if metadata.get('synthetic') is True:
-        raise ValueError('Synthetic data cannot be uploaded to the reviewed workshop dataset prefix')
-    if metadata.get('benchmarkOnly') is True:
-        raise ValueError('Public benchmark data belongs to the public-data workflow, not the workshop dataset prefix')
     manifest=(root/'manifest.csv').read_bytes()
     rows=list(csv.DictReader(io.StringIO(manifest.decode('utf-8-sig'))));validate_manifest(rows)
     files={'manifest.csv':manifest};checks={'manifest.csv':hashlib.sha256(manifest).hexdigest()};seen=set()

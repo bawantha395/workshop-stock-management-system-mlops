@@ -1,100 +1,78 @@
 # AI and MLOps
 
-Stocklane uses three kinds of AI. Live inference always runs on EKS; SageMaker
-is used only for short, bounded jobs, so nothing keeps billing between demos.
+Three kinds of AI, none of them needing a manual step. Live inference runs on EKS; SageMaker
+is used only for the weekly photo training, so nothing keeps billing in between.
 
 | Feature | Model | Where it runs |
 | --- | --- | --- |
-| Find an item from a photo | Frozen MobileNetV2 embeddings + a trained same-SKU calibrator | Vision service on EKS |
-| Stock usage forecast | Weekday baseline or Ridge model, chosen by a quality gate | Forecast service on EKS (batch forecasts from S3) |
-| Read a label into a draft item | Amazon Bedrock `amazon.nova-lite-v1:0` (Converse API) | Called on demand from the Vision service |
+| Stock forecast (what to reorder) | Pretrained **Chronos-Bolt** (`amazon/chronos-bolt-small`), used as it is | Nightly job on a GitHub runner; results are read by the forecast service on EKS |
+| Find an item from a photo | Frozen MobileNetV2 features + a same-item calibrator trained on photos people confirmed | Vision service on EKS; retrained weekly on SageMaker |
+| Read a label into a draft item | Textract first, then Amazon Bedrock Nova Lite (Converse API with tool use) for missing fields | On demand from the Vision service |
 
-## Lifecycle
+## Forecast: a pretrained model, nothing to train
 
 ```mermaid
 flowchart LR
-  D[Data<br/>versioned S3 prefix] --> J[SageMaker job<br/>Processing ml.t3.large] --> G{Quality gate<br/>validation + test}
-  G -- pass --> R[Model Registry<br/>PendingManualApproval]
-  G -- fail --> X[Archived, not releasable]
-  R --> V[Review model<br/>Approved / Rejected]
-  V --> L[Deploy environment<br/>model_package = ARN] --> E[EKS serves it<br/>Argo CD rollout]
+  A[App exports<br/>stock history 01:30] --> S[(S3)]
+  S --> F[Nightly job 02:00<br/>Chronos-Bolt on CPU]
+  F --> G{Back-test<br/>per item}
+  G -- error small --> P[Published forecast]
+  G -- error large / too little history --> R[Reorder-level rule]
+  P --> W[Reorder list + Stock report]
+  R --> W
 ```
 
-1. **Data.** Reviewed photos (`manifest.csv` + images) are uploaded with
-   `mlops/upload_dataset.py` to a content-addressed, checksummed S3 prefix.
-   Public benchmark inputs (`datasets/public-benchmark/`) are licensed,
-   checksum-pinned and downloaded by the workflow.
-2. **Train.** `train.yml` (your photos), `forecast.yml` (stock history) or
-   `train-public-data.yml` (public benchmark; also the `train` option of
-   Deploy). Jobs run as **SageMaker Processing jobs on `ml.t3.large`** because
-   new accounts usually have zero training-instance quota. Set
-   `SAGEMAKER_JOB_TYPE=training` to use real training jobs once you have quota.
-   Each job has a runtime limit and network isolation; no endpoint is created.
-3. **Gate.** The threshold is chosen on the validation split and judged on an
-   independent test split (photo precision ≥ 98 %, recall ≥ 50 %; the forecast
-   model must beat its baseline). A failing run cannot register a releasable
-   model.
-4. **Register.** Passing models become `PendingManualApproval` versions in
-   `stocklane-<env>-visual-sku` or `stocklane-<env>-stock-forecast`.
-5. **Approve.** Run **Review SageMaker model** with the package ARN.
-6. **Release.** Run **Deploy environment** with `model_package` set to that ARN.
-   `mlops/promote.py` checks approval, quality flags and checksum, copies the
-   bundle to the release prefix, and the release commit pins it. Roll back by
-   deploying a previously approved ARN — no retraining.
+1. The inventory service writes each item's daily use to S3 every night. Days when an item was
+   out of stock are filled with its in-stock average, so a stock-out is not read as "no demand".
+2. The nightly job (`forecast.yml`, `mlops/run_forecast.py`) gives Chronos-Bolt each item's history.
+3. **Back-test gate.** For every item the model first forecasts the item's own most recent days
+   (seven to 28) from the days before them. If the error (WAPE) is above 60 %, that item's forecast
+   is not released. The model never sees the days it is tested on.
+4. Released forecasts give "runs out in about N days" and an order quantity. Everything else
+   (fewer than 21 days of history, or irregular use) uses the **reorder-level rule**: when stock is at or
+   below the item's reorder level (5 by default), order enough to reach double that level.
+5. If the job fails, yesterday's forecast stays. Nothing here changes stock.
 
-## Hands-off operation (no manual steps)
+The first day works without any history: every item uses the reorder-level rule, and items move to
+the forecast one by one as their history grows.
+
+## Photo matcher: retrains itself
 
 | When | What happens by itself |
-|---|---|
-| Every night at 01:30 (Asia/Colombo) | The inventory service exports the stock history to S3 (`ForecastExportService`). |
-| Every night at 02:00 | **Train and publish stock forecast** runs for every deployed environment. Environments that aren't deployed are skipped. The per-item gate decides between ML and the weekday baseline, and the result is published. If the run fails, yesterday's forecast stays. |
-| On login | The owner's home page shows **Reorder this week**: items to order, the most urgent first, plus a purchase-list download. |
-| Every Sunday at 01:00 | The vision service exports every photo a person confirmed (new items and parts identified by photo at the storeroom counter) as a reviewed dataset (`app/dataset_export.py`). This starts once there are at least 60 photos, with 15 photos across 3 items in each split. |
-| Every Sunday at 02:30 | **Train reviewed workshop model** trains on that export for every deployed environment, but only if the photos changed (`mlops/workshop_dataset.py`). |
-| After a photo-model training | `mlops/auto_promote.py` approves the new version only if it passed the gate **and** beats the model being served (higher test F1, with precision of at least 98%). Otherwise it's rejected with the reason. An approved version is released through GitOps: **Release approved model** commits the overlay, then Argo CD rolls it out. This applies in every environment. |
-| Adding a new item from a label photo | Textract reads the label text first. The LLM only suggests the missing fields, and similar stocked items suggest the category, shelf and unit. The mechanic taps **Accept all**. |
+| --- | --- |
+| Every Sunday 01:00 (Asia/Colombo) | The vision service exports every photo a person confirmed (new items and parts identified at the storeroom counter) as a dataset. It starts once there are at least 60 photos, with 15 photos across 3 items in each split. |
+| Every Sunday 02:30 | `train.yml` trains the calibrator on that export, but only if the photos changed (`mlops/workshop_dataset.py`). It runs as a **SageMaker Processing job on `ml.t3.large`**, because new accounts usually have zero training-instance quota. |
+| After training | `mlops/auto_promote.py` approves the new version only if it passed the quality gate **and** beats the model being served (higher test F1, precision at least 98 %). Otherwise it is rejected with the reason. |
+| After approval | `release-model.yml` commits the model to the environment's overlay and Argo CD rolls it out (GitOps). |
 
-GitHub pauses scheduled workflows after 60 days without commits. A push re-enables them.
-The `aws-training` GitHub environment must not have required reviewers, or the nightly run would wait for an approval.
+The quality gate picks its threshold on a validation split and judges on an independent test split:
+precision at least 98 %, recall at least 50 %. Until the first model passes, the pretrained MobileNetV2
+matching with a fixed similarity limit is used.
+
+GitHub pauses scheduled workflows after 60 days without commits; a push re-enables them. The
+`aws-training` GitHub environment must not have required reviewers, or the scheduled runs would wait.
 
 ## Guard rails
 
-- Synthetic or public-benchmark artifacts can never reach the live app: the
-  uploader, the review workflow, promotion and both EKS model loaders reject them
-  (`tests/test_synthetic_guards.py`, `tests/test_public_data.py`).
-- A person always confirms stock movements; similarity scores are not
-  confidence percentages.
-- Bedrock may only suggest visible label fields. It cannot change quantities or
-  approve items. Requests are cached for 15 minutes and limited to 50 uncached
-  calls per UTC day (`bedrock_daily_request_limit`), shared across replicas.
+- A person always confirms stock movements; similarity scores are not confidence percentages.
+- Bedrock may only suggest visible label fields. It cannot change quantities or approve items.
+  Requests are cached for 15 minutes and limited to 50 uncached calls per UTC day
+  (`bedrock_daily_request_limit`), shared across replicas. When Bedrock is unavailable, Textract's
+  text reading still fills what it can and the app says no suggestion is available.
+- Model files are checksum-verified before use (`.safetensors` for Chronos; ONNX with a pinned SHA256 for the encoder).
 
 ## Bedrock region
 
-The Sydney account has zero Bedrock quota, so calls go to **us-east-1**
-(`bedrock_region` in `TFVARS_JSON`). The Vision pod's Pod Identity role is
-allowed to invoke only that one model in that region; no API key is used.
-
-## Public benchmark results (measured locally)
-
-| Check | Result |
-| --- | --- |
-| Photo test precision / recall | 0.385 / 0.071 — gate failed |
-| Monthly forecast: Ridge MAE vs best baseline | 0.736 vs 0.670 — gate failed |
-
-These show the gates working: a trained model that is worse than a simple
-baseline is not released. Real workshop photos and stock history are needed for
-a production-quality model.
+The Sydney account has zero Bedrock quota, so calls go to **us-east-1** (`bedrock_region` in
+`TFVARS_JSON`). The Vision pod's Pod Identity role may invoke only that one model in that
+region; no API key is used.
 
 ## What to show in an interview
 
 | Step | Where | What it proves |
 | --- | --- | --- |
-| Label suggestion | App → register item → AI suggestion | Bedrock call from EKS with Pod Identity, no API key; falls back to Textract text reading when Bedrock is unavailable |
-| Train | Actions → *Train real-data ML models* | SageMaker jobs from CI, quality gates, nothing left running |
-| Registry | SageMaker → Model Registry | Versioned, reviewable models in `PendingManualApproval` |
-| Release gate | `mlops/review_model.py`, `promote.py` | Benchmark and synthetic models cannot reach production |
-| Photo matching | App → Find an item | MobileNetV2 baseline served from EKS |
-
-To serve a *trained* photo model you need real workshop photos: collect a reviewed
-dataset, upload it with `mlops/upload_dataset.py`, run **Train reviewed workshop
-model**, approve the version, then deploy with its `model_package` ARN.
+| Nightly forecast | Actions → *Nightly stock forecast* → summary | A foundation model in production without training, with a per-item back-test gate and a safe fallback |
+| Weekly photo training | Actions → *Train reviewed workshop model* | Scheduled training on data the app collected itself |
+| Registry and auto approval | SageMaker → Model Registry, `mlops/auto_promote.py` | Versioned models; approval is a measured rule, not a click |
+| GitOps release | Actions → *Release approved model*, then Argo CD | The model reaches the cluster as a Git commit |
+| Label suggestion | App → register item | Textract then Bedrock tool use from EKS with Pod Identity, no API key |

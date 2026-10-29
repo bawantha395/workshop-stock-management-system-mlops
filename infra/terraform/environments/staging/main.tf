@@ -157,7 +157,6 @@ module "cicd" {
   models_bucket_arn           = module.data.buckets["models"].arn
   cloudfront_distribution_arn = module.edge.cloudfront_distribution_arn
   vision_model_group          = module.ml.vision_model_group
-  forecast_model_group        = module.ml.forecast_model_group
   training_role_arn           = module.ml.training_role_arn
   vpc_id                      = module.network.vpc_id
   private_subnet_ids          = module.network.private_subnet_ids

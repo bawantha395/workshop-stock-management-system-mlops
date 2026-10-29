@@ -88,7 +88,7 @@ def start(sm, name, role, image, channels, output_path, hyperparameters=None, me
     if kind == 'training':
         algorithm = {'TrainingImage': image, 'TrainingInputMode': 'File'}
         if metric_names:
-            algorithm['MetricDefinitions'] = [{'Name': 'benchmark:' + key, 'Regex': '"' + key + '":\\s*([0-9.eE+-]+)'}
+            algorithm['MetricDefinitions'] = [{'Name': 'photo:' + key, 'Regex': '"' + key + '":\\s*([0-9.eE+-]+)'}
                                               for key in metric_names]
         request = dict(TrainingJobName=name, RoleArn=role, AlgorithmSpecification=algorithm,
             InputDataConfig=[{'ChannelName': channel, 'DataSource': {'S3DataSource': {

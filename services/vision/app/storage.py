@@ -22,7 +22,6 @@ class Store:
         self.refs = Table('reference_images',m,Column('product_id',String(36),primary_key=True),Column('image_id',String(100),primary_key=True),Column('model_version',String(160),primary_key=True),Column('embedding',Vector() if self.pg else Text,nullable=False),Column('product',Text,nullable=False))
         self.events = Table('processed_events',m,Column('event_id',String(36),primary_key=True),Column('payload_hash',String(64),nullable=False))
         self.drafts = Table('drafts',m,Column('id',String(36),primary_key=True),Column('image_id',String(100),nullable=False),Column('fields',Text,nullable=False),Column('source',String(40),nullable=False),Column('status',String(20),nullable=False),Column('created_at',String(40),nullable=False),Column('actor',String(180),nullable=False),Column('product_id',String(36)))
-        self.captures = Table('capture_inbox',m,Column('id',String(36),primary_key=True),Column('request_hash',String(64),nullable=False),Column('image_id',String(100),nullable=False),Column('direction',String(10),nullable=False),Column('job_id',String(36)),Column('station_id',String(80),nullable=False),Column('status',String(20),nullable=False),Column('result',Text,nullable=False),Column('created_at',String(40),nullable=False),Column('movement_id',String(36)))
         if self.pg:
             from sqlalchemy import text
             with self.engine.begin() as c:

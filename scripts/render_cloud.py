@@ -44,7 +44,7 @@ def render(config, images, model_uri, model_sha, destination=None, *, platform=F
     common.update({
         'AWS_REGION': c['region'], 'DEPLOYMENT_ENVIRONMENT': env,
         'COGNITO_ISSUER': c['cognito_issuer'],
-        'COGNITO_CLIENT_IDS': c['cognito_web_client_id'] + ',' + c['cognito_camera_client_id'],
+        'COGNITO_CLIENT_IDS': c['cognito_web_client_id'],
         'APP_WEB_ORIGIN': c['frontend_url'], 'WEB_ORIGIN': c['frontend_url'],
         'STOCK_QUEUE_URL': c['stock_queue_url'], 'CATALOGUE_QUEUE_URL': c['catalogue_queue_url'],
         'REDIS_HOST': c['cache_host'], 'MEDIA_BUCKET': c['media_bucket'],

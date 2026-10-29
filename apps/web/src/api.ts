@@ -27,6 +27,5 @@ export type Invoice={id:string;job_id:string;invoice_number:string;labour:number
 export type Match={identifiedProductId?:string;qrValue?:string;imageId:string;state:string;modelVersion:string;candidates:{product:Product;imageId:string;similarity:number;sameSkuEstimate?:number|null}[];message:string};
 export function csv(name:string,rows:Record<string,unknown>[]){if(!rows.length)return;const keys=Object.keys(rows[0]);const escape=(x:unknown)=>'"'+String(x??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const blob=new Blob([[keys.map(escape).join(','),...rows.map(r=>keys.map(k=>escape(r[k])).join(','))].join('\r\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
 
-export type CaptureEntry={id:string;image_id:string;direction:'IN'|'OUT';job_id:string|null;station_id:string;status:string;result:Match;created_at:string};
 
 export async function signOut(){await auth?.removeUser();if(config.logoutUrl)location.assign(config.logoutUrl+'?client_id='+encodeURIComponent(config.clientId)+'&logout_uri='+encodeURIComponent(location.origin));else if(auth)await auth.signoutRedirect();}

@@ -21,13 +21,9 @@ def decode(data: bytes):
         raise ValueError('Image pixel dimensions are too large') from e
 
 class Encoder:
-    def __init__(self, model_dir, allow_benchmark=False):
+    def __init__(self, model_dir):
         folder = Path(model_dir)
         self.manifest = json.loads((folder / 'model.json').read_text())
-        if self.manifest.get('syntheticData'):
-            raise RuntimeError('Synthetic demo models cannot serve the live workshop')
-        if self.manifest.get('benchmarkOnly') and not allow_benchmark:
-            raise RuntimeError('Public benchmark models require workshop validation before live serving')
         path = folder / 'encoder.onnx'
         self.sha = hashlib.sha256(path.read_bytes()).hexdigest()
         if self.sha != self.manifest['sha256']:

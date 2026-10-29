@@ -35,8 +35,3 @@ resource "aws_sagemaker_model_package_group" "vision" {
   model_package_group_name        = "${var.name}-visual-sku"
   model_package_group_description = "Versioned visual encoder and trained same-SKU similarity calibration; manual approval required"
 }
-
-resource "aws_sagemaker_model_package_group" "forecast" {
-  model_package_group_name        = "${var.name}-stock-forecast"
-  model_package_group_description = "Stock usage forecasting with temporal evaluation and weekday baseline gates"
-}

@@ -86,10 +86,6 @@ variable "vision_model_group" {
   type = object({ name = string, arn = string })
 }
 
-variable "forecast_model_group" {
-  type = object({ name = string, arn = string })
-}
-
 variable "training_role_arn" {
   type = string
 }

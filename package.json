@@ -1,1 +1,1 @@
-{"name":"workshop-stock-ai","version":"0.1.0","private":true,"scripts":{"dev":"python3 scripts/dev.py","build":"npm run build --prefix apps/web"}}
+{"name":"workshop-stock-ai","version":"0.1.0","private":true,"scripts":{"build":"npm run build --prefix apps/web"}}

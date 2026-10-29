@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, csv, type Product } from "./api";
-import { alignToYesterday, colomboToday, readHistory, type HistoryFile } from "./historyImport";
-import { whole, type Row } from "./reorder";
+import { hasForecast, levelOrder, whole, type Row } from "./reorder";
+
+const colomboToday = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 
 type Item = Product & { location?: string | null };
 type Forecast = { status: string; products: Row[] };
@@ -15,10 +16,10 @@ export function buildLines(items: Item[], forecast: Row[]): Line[] {
   const byId = new Map(forecast.map((r) => [r.id, r]));
   const lines = items.map((p): Line => {
     const f = byId.get(p.id);
-    const stock = Number(p.quantity), usable = f && (f.status === "trained_ml" || f.status === "weekday_baseline");
+    const stock = Number(p.quantity), usable = hasForecast(f);
     const perDay = usable ? (f!.next7 || 0) / 7 : 0;
     const days = perDay > 0 ? stock / perDay : Infinity;
-    const order = usable ? f!.suggestedTopUp7 || 0 : 0;
+    const order = usable ? f!.suggestedTopUp7 || 0 : levelOrder({ ...(f || { id: p.id, sku: p.sku, name: p.name, unit: p.unit, status: "no_forecast" }), availableNow: stock, reorderLevel: Number(p.reorder_level) });
     const level: Level = stock <= 0 ? "out" : stock <= Number(p.reorder_level) || days <= 3 || order > 0 ? "low" : "ok";
     const lasts = stock <= 0 ? "Finished" : !usable ? "Still learning" : !Number.isFinite(days) ? "Not being used" : days > 90 ? "More than 3 months" : "About " + Math.max(1, Math.round(days)) + (Math.round(days) <= 1 ? " day" : " days");
     return { id: p.id, name: p.name, sku: p.sku, shelf: p.location || "", stock, unit: p.unit, level, lasts, order };
@@ -32,7 +33,6 @@ const LABEL: Record<Level, string> = { out: "Finished", low: "Order soon", ok: "
 export function StockReport() {
   const [items, setItems] = useState<Item[] | null>(null), [forecast, setForecast] = useState<Row[]>([]);
   const [error, setError] = useState(""), [search, setSearch] = useState(""), [filter, setFilter] = useState<Level | "all">("all");
-  const [file, setFile] = useState<HistoryFile | null>(null), [licensed, setLicensed] = useState(false), [fileKey, setFileKey] = useState(""), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const load = async () => {
     try {
       setItems(await api<Item[]>("/api/inventory/products"));
@@ -44,20 +44,6 @@ export function StockReport() {
   const counts = { out: lines.filter((l) => l.level === "out").length, low: lines.filter((l) => l.level === "low").length, ok: lines.filter((l) => l.level === "ok").length };
   const shown = lines.filter((l) => (filter === "all" || l.level === filter) && (l.name + " " + l.sku + " " + l.shelf).toLowerCase().includes(search.trim().toLowerCase()));
   const today = colomboToday();
-  const choose = async (f?: File) => {
-    setError(""); setMessage(""); setFile(null); setLicensed(false);
-    if (!f) return;
-    try { setFile(readHistory(await f.text())); setFileKey(crypto.randomUUID()); } catch (e) { setError((e as Error).message); }
-  };
-  const importOld = async () => {
-    if (!file) return;
-    setBusy(true); setError(""); setMessage("");
-    try {
-      const aligned = alignToYesterday(file, today).file;
-      const r = await api<{ message: string }>("/api/inventory/imports/sales-history", { method: "POST", body: JSON.stringify(aligned) }, fileKey);
-      setMessage(r.message); setFile(null); await load();
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-  };
   if (!items) return <section className="stock-panel report"><p className="stock-help">{error || "Loading your stock…"}</p></section>;
   return (
     <section className="report" aria-label="Stock report">
@@ -66,7 +52,6 @@ export function StockReport() {
         <button className="button secondary" onClick={() => csv("stock-" + today + ".csv", shown.map((l) => ({ Item: l.name, Code: l.sku, Shelf: l.shelf, "In stock": l.stock, Status: LABEL[l.level], "Will last": l.lasts, "Order this week": l.order || "" })))}>Download list</button>
       </div>
       {error && <p role="alert" className="stock-error">{error}</p>}
-      {message && <p role="status" className="counter-done">{message}</p>}
       <div className="report-filters" role="group" aria-label="Show">
         {([["all", "All", lines.length], ["out", "Finished", counts.out], ["low", "Order soon", counts.low], ["ok", "Fine", counts.ok]] as [Level | "all", string, number][]).map(([key, label, n]) => (
           <button key={key} className={"report-chip " + key + (filter === key ? " chosen" : "")} onClick={() => setFilter(key)}><b>{n}</b> {label}</button>
@@ -90,14 +75,6 @@ export function StockReport() {
         </table>
         {!shown.length && <div className="stock-empty">{lines.length ? "No items match." : "No items yet. Add your first item at the Storeroom counter."}</div>}
       </div>
-      <details className="report-setup">
-        <summary>Bring in old sales records</summary>
-        <p className="stock-help">Only needed once, if you have past sales from another system. The report and forecast then use that history.</p>
-        <label className="stock-field">Sales file<input type="file" accept="application/json,.json" onChange={(e) => void choose(e.target.files?.[0])} /></label>
-        {file && <p className="stock-help">{file.products.length} items from {file.source} ({file.license}).</p>}
-        {file && <label className="stock-check"><input type="checkbox" checked={licensed} onChange={(e) => setLicensed(e.target.checked)} /> These are real sales and the license allows this use.</label>}
-        <button className="button primary" disabled={busy || !file || !licensed} onClick={() => void importOld()}>Bring in sales</button>
-      </details>
     </section>
   );
 }

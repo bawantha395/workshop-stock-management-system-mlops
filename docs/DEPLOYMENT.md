@@ -4,12 +4,12 @@ Two GitHub Actions pipelines manage AWS:
 
 | Pipeline | What it does | Time |
 | --- | --- | --- |
-| **Deploy environment** (`deploy.yml`) | Creates or updates `dev`, `staging` or `prod` from nothing: tests → Terraform plan → apply → release → platform → frontend → (optional) SageMaker training | ~45 min from empty |
+| **Deploy environment** (`deploy.yml`) | Creates or updates `dev`, `staging` or `prod` from nothing: tests → Terraform init + plan → apply → build and push images → Argo CD and monitoring → frontend | ~45 min from empty |
 | **Destroy environment** (`destroy.yml`) | Removes everything Deploy created so nothing keeps billing | ~25 min |
 
 Everything else is a stage those two call (`_terraform`, `_release`, `_platform`,
-`_frontend`, `_cleanup`, `ci`, `train-public-data`). The ML workflows (`train`,
-`forecast`, `review-model`) can also be run by hand against a running environment.
+`_frontend`, `_cleanup`, `ci`). The ML workflows (`forecast` every night, `train` every
+Sunday, `release-model` after an approval) run by themselves and can also be run by hand.
 
 ```mermaid
 flowchart LR
@@ -29,8 +29,9 @@ Destroy removes the whole Terraform environment. It keeps only:
   user, and the private Terraform state bucket) — free or a few cents;
 - your **Route 53 hosted zone** (it is not managed by this project).
 
-Models are **not** kept: a fresh environment serves the checksum-pinned baseline
-model, and you can retrain with the `train` option.
+Models are **not** kept: a fresh environment starts with the checksum-pinned MobileNetV2
+photo matcher and no forecast (the reorder-level rule applies until the first nightly run).
+The photo model retrains itself weekly once people have confirmed enough photos.
 
 ## One-time setup (per environment)
 
@@ -167,11 +168,10 @@ only applied while `main` is still at the commit it was planned from).
    is on by default (`TEXTRACT_FALLBACK`) and the status endpoint still reports the
    real Bedrock problem. The first time you use it, re-run the CloudShell bootstrap
    (without `--create-access-key`) so the IAM boundary allows `textract:DetectDocumentText`.
-2. **SageMaker models:** run **Train real-data ML models** (`train-public-data`) on
-   the environment, or tick `train` when you deploy. The jobs appear under
-   SageMaker → Processing jobs, and the results appear as *pending* versions in the
-   Model Registry (`stocklane-<env>-visual-sku`, `stocklane-<env>-stock-forecast`).
-   See [MLOPS.md](MLOPS.md) for why benchmark models are never released to the app.
+2. **Models:** nothing to do. The forecast runs every night and the photo model retrains every
+   Sunday (see [MLOPS.md](MLOPS.md)). Make sure the `aws-training` GitHub environment has no
+   required reviewers, or the scheduled runs would wait for an approval. Run **Nightly stock
+   forecast** or **Train reviewed workshop model** by hand only to see a result sooner.
 
 ## Destroy
 

@@ -6,10 +6,6 @@ output "vision_model_group" {
   value = { name = aws_sagemaker_model_package_group.vision.model_package_group_name, arn = aws_sagemaker_model_package_group.vision.arn }
 }
 
-output "forecast_model_group" {
-  value = { name = aws_sagemaker_model_package_group.forecast.model_package_group_name, arn = aws_sagemaker_model_package_group.forecast.arn }
-}
-
 output "bedrock_invoke_arn" {
   value = local.bedrock_invoke_arn
 }

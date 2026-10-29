@@ -57,30 +57,12 @@ def test_model_checksum_is_enforced(tmp_path):
     (tmp_path/'encoder.onnx').write_bytes(b'changed');(tmp_path/'model.json').write_text(json.dumps({'sha256':'bad'}))
     with pytest.raises(RuntimeError,match='checksum'):Encoder(tmp_path)
 
-def test_camera_retry_does_not_duplicate_inbox(client):
-    event=str(uuid.uuid4());metadata={'event_id':event,'direction':'IN','station_id':'test-tray','job_id':''}
-    def send():return client.post('/api/vision/captures',data=metadata,files={'file':('item.jpg',photo(),'image/jpeg')})
-    assert send().status_code==200;assert send().status_code==200
-    records=client.get('/api/vision/captures').json();assert len(records)==1;assert records[0]['status']=='PENDING'
-
-def test_camera_reused_id_with_different_evidence_is_rejected(client):
-    event=str(uuid.uuid4());metadata={'event_id':event,'direction':'IN','station_id':'test-tray'}
-    assert client.post('/api/vision/captures',data=metadata,files={'file':('item.jpg',photo(),'image/jpeg')}).status_code==200
-    metadata['direction']='OUT'
-    assert client.post('/api/vision/captures',data=metadata,files={'file':('item.jpg',photo(),'image/jpeg')}).status_code==409
-
-def test_capture_movement_requires_a_staff_confirmed_ledger_entry(client):
-    metadata={'event_id':str(uuid.uuid4()),'direction':'OUT','station_id':'test-tray','job_id':''}
-    response=client.post('/api/vision/captures',data=metadata,files={'file':('item.jpg',photo(),'image/jpeg')})
-    assert response.status_code==200;assert response.json()['job_id'] is None
-    assert response.json()['status']=='PENDING'
-
 def test_metrics_require_service_identity(client):
     assert client.get('/metrics').status_code==401
     response=client.get('/metrics',headers={'Authorization':'Bearer test-service-token-at-least-32-characters'})
     assert response.status_code==200;assert 'stocklane_http_requests' in response.text
 
-def test_cached_photo_never_merges_distinct_delivery_events(tmp_path,monkeypatch):
+def test_the_same_photo_is_only_encoded_once(tmp_path,monkeypatch):
     import fakeredis,redis
     shared=fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis.Redis,'from_url',lambda *a,**kw:shared)
@@ -90,10 +72,8 @@ def test_cached_photo_never_merges_distinct_delivery_events(tmp_path,monkeypatch
     monkeypatch.setattr(Encoder,'encode',encode)
     with TestClient(create_app(s)) as client:
         for _ in range(2):
-            metadata={'event_id':str(uuid.uuid4()),'direction':'IN','station_id':'same-tray'}
-            assert client.post('/api/vision/captures',data=metadata,files={'file':('item.jpg',photo(),'image/jpeg')}).status_code==200
+            assert client.post('/api/vision/match',files={'file':('item.jpg',photo(),'image/jpeg')}).status_code==200
         assert len(calls)==1
-        assert len(client.get('/api/vision/captures').json())==2
 
 def test_low_similarity_cannot_become_a_photo_match(client,monkeypatch):
     monkeypatch.setattr(client.app.state.store,'candidates',lambda *args:[{'similarity':0.40,'product':{'id':str(uuid.uuid4())},'imageId':'unused'}])
@@ -104,13 +84,12 @@ def test_low_similarity_cannot_become_a_photo_match(client,monkeypatch):
     assert response.json()['autoPostEligible'] is False
 
 
-def test_qr_endpoint_does_not_persist_a_capture_or_change_stock(client):
+def test_qr_endpoint_only_reads_the_code(client):
     from test_qr import qr_image
     value='stocklane:v1:3f2b8c1e-5a47-4d9e-9b6a-0c1d2e3f4a5b'
     response=client.post('/api/vision/qr',files={'file':('qr.png',qr_image(value),'image/png')})
     assert response.status_code==200
     assert response.json()=={'value':value}
-    assert client.get('/api/vision/captures').json()==[]
 
 def test_bedrock_daily_limit_applies_on_cache_misses_only(tmp_path,monkeypatch):
     import redis,fakeredis

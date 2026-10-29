@@ -4,11 +4,9 @@ import com.stocklane.inventory.dto.ForecastSnapshotRequest;
 import com.stocklane.inventory.dto.MovementInput;
 import com.stocklane.inventory.dto.ProductEdit;
 import com.stocklane.inventory.dto.ProductInput;
-import com.stocklane.inventory.dto.SalesHistoryImport;
 import com.stocklane.inventory.dto.PersonInput;
 import com.stocklane.inventory.service.ForecastSnapshotService;
 import com.stocklane.inventory.service.InventoryService;
-import com.stocklane.inventory.service.SalesHistoryImportService;
 import com.stocklane.inventory.service.PeopleService;
 import com.stocklane.inventory.service.StockAnalysisService;
 import java.util.*;
@@ -17,10 +15,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 @RestController
 public class InventoryController {
- private final InventoryService inventory;private final StockAnalysisService analysis;private final ForecastSnapshotService forecast;private final SalesHistoryImportService imports;private final PeopleService people;
- public InventoryController(InventoryService inventory,StockAnalysisService analysis,ForecastSnapshotService forecast,SalesHistoryImportService imports,PeopleService people){this.inventory=inventory;this.analysis=analysis;this.forecast=forecast;this.imports=imports;this.people=people;}
+ private final InventoryService inventory;private final StockAnalysisService analysis;private final ForecastSnapshotService forecast;private final PeopleService people;
+ public InventoryController(InventoryService inventory,StockAnalysisService analysis,ForecastSnapshotService forecast,PeopleService people){this.inventory=inventory;this.analysis=analysis;this.forecast=forecast;this.people=people;}
  @PostMapping("/api/inventory/analysis/forecast/history") @PreAuthorize("hasRole('OWNER')") Object forecastHistory(@RequestBody ForecastSnapshotRequest body,Authentication actor){return forecast.prepare(body.historyFrom(),body.historyConfirmed(),actor.getName());}
- @PostMapping("/api/inventory/imports/sales-history") @PreAuthorize("hasRole('OWNER')") Object importSalesHistory(@RequestHeader("Idempotency-Key")String key,@RequestBody SalesHistoryImport body){return imports.importHistory(key,body);}
  @GetMapping("/api/inventory/people") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object people(){return people.list();}
  @PostMapping("/api/inventory/people") @PreAuthorize("hasRole('OWNER')") Object addPerson(@RequestHeader("Idempotency-Key")String key,@RequestBody PersonInput body){return people.add(key,body);}
  @DeleteMapping("/api/inventory/people/{id}") @PreAuthorize("hasRole('OWNER')") Object removePerson(@PathVariable String id){return people.remove(id);}
@@ -41,7 +38,6 @@ public class InventoryController {
  @GetMapping("/internal/products/{id}") Object product(@PathVariable String id){return inventory.product(id,false);}
  @GetMapping("/internal/movements/{id}") Object movement(@PathVariable String id){return inventory.movementById(id);}
  @GetMapping("/internal/catalogue") Object internalCatalogue(){return inventory.products();}
- @GetMapping("/api/inventory/captures/{id}/movement") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object captureMovement(@PathVariable String id){Map<String,Object> result=new HashMap<>();result.put("movement",inventory.captureMovement(id));return result;}
  @GetMapping("/api/inventory/jobs/{id}/movements") @PreAuthorize("hasAnyRole('OWNER','MECHANIC')") Object jobMoves(@PathVariable String id){return inventory.jobMovements(id);}
  @PostMapping("/internal/jobs/{id}/freeze") Object freeze(@PathVariable String id){return inventory.freezeJob(id);}
 }

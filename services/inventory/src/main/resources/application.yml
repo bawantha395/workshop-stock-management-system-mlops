@@ -46,7 +46,6 @@ app:
   internal-token: ${INTERNAL_TOKEN}
   inventory-read-token: ${INVENTORY_READ_TOKEN:}
   inventory-control-token: ${INVENTORY_CONTROL_TOKEN:}
-  vision-read-token: ${VISION_READ_TOKEN:}
   cognito-issuer: ${COGNITO_ISSUER:}
   cognito-clients: ${COGNITO_CLIENT_IDS:}
   workshop-url: ${WORKSHOP_URL:http://workshop:8082}

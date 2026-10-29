@@ -1,6 +1,0 @@
-UCI Online Retail II (Chen, 2012). UCI Machine Learning Repository. https://doi.org/10.24432/C5CG6D
-License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-Landing page: https://archive.ics.uci.edu/dataset/502/online+retail+ii
-Retrieved from: https://github.com/allanvc/onlineretail2 (CRAN package onlineretail2, data/onlineretail2.rda) (sha256 be2480b1fcb1fa123f90d731f63ab3cf44f6c97cba0a38eabee93759d411c6f7)
-Transactions read: 1067371
-Changes: Real UCI Online Retail II sales, 2009-12-01 to 2011-12-09. Daily sales are net of same-day cancellations. Source has no stock levels: opening balance = all recorded sales + last 28 days of sales. Prices are GBP. At import the app moves dates forward in whole weeks so the last day is yesterday.

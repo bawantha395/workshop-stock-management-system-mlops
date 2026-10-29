@@ -112,12 +112,12 @@ sys.exit({code})
 
 def test_wrapper_maps_inputs_and_packs_model_like_a_training_job(tmp_path):
     root, result = run_wrapper(tmp_path, ENTRYPOINT.format(root=tmp_path / 'ml', code=0),
-                               parameters={'task': 'monthly_car_parts_benchmark'})
+                               parameters={'task': 'visual_sku'})
     assert result.returncode == 0, result.stderr
     with tarfile.open(root / 'processing' / 'output' / 'model.tar.gz') as archive:
         assert archive.getnames() == ['metrics.json']
         metrics = json.load(archive.extractfile('metrics.json'))
-    assert metrics == {'task': 'monthly_car_parts_benchmark', 'rows': 'dataset', 'qualityGatePassed': True}
+    assert metrics == {'task': 'visual_sku', 'rows': 'dataset', 'qualityGatePassed': True}
 
 
 def test_wrapper_fails_when_training_fails(tmp_path):
@@ -163,13 +163,13 @@ def limit_problems(shape, value, path='request'):
     return problems
 
 
-def processing_request(monkeypatch, name='stocklane-dev-public-photo-20261029-080928-782f'):
+def processing_request(monkeypatch, name='stocklane-dev-photo-20261029-080928-782f'):
     monkeypatch.delenv('SAGEMAKER_JOB_TYPE', raising=False)
     sm = Mock()
     sm.create_processing_job.return_value = {'ProcessingJobArn': 'arn:processing'}
     jobs.start(sm, name, ROLE, IMAGE,
-        [('dataset', 's3://owned/benchmarks/public/datasets/' + 'a' * 64 + '/photos/'), ('encoder', 's3://owned/encoders/def/')],
-        's3://owned/benchmarks/public/training', {'task': 'visual_sku', 'benchmark_mode': 'true'}, ['precision', 'recall'])
+        [('dataset', 's3://owned/datasets/' + 'a' * 64 + '/'), ('encoder', 's3://owned/encoders/def/')],
+        's3://owned/training', {'task': 'visual_sku'}, ['precision', 'recall'])
     return sm.create_processing_job.call_args.kwargs
 
 
@@ -211,12 +211,3 @@ def test_github_training_role_can_read_the_inference_image_it_registers():
         assert action in policy
     assert 'repository/${var.name}/ml-training"' in policy
     assert 'ecr:Put' not in policy and 'ecr:*' not in policy
-
-
-def test_training_report_keeps_a_short_masked_aws_error():
-    import sys
-    sys.path.insert(0, str(ROOT / 'mlops'))
-    from run_public_training import error_text
-    text = error_text('Image 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/x not\n accessible ' + 'x' * 400)
-    assert '721274598579' not in text and '<account>' in text
-    assert len(text) == 300 and text.endswith('...') and '\n' not in text

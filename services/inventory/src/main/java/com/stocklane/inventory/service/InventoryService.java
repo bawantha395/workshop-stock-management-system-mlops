@@ -22,8 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class InventoryService {
  private final ProductRepository productRepository;private final MovementRepository movementRepository;private final JobGateRepository gateRepository;private final OutboxRepository outboxRepository;
- private final Commands commands;private final StringRedisTemplate redis;private final CaptureVerifier captures;private final PeopleService people;
- public InventoryService(ProductRepository productRepository,MovementRepository movementRepository,JobGateRepository gateRepository,OutboxRepository outboxRepository,Commands c,StringRedisTemplate redis,CaptureVerifier captures,PeopleService people){this.productRepository=productRepository;this.movementRepository=movementRepository;this.gateRepository=gateRepository;this.outboxRepository=outboxRepository;this.commands=c;this.redis=redis;this.captures=captures;this.people=people;}
+ private final Commands commands;private final StringRedisTemplate redis;private final PeopleService people;
+ public InventoryService(ProductRepository productRepository,MovementRepository movementRepository,JobGateRepository gateRepository,OutboxRepository outboxRepository,Commands c,StringRedisTemplate redis,PeopleService people){this.productRepository=productRepository;this.movementRepository=movementRepository;this.gateRepository=gateRepository;this.outboxRepository=outboxRepository;this.commands=c;this.redis=redis;this.people=people;}
 
  public List<Map<String,Object>> products(){return productRepository.findActive();}
  public List<Map<String,Object>> movements(){return movementRepository.findRecent();}
@@ -38,8 +38,7 @@ public class InventoryService {
    String id=UUID.randomUUID().toString();
    productRepository.insert(id,p.sku().trim().toUpperCase(),p.name().trim(),p.category(),p.brand(),Objects.toString(p.grade(),""),Objects.toString(p.capacity(),""),blankNull(p.barcode()),p.unit(),p.sellingPrice(),p.reorderLevel(),blankNull(p.imageId()),Instant.now().toString());
    productRepository.updateCatalogueKeys(id,p.brand().trim().toUpperCase(Locale.ROOT),part(p.partNumber()),Objects.toString(p.location(),""));
-   if(p.sourceCaptureId()!=null&&p.openingQuantity().signum()<=0)throw new IllegalArgumentException("Confirm a positive receipt quantity for this captured item");
-   if(p.openingQuantity().signum()>0)record(new MovementInput(p.sourceCaptureId()==null?"OPENING":"RECEIPT",id,p.openingQuantity(),null,null,"Approved initial physical count",p.sourceCaptureId()));
+   if(p.openingQuantity().signum()>0)record(new MovementInput("OPENING",id,p.openingQuantity(),null,null,"Approved initial physical count",null));
    Map<String,Object> result=product(id,false);event("CATALOGUE_APPROVED",result);return result;
   });
  }
@@ -47,8 +46,6 @@ public class InventoryService {
  private Map<String,Object> record(MovementInput m){
   if(m.quantity()==null||m.quantity().signum()<=0||m.quantity().scale()>3)throw new IllegalArgumentException("Quantity must be positive, with at most 3 decimals");
   if(m.kind()==null||!Set.of("OPENING","RECEIPT","ISSUE","RETURN","STOCK_OUT").contains(m.kind()))throw new IllegalArgumentException("Unsupported movement type");
-  if(m.sourceCaptureId()!=null)try{UUID.fromString(m.sourceCaptureId());}catch(Exception e){throw new IllegalArgumentException("Invalid capture event ID");}
-  captures.verify(m);
   if(m.note()!=null&&m.note().length()>500)throw new IllegalArgumentException("Note is too long");
   boolean counterReturn="RETURN".equals(m.kind())&&m.jobId()==null;
   boolean job="ISSUE".equals(m.kind())||"RETURN".equals(m.kind())&&!counterReturn;
@@ -73,7 +70,7 @@ public class InventoryService {
   if(balance.signum()<0)throw new ConflictException("Insufficient stock for this issue");
   productRepository.updateQuantity(m.productId(),balance);
   String id=UUID.randomUUID().toString();
-  movementRepository.insert(id,m.productId(),m.kind(),m.quantity(),price,m.jobId(),m.issueId(),Commands.actor(),Objects.toString(m.note(),""),Instant.now().toString(),m.sourceCaptureId(),receiver);
+  movementRepository.insert(id,m.productId(),m.kind(),m.quantity(),price,m.jobId(),m.issueId(),Commands.actor(),Objects.toString(m.note(),""),Instant.now().toString(),receiver);
   if(job)gateRepository.incrementRevision(m.jobId());
   Map<String,Object> result=new LinkedHashMap<>(movementRepository.getById(id));result.put("sku",product.get("sku"));result.put("name",product.get("name"));result.put("unit",product.get("unit"));result.put("balance",balance);
   event("STOCK_MOVED",result);return result;
@@ -91,7 +88,6 @@ public class InventoryService {
   String s=commands.encode(productRepository.catalogueRows());
   try{redis.opsForValue().set(key,s,Duration.ofSeconds(30));}catch(Exception ignored){}return s;
  }
- public Object captureMovement(String capture){return movementRepository.findByCapture(capture).orElse(null);}
  public Object movementById(String id){return movementRepository.findById(id).orElseThrow(()->new NotFoundException("Movement not found"));}
  /** Parts handed to one person at the counter in the last 30 days, with what is still out. */
  public List<Map<String,Object>> handovers(String receiverId){

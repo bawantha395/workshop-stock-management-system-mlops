@@ -7,6 +7,4 @@ import java.math.BigDecimal;
  * receiverId names the person who received a part at the storeroom counter (stock out),
  * and a return without a repair job takes back such a counter handover (issueId).
  */
-public record MovementInput(String kind,String productId,BigDecimal quantity,String jobId,String issueId,String note,String sourceCaptureId,String receiverId){
- public MovementInput(String kind,String productId,BigDecimal quantity,String jobId,String issueId,String note,String sourceCaptureId){this(kind,productId,quantity,jobId,issueId,note,sourceCaptureId,null);}
-}
+public record MovementInput(String kind,String productId,BigDecimal quantity,String jobId,String issueId,String note,String receiverId){}

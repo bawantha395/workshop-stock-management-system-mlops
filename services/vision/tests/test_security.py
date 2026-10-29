@@ -18,15 +18,15 @@ def keys():
     pem=private.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
     return pem,{'keys':[{'kty':'RSA','kid':'test-key','use':'sig','alg':'RS256','n':b64(numbers.n),'e':b64(numbers.e)}]}
 
-def check(keys,override=None,capture=False):
+def check(keys,override=None):
     private,public=keys
     claims={'iss':ISSUER,'sub':'test-owner','iat':int(time.time()),'exp':int(time.time())+300,'client_id':'web-client','token_use':'access','cognito:groups':['OWNER']}
     claims.update(override or {})
     token=jwt.encode(claims,private,algorithm='RS256',headers={'kid':'test-key'})
-    security=Security(Settings(cognito_issuer=ISSUER,cognito_client_ids='web-client,camera-client'))
+    security=Security(Settings(cognito_issuer=ISSUER,cognito_client_ids='web-client'))
     security.keys=public;security.expires=time.monotonic()+300
     request=Request({'type':'http','headers':[(b'authorization',('Bearer '+token).encode())]})
-    return security.staff(request,capture=capture)
+    return security.staff(request)
 
 def test_valid_staff_access_token(keys):assert check(keys)=='test-owner'
 
@@ -35,12 +35,6 @@ def test_wrong_token_claims_are_rejected(keys,override):
     with pytest.raises(HTTPException) as e:check(keys,override)
     assert e.value.status_code==401
 
-def test_camera_token_cannot_approve_catalogue(keys):
-    claims={'sub':'camera-client','client_id':'camera-client','cognito:groups':[],'scope':'stocklane/capture'}
-    assert check(keys,claims,capture=True)=='camera-client'
-    with pytest.raises(HTTPException) as e:check(keys,claims,capture=False)
-    assert e.value.status_code==403
-
 def test_unsigned_algorithm_is_not_accepted(keys):
     private,public=keys
     security=Security(Settings(cognito_issuer=ISSUER,cognito_client_ids='web-client'));security.keys=public;security.expires=time.monotonic()+300
@@ -48,13 +42,8 @@ def test_unsigned_algorithm_is_not_accepted(keys):
     with pytest.raises(HTTPException) as e:security.staff(Request({'type':'http','headers':[(b'authorization',('Bearer '+token).encode())]}))
     assert e.value.status_code==401
 
-def test_metrics_token_is_not_a_production_capture_read_capability():
-    s=Settings(auth_mode='cognito',environment='cloud',internal_token='metrics-'+'m'*40,vision_read_token='read-'+'r'*40)
-    sec=Security(s)
-    def request(token,method='GET',path='/internal/captures/test'):
-        return Request({'type':'http','method':method,'path':path,'scheme':'http','server':('test',80),'headers':[(b'x-internal-token',token.encode())]})
-    sec.internal(request(s.vision_read_token))
-    with pytest.raises(HTTPException) as e:sec.internal(request(s.internal_token))
-    assert e.value.status_code==401
-    with pytest.raises(HTTPException) as e:sec.internal(request(s.vision_read_token,'POST','/internal/events'))
+def test_internal_http_is_disabled_in_the_cloud():
+    s=Settings(auth_mode='cognito',environment='cloud',internal_token='metrics-'+'m'*40)
+    request=Request({'type':'http','method':'GET','path':'/internal/events','scheme':'http','server':('test',80),'headers':[(b'x-internal-token',s.internal_token.encode())]})
+    with pytest.raises(HTTPException) as e:Security(s).internal(request)
     assert e.value.status_code==403

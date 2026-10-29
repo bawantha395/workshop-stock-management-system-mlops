@@ -10,10 +10,6 @@ output "web_client_id" {
   value = aws_cognito_user_pool_client.web.id
 }
 
-output "camera_client_id" {
-  value = aws_cognito_user_pool_client.camera.id
-}
-
 output "owner_user_names" {
   value = aws_cognito_user.owner[*].username
 }

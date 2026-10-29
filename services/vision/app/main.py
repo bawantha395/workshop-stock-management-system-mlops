@@ -182,7 +182,7 @@ def create_app(settings=None):
 
     @app.post('/api/vision/match')
     async def match(request:Request,file:UploadFile=File(...)):
-        security.staff(request,capture=True)
+        security.staff(request)
         data=await file.read(s.max_upload_bytes+1)
         if len(data)>s.max_upload_bytes:raise HTTPException(413,'Image exceeds the 8 MB upload limit')
         try:
@@ -203,78 +203,6 @@ def create_app(settings=None):
         security.staff(request)
         try:return Response(store.image(image_id),media_type='image/jpeg',headers={'Cache-Control':'private, max-age=300'})
         except (ValueError,FileNotFoundError):raise HTTPException(404,'Image not found') from None
-
-    @app.post('/api/vision/captures')
-    async def capture(request:Request,file:UploadFile=File(...),event_id:str=Form(...),direction:str=Form(...),station_id:str=Form(...),job_id:str=Form('')):
-        security.staff(request,capture=True)
-        try:uuid.UUID(event_id)
-        except ValueError:raise HTTPException(400,'Invalid event ID') from None
-        if direction not in {'IN','OUT'} or len(station_id)>80:raise HTTPException(400,'Invalid capture station metadata')
-        if job_id:
-            try:uuid.UUID(job_id)
-            except ValueError:raise HTTPException(400,'Invalid job ID') from None
-        data=await file.read(s.max_upload_bytes+1)
-        if len(data)>s.max_upload_bytes:raise HTTPException(413,'Image is too large')
-        fingerprint=hashlib.sha256(data+json.dumps([direction,station_id,job_id]).encode()).hexdigest()
-        with store.engine.connect() as c:
-            seen=c.execute(select(store.captures).where(store.captures.c.id==event_id)).mappings().first()
-            if seen:
-                if seen['request_hash']!=fingerprint:raise HTTPException(409,'Capture ID reused with different evidence')
-                return dict(seen,result=json.loads(seen['result']))
-        try:
-            image_id=await asyncio.to_thread(store.save_image,data)
-            qr_value=await asyncio.to_thread(product_qr,data)
-            identified=None
-            if qr_value:
-                product=await asyncio.to_thread(verified_product,qr_value.removeprefix('stocklane:v1:'))
-                identified=product['id'];candidates=[]
-            else:
-                vector=await asyncio.to_thread(embedding,store.image(image_id))
-                candidates=await asyncio.to_thread(store.candidates,encoder.version,vector)
-                candidates=[candidate for candidate in candidates if encoder.accepts(candidate['similarity'],s.match_threshold)]
-                for candidate in candidates:candidate['sameSkuEstimate']=encoder.same_sku_estimate(candidate['similarity'])
-        except (ValueError,OSError):raise HTTPException(422,'Invalid item photo') from None
-        result={'imageId':image_id,'state':'REVIEW' if candidates or identified else 'UNKNOWN','modelVersion':encoder.version,'candidates':candidates,'identifiedProductId':identified,'qrValue':qr_value,'autoPostEligible':False,'message':'QR identified the product. Confirm quantity.' if identified else 'Review this captured movement and confirm its quantity.'}
-        row={'id':event_id,'request_hash':fingerprint,'image_id':image_id,'direction':direction,'job_id':job_id or None,'station_id':station_id,'status':'PENDING','result':json.dumps(result),'created_at':datetime.now(timezone.utc).isoformat(),'movement_id':None}
-        try:
-            with store.engine.begin() as c:c.execute(insert(store.captures).values(**row))
-        except IntegrityError:
-            with store.engine.connect() as c:
-                seen=c.execute(select(store.captures).where(store.captures.c.id==event_id)).mappings().one()
-                if seen['request_hash']!=fingerprint:raise HTTPException(409,'Capture ID reused') from None
-                row=dict(seen)
-        return dict(row,result=json.loads(row['result']))
-
-    @app.get('/api/vision/captures')
-    def capture_inbox(request:Request):
-        security.staff(request)
-        with store.engine.connect() as c:
-            return [dict(r,result=json.loads(r['result'])) for r in c.execute(select(store.captures).order_by(store.captures.c.created_at.desc()).limit(100)).mappings()]
-
-    @app.get('/internal/captures/{event_id}')
-    def internal_capture(event_id:str,request:Request):
-        security.internal(request)
-        with store.engine.connect() as c:
-            row=c.execute(select(store.captures).where(store.captures.c.id==event_id)).mappings().first()
-            if not row:raise HTTPException(404,'Capture not found')
-            return {k:row[k] for k in ['id','status','direction','job_id','image_id']}
-
-    class CaptureResolution(BaseModel):movementId:str
-
-    @app.patch('/api/vision/captures/{event_id}')
-    def resolve_capture(event_id:str,body:CaptureResolution,request:Request):
-        security.staff(request)
-        with store.engine.begin() as c:
-            row=c.execute(select(store.captures).where(store.captures.c.id==event_id)).mappings().first()
-            if not row:raise HTTPException(404,'Capture not found')
-            r=httpx.get(s.inventory_url+'/internal/movements/'+body.movementId,headers={'X-Internal-Token':s.inventory_read_token or s.internal_token},timeout=5,trust_env=False)
-            if r.status_code!=200:raise HTTPException(409,'A confirmed inventory movement is required')
-            movement=r.json()
-            if movement.get('source_capture_id')!=event_id or movement.get('kind')!=('RECEIPT' if row['direction']=='IN' else ('ISSUE' if row['job_id'] else 'STOCK_OUT')):
-                raise HTTPException(409,'Movement is not linked to this capture')
-            if row['job_id'] and movement.get('job_id')!=row['job_id']:raise HTTPException(409,'Movement belongs to another job')
-            c.execute(update(store.captures).where(store.captures.c.id==event_id).values(status='POSTED',movement_id=body.movementId))
-        return {'status':'POSTED'}
 
     @app.post('/internal/events')
     def event(request:Request,event:dict):

@@ -6,8 +6,8 @@
   quantity by editing Redis, a job projection or a reference-image record.
 - Each user command has a durable idempotency key and stored response. Retrying
   unchanged data uses that key; a new physical receipt gets a new key.
-- Camera encounter identity is independent of image identity. Identical photos
-  can belong to different deliveries. The capture ledger reference is unique.
+- A photo is never a stock movement by itself. Identical photos can belong to different
+  deliveries; only a person's confirmed receipt or hand-over changes stock.
 - Receipt/issue/return, command response and inventory outbox commit together.
   Outbox delivery is at least once; consumers deduplicate durably.
 - Return against the original issue. Its original selling price is preserved,
@@ -73,12 +73,12 @@ no autonomous remediation is enabled in this milestone.
 
 RDS backups and S3 versioning are configured. Execute an actual restore into a
 separate environment and compare stock balances, invoices and reference counts
-before declaring an RPO/RTO. Never use `docker compose down -v` on records you
-need. The local activity table shows the latest 200 movements; the database
+before declaring an RPO/RTO. Never delete a database volume or snapshot of records you
+need. The activity table shows the latest 200 movements; the database
 retains the ledger. A paginated long-term reporting UI is a later feature.
 
-Private internal APIs use separate inventory-read, inventory-control and
-capture-verification capabilities, separate from metrics tokens, staff Cognito
+Private internal APIs use separate inventory-read and inventory-control
+capabilities, separate from metrics tokens, staff Cognito
 tokens and AWS IAM identities. Vision is not given the inventory-control
 capability. Consider service-bound short-lived identities or mTLS for stronger
 multi-team isolation. Secrets injected as pod
@@ -87,7 +87,5 @@ Secrets refresh does not restart existing processes. RDS master-secret rotation
 is managed by AWS; application-role password rotation requires updating the
 database role and restarting the relevant workloads in a controlled sequence.
 
-Collect only the tray region, keep the camera workstation/spool private, and
-define retention for raw photos. Hardware counting/direction thresholds need
-real tests. The software cannot infer quantities inside bags, identify obscured
-labels or measure the remaining oil in an opaque container.
+Define retention for raw photos. The software cannot infer quantities inside bags,
+identify obscured labels or measure the remaining oil in an opaque container.
