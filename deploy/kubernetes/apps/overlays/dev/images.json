@@ -1,8 +1,8 @@
 {
-  "inventory": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory@sha256:f507d17ca54d367dc4355e089a4ab4fa17031a87e50552b9e4ddb7d6c1dd7eca",
-  "workshop": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop@sha256:fd72db513540a33a22035eb8f55fe14b9a00867b9ee4c47af04311e8e6657c07",
-  "vision": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision@sha256:64d855d71f5efd1438aef91f4d96e10357384f43b3e0fce062b0a93b416bad56",
-  "forecast": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/forecast@sha256:8aba476a859ac21b947caf2d80cde143c2dcdccfd3e14e3c07972762c1354a46",
-  "operations": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations@sha256:c14a318497b16ff2b9caf934a5645db7253743a2f3f202757052b07bb2a58f88",
-  "ml-training": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/ml-training@sha256:9ae90a1f5e42d5a748c8a033f91e1d4b04e1a301d2b4fc9273c80eb6e69b4504"
+  "inventory": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/inventory@sha256:ac71ff79f657969b4f82fd9edbb6fe180a37fcc31e2179987bd628b8c2418078",
+  "workshop": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/workshop@sha256:8390b6a515012842efc220add50ac515f3a99f9c2a57e2eb921e046b3b12196a",
+  "vision": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/vision@sha256:8029049a9b7a6406056ae74c5146da0bdd6034a340f4ff77cbf21f770be72592",
+  "forecast": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/forecast@sha256:84cd6b0140580d7ccaae3494f19a7e40e89a13b0d994e167a899914d3785a65a",
+  "operations": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations@sha256:4cf3f853f8d08efd8ef7669f2525c72104814dc77be56aca63df79a28dc5d95d",
+  "ml-training": "721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/ml-training@sha256:62e0ccdd1a045e22971933378cc4182d5d57a6e0ac35cef490b0d6bb46fc02f5"
 }

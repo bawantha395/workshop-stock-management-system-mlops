@@ -1,15 +1,15 @@
 {
   "sourceBucket": "stocklane-dev-models-721274598579",
-  "sourcePrefix": "releases/frontend/fe6f50bb3905-40870015038-1",
+  "sourcePrefix": "releases/frontend/63773eab5b71-40895158911-1",
   "targetBucket": "stocklane-dev-web-721274598579",
   "distributionId": "E3C3UE2T86RBZT",
   "region": "ap-southeast-2",
   "accountId": "721274598579",
-  "release": "fe6f50bb3905-40870015038-1",
+  "release": "63773eab5b71-40895158911-1",
   "files": [
     {
-      "path": "assets/Scanner-BNwxiSlY.js",
-      "sha256": "0053a34c99cd2b30b0f75a263f25e81b490e41e3a651e5831b89646039888569"
+      "path": "assets/Scanner-CafI6mn0.js",
+      "sha256": "f5285b62d7b4f81ee930e7e6ba6bd00dd8f7f846fb7d73fe5389d0886138b67a"
     },
     {
       "path": "assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
@@ -20,12 +20,12 @@
       "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
     },
     {
-      "path": "assets/index-BuYvrRa1.css",
-      "sha256": "dda0a679c1fd16f8e2a9bee68baa104464b6e4604a0a9b8278c03ded5fbf3dbb"
+      "path": "assets/index-D1OdnmyV.js",
+      "sha256": "9193d6e852d6dfaf15ed6700eba81af74164fc0c3b1407d3f5c91b516ead1b74"
     },
     {
-      "path": "assets/index-CawrpzhZ.js",
-      "sha256": "a1a821eeb8e5cba9efd790b610ba4a91f9cd1eeb5e7fcec435de7f37f585c9ff"
+      "path": "assets/index-qd-M94F6.css",
+      "sha256": "ff592c8571321c6ae6a412c8b10021d5ead5ed3e98b20fde04bec4e519772812"
     },
     {
       "path": "assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2",
@@ -53,7 +53,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "f4e734c9376cd66f57f36013dfebd593a19733ae1624db2444a5f88ab6f8c7ce"
+      "sha256": "c304bc0c562799c5056ad18b437d42bcbbf317d96036404e8a329fd865b613ad"
     }
   ]
 }
