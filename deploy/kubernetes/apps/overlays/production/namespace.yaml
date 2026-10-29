@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: stocklane
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    stocklane.io/environment: production
-    stocklane.io/monitoring: enabled

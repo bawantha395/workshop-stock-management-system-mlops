@@ -1232,7 +1232,7 @@
                   ]
                 },
                 {
-                  "Sid": "ManageCertificateAndApiRecords",
+                  "Sid": "ManageProjectDnsRecords",
                   "Effect": "Allow",
                   "Action": [
                     "route53:ChangeResourceRecordSets"
@@ -1241,19 +1241,23 @@
                     "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
                   },
                   "Condition": {
-                    "ForAllValues:StringEquals": {
+                    "ForAllValues:StringLike": {
                       "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
                         {
-                          "Ref": "ApiDomain"
-                        },
-                        "argocd-stocklane.bawantha-rathnayake.tech",
-                        "grafana-stocklane.bawantha-rathnayake.tech"
-                      ],
+                          "Fn::Sub": "*stocklane*.${PublicZoneName}"
+                        }
+                      ]
+                    },
+                    "ForAllValues:StringEquals": {
                       "route53:ChangeResourceRecordSetsRecordTypes": [
-                        "A"
+                        "A",
+                        "AAAA",
+                        "CNAME"
                       ],
                       "route53:ChangeResourceRecordSetsActions": [
-                        "UPSERT"
+                        "CREATE",
+                        "UPSERT",
+                        "DELETE"
                       ]
                     }
                   }
@@ -1579,11 +1583,14 @@
                 "Fn::Sub": "arn:${AWS::Partition}:route53:::hostedzone/${HostedZoneId}"
               },
               "Condition": {
-                "ForAllValues:StringEquals": {
+                "ForAllValues:StringLike": {
                   "route53:ChangeResourceRecordSetsNormalizedRecordNames": [
-                    "argocd-stocklane.bawantha-rathnayake.tech",
-                    "grafana-stocklane.bawantha-rathnayake.tech"
-                  ],
+                    {
+                      "Fn::Sub": "*stocklane*.${PublicZoneName}"
+                    }
+                  ]
+                },
+                "ForAllValues:StringEquals": {
                   "route53:ChangeResourceRecordSetsRecordTypes": [
                     "A"
                   ],
@@ -1713,6 +1720,88 @@
               "Condition": {
                 "StringEquals": {
                   "aws:ResourceTag/Project": {
+                    "Ref": "ProjectName"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "TeardownPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "ManagedPolicyName": {
+          "Fn::Sub": "${ProjectName}-teardown"
+        },
+        "Description": "Destroy workflow: empty the Model Registry groups and remove load balancers Kubernetes created.",
+        "Roles": [
+          {
+            "Ref": "ApplyRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CleanProjectModelVersions",
+              "Effect": "Allow",
+              "Action": [
+                "sagemaker:DeleteModelPackage",
+                "sagemaker:DescribeModelPackage"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:sagemaker:${AWS::Region}:${AWS::AccountId}:model-package/${ProjectName}-*/*"
+              }
+            },
+            {
+              "Sid": "ListModelVersions",
+              "Effect": "Allow",
+              "Action": [
+                "sagemaker:ListModelPackages"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "DiscoverKubernetesLoadBalancers",
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:DescribeTags"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "SweepKubernetesLoadBalancers",
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:DeleteLoadBalancer",
+                "elasticloadbalancing:DeleteTargetGroup",
+                "elasticloadbalancing:ModifyLoadBalancerAttributes"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  },
+                  "aws:ResourceTag/elbv2.k8s.aws/cluster": {
                     "Ref": "ProjectName"
                   }
                 }

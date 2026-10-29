@@ -2,6 +2,11 @@ name: Train reviewed workshop model
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: Environment
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
       dataset_uri:
         description: Versioned S3 dataset prefix with manifest.csv and reviewed photos
         required: true
@@ -15,15 +20,15 @@ permissions:
   contents: read
   id-token: write
 concurrency:
-  group: aws-training
+  group: aws-training-${{ inputs.environment }}
   cancel-in-progress: false
 env:
   AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
   AWS_REGION: ap-southeast-2
   AWS_DEFAULT_REGION: ap-southeast-2
   AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
-  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
-  TF_ENVIRONMENT: ${{ vars.TF_ENVIRONMENT || 'dev' }}
+  PROJECT_NAME: stocklane-${{ inputs.environment }}
+  TF_ENVIRONMENT: ${{ inputs.environment }}
 jobs:
   train:
     if: github.ref == 'refs/heads/main'
@@ -34,25 +39,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: {python-version: '3.12'}
-      - name: Authenticate to AWS with GitHub OIDC
-        if: vars.AWS_AUTH_MODE != 'access-key'
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - uses: ./.github/actions/aws-credentials
         with:
-          role-to-assume: ${{ format('arn:aws:iam::{0}:role/{1}-github-training', vars.AWS_ACCOUNT_ID, vars.PROJECT_NAME) }}
-          aws-region: ap-southeast-2
-          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
-      - name: Assume delivery role with restricted CI user
-        if: vars.AWS_AUTH_MODE == 'access-key'
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ format('arn:aws:iam::{0}:role/{1}-github-training', vars.AWS_ACCOUNT_ID, vars.PROJECT_NAME) }}
-          aws-region: ap-southeast-2
-          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          force-skip-oidc: true
-          role-skip-session-tagging: true
-          role-session-name: stocklane-${{ github.run_id }}
+          role: github-training
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
       - run: pip install boto3==1.43.118
       - run: python scripts/pipeline_common.py --output artifacts/aws.json
       - name: Train, evaluate and register pending approval

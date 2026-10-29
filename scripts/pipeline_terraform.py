@@ -131,14 +131,28 @@ def public_summary(document):
     return {"actions": actions, "resources": resources}
 
 
-def plan(c, adopt_existing_nodegroup=False):
+def github_output(**values):
+    """Hand values to later jobs of the same workflow run."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a") as stream:
+            for key, value in values.items():
+                stream.write(f"{key}={value}\n")
+
+
+def plan(c, adopt_existing_nodegroup=False, destroy=False):
     sha = os.environ["GITHUB_SHA"]
     assert_main_current(sha)
     inputs = prepare(c)
-    prepare_nodegroup_recovery(c, adopt=adopt_existing_nodegroup)
-    tf("plan", "-input=false", "-lock-timeout=300s", "-out=" + str(WORK / "plan.bin"), "-no-color")
+    if not destroy:
+        prepare_nodegroup_recovery(c, adopt=adopt_existing_nodegroup)
+    options = ["plan", "-input=false", "-lock-timeout=300s", "-out=" + str(WORK / "plan.bin"), "-no-color"]
+    if destroy:
+        options.append("-destroy")
+    tf(*options)
     document = json.loads(tf("show", "-json", str(WORK / "plan.bin"), capture=True))
-    check_worker_quota(c, inputs, document)
+    if not destroy:
+        check_worker_quota(c, inputs, document)
     summary = public_summary(document)
     plan_id = os.environ["GITHUB_RUN_ID"] + "-" + os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     prefix = f"plans/{c['environment']}/{plan_id}"
@@ -159,10 +173,10 @@ def plan(c, adopt_existing_nodegroup=False):
         "lock_sha256": hashlib.sha256(provider_lock).hexdigest(), "lock_version": lock_response["VersionId"],
         "project": c["project"], "environment": c["environment"], "key": c["key"],
         "inputs_sha256": hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest(),
-        "summary": summary}
+        "destroy": destroy, "summary": summary}
     client("s3", c).put_object(Bucket=c["bucket"], Key=prefix + "/metadata.json",
         Body=json.dumps(metadata).encode(), ServerSideEncryption="AES256", IfNoneMatch="*")
-    report = ("## Terraform plan\n\n"
+    report = ("## Terraform " + ("destroy plan" if destroy else "plan") + "\n\n"
         + f"Plan ID: `{plan_id}`\n\nCommit: `{sha}`\n\nSHA256: `{digest}`\n\n"
         + "Run **Apply reviewed Terraform plan** with that Plan ID and SHA256 after review.\n\n"
         + "Imports are included below. To approve only worker replacement, set `allow_nodegroup_replacement=true` and keep `allow_deletions=false`. Temporary EC2 quota is needed while old and new workers overlap.\n\n"
@@ -172,6 +186,7 @@ def plan(c, adopt_existing_nodegroup=False):
         Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(report)
     print("Plan ID:", plan_id)
     print("Plan SHA256:", digest)
+    github_output(plan_id=plan_id, sha256=digest, changes=sum(summary["actions"].values()))
 
 
 def verified_plan(c, plan_id, expected_sha256, now=None):
@@ -218,6 +233,9 @@ def apply(c, args):
     path.write_bytes(payload)
     path.chmod(0o600)
     tf("apply", "-input=false", "-lock-timeout=300s", str(path))
+    if metadata.get("destroy"):
+        print("Destroyed every resource in the reviewed destroy plan")
+        return
     outputs = json.loads(tf("output", "-json", capture=True))
     data = outputs["deployment"]["value"]
     if data["account_id"] != c["account"] or data["region"] != c["region"]:
@@ -240,12 +258,13 @@ if __name__ == "__main__":
     parser.add_argument("--allow-deletions", action="store_true")
     parser.add_argument("--allow-nodegroup-replacement", action="store_true")
     parser.add_argument("--adopt-existing-nodegroup", action="store_true")
+    parser.add_argument("--destroy", action="store_true", help="Plan the removal of every resource")
     args = parser.parse_args()
     config = settings()
     check_account(config)
     try:
         {"bootstrap": lambda: bootstrap(config),
-         "plan": lambda: plan(config, args.adopt_existing_nodegroup),
+         "plan": lambda: plan(config, args.adopt_existing_nodegroup, args.destroy),
          "apply": lambda: apply(config, args)}[args.operation]()
     except subprocess.CalledProcessError as error:
         # Terraform has already printed the actionable provider error.

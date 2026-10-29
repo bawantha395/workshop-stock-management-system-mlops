@@ -2,7 +2,8 @@
 
 The application, Argo CD, Prometheus Operator, Prometheus, Alertmanager, Grafana
 and cluster add-ons are delivered as plain Kubernetes YAML with Kustomize.
-Helm is not required in the deployment workflow. Terraform creates EKS, IAM,
+Helm is not required in the deployment workflow (see *Why vendored YAML instead
+of Helm* below). Terraform creates EKS, IAM,
 RDS, S3, ElastiCache and the other AWS services.
 
 ## Resource layout
@@ -14,7 +15,7 @@ RDS, S3, ElastiCache and the other AWS services.
 | `deploy/kubernetes/apps/base/vision/` | The vision service resources, model init container and temporary model volume. |
 | `deploy/kubernetes/apps/base/shared/` | Separate ConfigMap, ALB Ingress and NetworkPolicy YAML. |
 | `deploy/kubernetes/apps/base/model-index/job.yaml` | Argo CD PreSync model-index preparation job. |
-| `deploy/kubernetes/apps/overlays/` | `dev`, `test`, `uat`, `production`: namespaces and per-resource patches. |
+| `deploy/kubernetes/apps/overlays/` | `dev`, `staging`, `prod`: namespaces and per-resource patches. |
 | `deploy/kubernetes/platform/` | EBS `storageclass.yaml`, External Secrets store, ALB configuration, metrics server and Fluent Bit. |
 | `deploy/kubernetes/argocd/base/` | Pinned Argo CD installation and child-application health configuration. |
 | `deploy/kubernetes/argocd/applications/` | Separate AppProject and Application YAML, with an overlay per environment. |
@@ -48,16 +49,13 @@ flowchart TD
 | Overlay | Application namespace | App replicas / HPA maximum | Prometheus / Alertmanager replicas |
 | --- | --- | --- | --- |
 | dev | `stocklane-dev` | 1 / 2 | 1 / 1 |
-| test | `stocklane-test` | 1 / 2 | 1 / 1 |
-| uat | `stocklane-uat` | 2 / 4 | 1 / 1 |
-| production | `stocklane` | 3 / 6 | 2 / 3 |
+| staging | `stocklane-staging` | 2 / 4 | 1 / 1 |
+| prod | `stocklane-prod` | 3 / 6 | 2 / 3 |
 
-These are workload configurations. They do not create four EKS clusters or four
-AWS environments automatically. Deploy only the selected environment. Cluster
-platform components are installed once per cluster; use a separate cluster and
-Terraform state/account for production isolation. Reusable Terraform child
-modules and a complete multi-account promotion pipeline remain separate work.
-The current release/frontend workflows target the production deployment.
+The overlay names match the Terraform environments in
+`infra/terraform/environments/`. Each environment is its own EKS cluster with its
+own Terraform state, so **Deploy environment** with `staging` creates a separate
+stack (`stocklane-staging`) and renders `overlays/staging` for it.
 
 All overlays retain Cognito, TLS, private data services and cloud authentication.
 Development on AWS does not enable the local demo identity header.
@@ -87,7 +85,7 @@ pip install -r scripts/requirements.txt
 python scripts/install_kustomize.py --directory "$PWD/deploy/generated/tools"
 export PATH="$PWD/deploy/generated/tools:$PATH"
 python scripts/validate_kustomize.py
-kustomize build deploy/kubernetes/apps/overlays/production
+kustomize build deploy/kubernetes/apps/overlays/prod
 ```
 
 The validator builds all environment layouts, checks pinned vendor file hashes,
@@ -103,7 +101,7 @@ release helper writes actual Terraform outputs, immutable image digests and
 model checksums to per-resource patches. It then runs:
 
 ```bash
-python scripts/validate_kustomize.py --environment production --configured
+python scripts/validate_kustomize.py --environment prod --configured
 ```
 
 This gate rejects placeholder runtime values, mutable application images and
@@ -112,13 +110,24 @@ annotations trigger rollouts when the model/configuration changes. The PreSync
 index job receives the new model URI/checksum explicitly, because the shared
 ConfigMap is updated later in the Sync phase.
 
+## Why vendored YAML instead of Helm
+
+Third-party components are copied into `deploy/kubernetes/vendor/` as plain
+YAML, one object per file, and every file's SHA256 is pinned in
+`upstream.lock.json`. Compared with installing Helm charts at deploy time:
+
+- a deploy can only apply bytes that were reviewed in Git (supply-chain lock);
+- the private CodeBuild runner inside the VPC needs no chart repository access;
+- `kustomize build` shows the exact objects, so diffs in a pull request are real.
+
+The trade-off is that upgrades mean re-vendoring the files and updating the lock
+in one reviewed pull request.
+
 ## Initial bootstrap and Argo CD
 
-After the reviewed release is merged and the operator has pulled that commit:
-
-```bash
-python scripts/bootstrap_eks.py --config deploy/generated/aws.outputs.json
-```
+The **Deploy environment** pipeline runs this inside the VPC on the private
+CodeBuild runner (`scripts/run_platform_bootstrap.py` → `scripts/bootstrap_eks.py`)
+right after the release commit is pushed.
 
 The helper checks the AWS account and configured overlays, applies namespaces
 and CRDs with server-side apply, waits for controllers and webhooks, initialises

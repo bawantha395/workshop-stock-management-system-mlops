@@ -232,21 +232,34 @@ def test_source_archive_excludes_state_credentials_builds_and_models(config, tmp
         assert all(b"PRIVATE_SENTINEL" not in archive.read(name) for name in archive.namelist())
 
 
+def workflow(name):
+    return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
+
+
+REUSABLE_ENVIRONMENTS = {
+    "_terraform.yml": {"aws-bootstrap", "aws-infrastructure-plan", "aws-infrastructure-apply"},
+    "_release.yml": {"aws-release"},
+    "_platform.yml": {"aws-platform"},
+    "_frontend.yml": {"aws-release"},
+    "_cleanup.yml": {"aws-infrastructure-apply"},
+}
+
+
 def test_privileged_workflows_require_main_and_manual_apply():
-    for name, environment in [("aws-backend.yml", "aws-bootstrap"),
-                              ("terraform-plan.yml", "aws-infrastructure-plan"),
-                              ("terraform-apply.yml", "aws-infrastructure-apply"),
-                              ("platform.yml", "aws-platform")]:
-        workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
-        assert "pull_request" not in workflow["on"] and "pull_request_target" not in workflow["on"]
-        privileged = [job for job in workflow["jobs"].values() if job.get("environment") == environment]
-        assert len(privileged) == 1
-        assert "github.ref == 'refs/heads/main'" in privileged[0]["if"]
-        assert privileged[0]["permissions"]["id-token"] == "write"
+    for name, environments in REUSABLE_ENVIRONMENTS.items():
+        reusable = workflow(name)
+        # Only callable from the two master pipelines; never from pull requests.
+        assert set(reusable["on"]) == {"workflow_call"}, name
+        jobs = [job for job in reusable["jobs"].values() if "environment" in job]
+        assert {job["environment"] for job in jobs} == environments, name
+        for job in jobs:
+            assert "github.ref == 'refs/heads/main'" in job["if"], name
+            assert job["permissions"]["id-token"] == "write", name
         assert "upload-artifact" not in (ROOT / ".github/workflows" / name).read_text()
-    apply = yaml.load((ROOT / ".github/workflows/terraform-apply.yml").read_text(), Loader=yaml.BaseLoader)
-    assert set(apply["on"]) == {"workflow_dispatch"}
-    assert {"plan_id", "plan_sha256"} <= apply["on"]["workflow_dispatch"]["inputs"].keys()
+    terraform = workflow("_terraform.yml")
+    assert {"plan_id", "sha256", "allow_deletions"} <= terraform["on"]["workflow_call"]["inputs"].keys()
+    for name in ("deploy.yml", "destroy.yml"):
+        assert set(workflow(name)["on"]) == {"workflow_dispatch"}, name
 
 
 def terraform_blocks(path, kind, names):
@@ -365,28 +378,28 @@ def test_bootstrap_policies_bind_environment_and_preserve_state_history():
 
 
 
-def test_delivery_filters_avoid_recursive_or_early_releases():
-    from workflow_eligibility import eligible
-    assert eligible("application", ["services/inventory/App.java"])
-    assert eligible("application", ["scripts/bootstrap_database.py"])
-    assert not eligible("application", ["deploy/kubernetes/apps/overlays/dev/release.json"])
-    assert not eligible("application", ["services/inventory/App.java", "infra/terraform/modules/data/main.tf"])
-    assert not eligible("application", ["apps/web/src/main.tsx"], current=False)
-    assert eligible("application", [], manual=True)
-    assert eligible("platform", ["deploy/kubernetes/apps/overlays/dev/release.json"])
-    assert not eligible("platform", ["README.md"])
-    assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "infra/terraform/modules/eks/main.tf"])
-    assert not eligible("platform", ["deploy/kubernetes/apps/base/forecast/deployment.yaml", "services/forecast/app/main.py"])
-
-
-def test_workflow_run_consumers_require_successful_own_main_push():
-    for name in ["release.yml", "platform.yml"]:
-        workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
-        assert workflow["on"]["workflow_run"]["branches"] == ["main"]
-        guard = workflow["jobs"]["eligibility"]["if"]
-        assert "workflow_run.event == 'push'" in guard
-        assert "workflow_run.conclusion == 'success'" in guard
-        assert "workflow_run.head_repository.full_name == github.repository" in guard
+def test_master_pipelines_run_every_stage_in_order():
+    deploy = workflow("deploy.yml")["jobs"]
+    order = ["test", "plan", "apply", "release", "platform", "frontend"]
+    for before, after in zip(order, order[1:]):
+        needs = deploy[after]["needs"]
+        assert before in (needs if isinstance(needs, list) else [needs]), after
+    assert deploy["test"]["uses"] == "./.github/workflows/ci.yml"
+    assert deploy["apply"]["with"]["plan_id"] == "${{ needs.plan.outputs.plan_id }}"
+    assert deploy["platform"]["with"]["ref"] == "${{ needs.release.outputs.sha }}"
+    assert "workflow_call" in workflow("ci.yml")["on"]
+    destroy = workflow("destroy.yml")
+    assert destroy["on"]["workflow_dispatch"]["inputs"]["confirm"]["required"] == "true"
+    jobs = destroy["jobs"]
+    assert jobs["platform-teardown"]["with"]["operation"] == "teardown"
+    assert jobs["destroy-plan"]["with"]["operation"] == "destroy-plan"
+    assert jobs["destroy"]["with"]["allow_deletions"] == "true"
+    for name, job in jobs.items():
+        if name != "confirm":
+            assert "confirm" in str(job.get("needs")) or name == "destroy", name
+    # No workflow starts AWS work on its own from another workflow's result.
+    for path in (ROOT / ".github/workflows").glob("*.yml"):
+        assert "workflow_run" not in yaml.load(path.read_text(), Loader=yaml.BaseLoader)["on"], path.name
 
 
 def test_application_releases_preserve_reviewed_model(tmp_path):
@@ -516,23 +529,27 @@ def test_failed_key_handoff_revokes_the_unusable_key(tmp_path,monkeypatch):
 
 
 def test_access_key_workflow_authentication_assumes_roles_without_oidc():
-    authenticated_jobs=[]
-    for path in (ROOT/".github/workflows").glob("*.yml"):
-        workflow=yaml.load(path.read_text(),Loader=yaml.BaseLoader)
-        for name,job in workflow["jobs"].items():
-            credentials=[step for step in job.get("steps",[])
-                if step.get("uses","").startswith("aws-actions/configure-aws-credentials@")]
-            if not credentials:continue
-            access=[step for step in credentials if step.get("if")=="vars.AWS_AUTH_MODE == 'access-key'"]
-            oidc=[step for step in credentials if step.get("if")=="vars.AWS_AUTH_MODE != 'access-key'"]
-            assert len(access)==len(oidc)==1, (path.name,name)
-            step=access[0]
-            assert step["with"]["force-skip-oidc"]=="true"
-            assert step["with"]["role-skip-session-tagging"]=="true"
-            assert "role-to-assume" in step["with"]
-            assert step["with"]["aws-secret-access-key"]=="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-            authenticated_jobs.append((path.name,name))
-    assert authenticated_jobs
+    action = yaml.load((ROOT / ".github/actions/aws-credentials/action.yml").read_text(), Loader=yaml.BaseLoader)
+    steps = action["runs"]["steps"]
+    access = [step for step in steps if step.get("if") == "env.AWS_AUTH_MODE == 'access-key'"]
+    oidc = [step for step in steps if step.get("if") == "env.AWS_AUTH_MODE != 'access-key'"]
+    assert len(access) == len(oidc) == 1
+    step = access[0]
+    assert step["with"]["force-skip-oidc"] == "true"
+    assert step["with"]["role-skip-session-tagging"] == "true"
+    assert step["with"]["role-to-assume"] == oidc[0]["with"]["role-to-assume"]
+    assert step["with"]["aws-secret-access-key"] == "${{ inputs.secret-access-key }}"
+    authenticated_jobs = []
+    for path in (ROOT / ".github/workflows").glob("*.yml"):
+        text = path.read_text()
+        assert "aws-actions/configure-aws-credentials@" not in text, path.name
+        for name, job in yaml.load(text, Loader=yaml.BaseLoader)["jobs"].items():
+            for login in [s for s in job.get("steps", []) if s.get("uses") == "./.github/actions/aws-credentials"]:
+                assert login["with"]["role"] in {"ci-bootstrap", "ci-plan", "ci-apply", "github-release",
+                                                 "github-platform", "github-training"}, (path.name, name)
+                assert "secrets.AWS_SECRET_ACCESS_KEY }}" in login["with"]["secret-access-key"]
+                authenticated_jobs.append((path.name, name))
+    assert len(authenticated_jobs) >= 8
 
 
 @pytest.mark.parametrize("existing", [False, True])

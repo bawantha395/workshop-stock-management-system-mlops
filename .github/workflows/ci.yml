@@ -1,13 +1,15 @@
 name: Validate platform
 on:
   workflow_dispatch:
+  workflow_call:   # Deploy environment runs these checks first
   pull_request:
   push:
     branches: [main]
 permissions:
   contents: read
 concurrency:
-  group: ci-${{ github.ref }}
+  # Pushes and PRs cancel older runs on the same branch; a deploy run gets its own group.
+  group: ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 jobs:
   java:
@@ -47,7 +49,7 @@ jobs:
       - run: pip install -r services/vision/requirements-dev.txt PyYAML==6.0.3 fakeredis==2.40.0 scikit-learn==1.9.1
       - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: python scripts/download_model.py
-      - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_operational_readiness.py tests/test_demo_data.py tests/test_public_data.py -q
+      - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_operational_readiness.py tests/test_synthetic_guards.py tests/test_public_data.py -q
       - run: python -m compileall -q scripts mlops edge
   compose-integration:
     runs-on: ubuntu-latest
@@ -138,7 +140,7 @@ jobs:
       - run: python scripts/install_actionlint.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: actionlint -color=false
       - run: cfn-lint -i W2001 -t infra/ci/identity.json infra/ci/state.json
-      - run: pytest tests/test_pipeline.py -q
+      - run: pytest tests/test_pipeline.py tests/test_teardown.py -q
   security:
     runs-on: ubuntu-latest
     steps:

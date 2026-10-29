@@ -9,7 +9,7 @@ Prepared 2026-10-27. These are real external observations and source catalogue i
 - `real-photo-overview.png`: source photo preview, not an extra training sample.
 - `photo-products.json`: source product IDs and original multilingual titles, not manufacturer fitment verification.
 - `local-validation-report.json`: actual local evaluation. No AWS job was started while preparing this file. Both pooled quality gates failed; these models are not ready for live stock decisions.
-- `RUN_WORKFLOW.md`: full deployment and training instructions.
+- Training instructions: [docs/MLOPS.md](../../docs/MLOPS.md) (run **Deploy environment** with `train`, or **Train real-data ML models**).
 - `ATTRIBUTION.md` and `LICENSE-CC-BY-4.0.txt`: source attribution and reuse terms.
 
 The photo source is Amazon Berkeley Objects, https://registry.opendata.aws/amazon-berkeley-objects/ . Images include product sets, close-ups, marketing panels and accessories. The history source is Monash Car Parts with Missing Values, https://zenodo.org/records/4656022 , DOI 10.5281/zenodo.4656022. Both sources identify CC BY 4.0 releases. Anonymous history IDs cannot be linked to the photo ASINs or current workshop stock.

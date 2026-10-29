@@ -1,0 +1,36 @@
+# Reusable: publish the frontend files staged by the release to the web bucket
+# and refresh CloudFront.
+name: _frontend
+on:
+  workflow_call:
+    inputs:
+      environment: {type: string, required: true}
+      ref: {type: string, default: ''}
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_DEFAULT_REGION: ap-southeast-2
+  AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  PROJECT_NAME: stocklane-${{ inputs.environment }}
+  TF_ENVIRONMENT: ${{ inputs.environment }}
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: aws-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {ref: '${{ inputs.ref || github.sha }}'}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r scripts/requirements.txt
+      - uses: ./.github/actions/aws-credentials
+        with:
+          role: github-release
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+      - run: python scripts/publish_frontend.py --environment "$TF_ENVIRONMENT"

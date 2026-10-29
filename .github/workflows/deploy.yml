@@ -1,0 +1,125 @@
+# ONE-CLICK DEPLOY: builds a complete Stocklane environment from nothing.
+#
+#   test ─► plan ─► apply ─► release ─► platform ─► frontend ─► (train) ─► summary
+#
+#   test      ci.yml: unit tests, Terraform validate + mocked plan, Kustomize checks
+#   plan      Terraform plan saved privately (infra/terraform/environments/<env>)
+#   apply     apply exactly that plan (about 25 minutes: EKS, RDS, CloudFront)
+#   release   build images to ECR, render the Kustomize overlay, commit it (GitOps)
+#   platform  private CodeBuild installs Argo CD + controllers; Argo CD syncs the
+#             release commit; HTTPS API probe
+#   frontend  publish the React app to S3 + CloudFront
+#   train     optional: SageMaker Processing jobs -> Model Registry
+#
+# To serve a newly approved model, run Deploy again with its model_package ARN.
+#
+# Run "Destroy environment" afterwards to stop all charges.
+name: Deploy environment
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to create or update
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+      train:
+        description: Also train the ML models on SageMaker after deploying
+        type: boolean
+        default: false
+      model_package:
+        description: Optional approved Model Registry version ARN to serve; empty keeps the baseline model
+        type: string
+        default: ''
+      allow_deletions:
+        description: Allow the plan to delete or replace resources (check the plan summary first)
+        type: boolean
+        default: false
+permissions:
+  contents: write
+  id-token: write
+# One deploy/destroy at a time across all environments: a saved plan may only be
+# applied while main is still at the commit it was planned from.
+concurrency:
+  group: stocklane-aws
+  cancel-in-progress: false
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  plan:
+    needs: test
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: plan
+    secrets: inherit
+
+  apply:
+    needs: plan
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: apply
+      plan_id: ${{ needs.plan.outputs.plan_id }}
+      sha256: ${{ needs.plan.outputs.sha256 }}
+      allow_deletions: ${{ inputs.allow_deletions }}
+    secrets: inherit
+
+  release:
+    needs: apply
+    uses: ./.github/workflows/_release.yml
+    with:
+      environment: ${{ inputs.environment }}
+      model_package: ${{ inputs.model_package }}
+    secrets: inherit
+
+  platform:
+    needs: release
+    uses: ./.github/workflows/_platform.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: bootstrap
+      ref: ${{ needs.release.outputs.sha }}
+    secrets: inherit
+
+  frontend:
+    needs: [release, platform]
+    uses: ./.github/workflows/_frontend.yml
+    with:
+      environment: ${{ inputs.environment }}
+      ref: ${{ needs.release.outputs.sha }}
+    secrets: inherit
+
+  train:
+    needs: frontend
+    if: inputs.train
+    uses: ./.github/workflows/train-public-data.yml
+    with:
+      environment: ${{ inputs.environment }}
+      task: both
+    secrets: inherit
+
+  summary:
+    needs: [frontend, train]
+    if: always() && needs.frontend.result == 'success'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Print the environment URLs
+        env:
+          TARGET: ${{ inputs.environment }}
+          TRAINED: ${{ needs.train.result }}
+          TFVARS_JSON: ${{ inputs.environment == 'prod' && secrets.TFVARS_JSON_PROD || inputs.environment == 'staging' && secrets.TFVARS_JSON_STAGING || secrets.TFVARS_JSON }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          d = json.loads(os.environ["TFVARS_JSON"])
+          print(f"## Stocklane `{os.environ['TARGET']}` is running\n")
+          print("| | URL |\n|---|---|")
+          for label, key in [("App", "web_domain"), ("API", "api_domain"), ("Argo CD", "argocd_domain"), ("Grafana", "grafana_domain")]:
+              if d.get(key):
+                  print(f"| {label} | https://{d[key]} |")
+          print(f"\nSageMaker training: {os.environ['TRAINED'] or 'skipped'}")
+          print("\nWhen you are done, run **Destroy environment** to stop all charges.")
+          PY

@@ -11,8 +11,10 @@ SAFE_LOADER.add_constructor("tag:yaml.org,2002:value", lambda loader, node: load
 
 ROOT = Path(__file__).resolve().parents[1]
 KUBERNETES = ROOT / 'deploy/kubernetes'
-ENVIRONMENTS = {'dev': 'stocklane-dev', 'test': 'stocklane-test', 'uat': 'stocklane-uat', 'production': 'stocklane'}
-PROFILES = {'dev': (1, 2), 'test': (1, 2), 'uat': (2, 4), 'production': (3, 6)}
+# Same names and namespaces as infra/terraform/environments/<env>.
+ENVIRONMENTS = {'dev': 'stocklane-dev', 'staging': 'stocklane-staging', 'prod': 'stocklane-prod'}
+# (minimum, maximum) application replicas per environment.
+PROFILES = {'dev': (1, 2), 'staging': (2, 4), 'prod': (3, 6)}
 
 class BlockDumper(yaml.SafeDumper):
     pass
@@ -41,9 +43,9 @@ def build(path, binary=None):
     return [obj for obj in yaml.load_all(result.stdout, Loader=SAFE_LOADER) if obj]
 
 def environment(config):
-    name = config.get('environment', 'production')
+    name = config.get('environment', 'prod')
     if name not in ENVIRONMENTS:
-        raise ValueError('Environment must be dev, test, uat or production')
+        raise ValueError('Environment must be dev, staging or prod')
     namespace = config.get('workload_namespace', ENVIRONMENTS[name])
     if namespace != ENVIRONMENTS[name]:
         raise ValueError('Workload namespace does not match the selected environment')

@@ -3,7 +3,7 @@ import argparse,hashlib,json,mimetypes
 from pathlib import Path,PurePosixPath
 import boto3
 parser=argparse.ArgumentParser()
-parser.add_argument('--environment',choices=['dev','test','uat','production'],default='production')
+parser.add_argument('--environment',choices=['dev','staging','prod'],default='dev')
 a=parser.parse_args()
 c=json.loads((Path('deploy/kubernetes/apps/overlays')/a.environment/'frontend_release.json').read_text())
 if boto3.client('sts').get_caller_identity()['Account']!=c['accountId']:raise RuntimeError('AWS account mismatch')

@@ -25,24 +25,14 @@ shared platform controls. The service is stateless and does not need a PVC.
 It has its own ECR repository and Pod Identity with read-only access to the
 published forecast. Its temporary filesystem is an emptyDir, not persistent data.
 
-## Deploy this release first
+## Deploy it
 
-1. Synchronise current main, upload this source, and pass **Validate platform**.
-2. Update existing trust if taking the domain/certificate changes from this ZIP;
-   follow CUSTOM_DOMAINS.md. Do not replace existing TFVARS_JSON defaults.
-3. Run the existing Terraform plan/review/apply process. This adds the Forecast
-   ECR repository, Pod Identity/read permissions, Inventory snapshot write rights,
-   and the separate SageMaker stock-forecast package group/training permissions.
-4. Run **Prepare AWS release** and merge its GitOps PR. It builds the Forecast
-   image and the updated Training image; rendering pins their new digests.
-   Do not bootstrap the newly added, unreleased Forecast base image directly.
-5. Mixed source/infrastructure uploads intentionally skip automatic platform bootstrap until a GitOps-only release merge. Run **Bootstrap EKS platform**, then publish frontend using the normal release
-   process. It waits for the Forecast deployment as well as the other services.
-
-Forecasting is a new microservice; your existing application must be released
-before its new endpoint and history-export endpoint are available. A single
-forecast workflow handles training through publication **after this deployment**;
-it cannot bypass Terraform review or manufacture missing history.
+The Forecast service is part of every environment. **Deploy environment**
+creates its ECR repository, Pod Identity and the stock-forecast Model Registry
+group, builds its image and waits for its deployment with the other services.
+The forecast workflow below handles training through publication **after** the
+environment is deployed; it cannot bypass Terraform review or manufacture
+missing history.
 
 ## Run forecasting once
 
@@ -107,10 +97,10 @@ must reconcile with current stock. Days with zero beginning/end stock are censor
 unrecorded intraday stock-outs remain a limitation. Training does not infer unmet
 demand. End-of-day/starting balance is only an availability proxy.
 
-One CPU `ml.m5.large` training job, ten-minute MaxRuntimeInSeconds, network
-isolation, no automatic retries and a controller wall-clock stop limit are used.
-This is paid training when eligible; account SCPs, free-plan restrictions and
-SageMaker quotas still apply. There is no continuously billed SageMaker endpoint.
+One CPU `ml.t3.large` SageMaker Processing job (or an `ml.m5.large` training job
+with `SAGEMAKER_JOB_TYPE=training` once the account has training quota), a
+runtime limit, network isolation, no automatic retries and a controller
+wall-clock stop limit are used. Account SCPs and SageMaker quotas still apply. There is no continuously billed SageMaker endpoint.
 The Forecast EKS pod requests 50m CPU / 96Mi memory. Check cluster headroom;
 existing tiny nodes may need capacity before another pod can schedule.
 

@@ -7,12 +7,20 @@ from render_cloud import render
 from kustomize_utils import KUBERNETES, environment, build as kustomize_build
 ROOT=Path(__file__).resolve().parents[1]
 
-def reviewed_model(overlay,bucket):
+def reviewed_model(overlay,bucket,s3=None):
     path=overlay/'release.json'
     if not path.exists():return None
     value=json.loads(path.read_text())['model']
     if not value['uri'].startswith('s3://'+bucket+'/releases/') or not re.fullmatch(r'[a-f0-9]{64}',value['sha256']):
         raise ValueError('The previous reviewed model has invalid project provenance')
+    if s3 is not None:
+        # A freshly recreated environment has an empty models bucket: start
+        # again from the checksum-pinned baseline instead of a missing bundle.
+        try:s3.head_object(Bucket=bucket,Key=value['uri'].split('/',3)[3])
+        except Exception as error:
+            if getattr(error,'response',{}).get('Error',{}).get('Code') in {'404','NoSuchKey','NotFound'}:
+                print('Previous model bundle is gone (new environment); using the baseline model');return None
+            raise
     return {**value,'version':'retained-reviewed-model'}
 
 def build(a):
@@ -23,7 +31,7 @@ def build(a):
     commit=subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()
     expected=os.environ.get('STOCKLANE_SOURCE_SHA') or os.environ.get('GITHUB_SHA')
     if expected and expected!=commit:raise RuntimeError('Checked-out source does not match the reviewed commit')
-    retained=reviewed_model(overlay,c['model_bucket']) if not a.model_package else None
+    retained=reviewed_model(overlay,c['model_bucket'],s3) if not a.model_package else None
     if retained and retained.get('packageArn'):
         description=boto3.client('sagemaker',region_name=region).describe_model_package(ModelPackageName=retained['packageArn'])
         if description['ModelApprovalStatus']!='Approved':raise RuntimeError('The retained model package is no longer approved')
@@ -68,7 +76,7 @@ def build(a):
     frontend={'sourceBucket':c['model_bucket'],'sourcePrefix':prefix,'targetBucket':c['web_bucket'],'distributionId':c['cloudfront_distribution_id'],'region':c['region'],'accountId':c['account_id'],'release':tag,'files':files}
     (overlay/'frontend_release.json').write_text(json.dumps(frontend,indent=2)+'\n')
     (work/'summary.md').write_text('Builds immutable service images and prepares the AWS GitOps overlay.\n\nModel bundle: '+model['version']+'\n\nValidation: CI checks must pass before merging. Argo CD builds compatible reference vectors before rollout.\n')
-    print('Release payload rendered. Review and merge the GitOps PR before application rollout.')
+    print('Release rendered: images pushed, GitOps overlay and frontend bundle prepared.')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--config',required=True);p.add_argument('--model-package',default='');build(p.parse_args())

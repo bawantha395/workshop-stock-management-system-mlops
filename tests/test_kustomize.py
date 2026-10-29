@@ -41,8 +41,8 @@ def test_argo_applications_reference_projects_and_paths_for_the_same_environment
     assert workload['spec']['destination']['namespace'] == ENVIRONMENTS[env]
     assert int(workload['metadata']['annotations']['argocd.argoproj.io/sync-wave']) > 20
 
-def test_production_monitoring_keeps_persistent_data_and_private_admin_access():
-    docs = build(KUBERNETES / 'monitoring/overlays/production')
+def test_prod_monitoring_keeps_persistent_data_and_private_admin_access():
+    docs = build(KUBERNETES / 'monitoring/overlays/prod')
     validate_objects(docs, schemas())
     assert next(o for o in docs if o['kind']=='Prometheus')['spec']['replicas'] == 2
     assert next(o for o in docs if o['kind']=='Alertmanager')['spec']['replicas'] == 3
@@ -103,7 +103,7 @@ def test_schema_validation_accepts_pinned_crd_specs_and_metadata_patches_only():
     with pytest.raises(ValueError, match='Unpinned or modified CustomResourceDefinition'):
         validate_objects([unknown], schemas())
 
-def config(env='production'):
+def config(env='prod'):
     return {'environment':env,'region':'eu-west-1','account_id':'123456789012','cognito_issuer':'https://cognito-idp.eu-west-1.amazonaws.com/test','cognito_web_client_id':'web-client','cognito_camera_client_id':'camera-client','frontend_url':'https://test.cloudfront.net','stock_queue_url':'https://sqs.eu-west-1.amazonaws.com/123456789012/stock','catalogue_queue_url':'https://sqs.eu-west-1.amazonaws.com/123456789012/catalogue','cache_host':'cache.example.internal','media_bucket':'test-media','database_host':'db.example.internal','database_secrets':{s:'arn:aws:secretsmanager:eu-west-1:123456789012:secret:'+s for s in ['inventory','workshop','vision']},'platform_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:platform','api_domain':'api.example.com','api_certificate_arn':'arn:aws:acm:eu-west-1:123456789012:certificate/test'}
 
 def test_renderer_preserves_bases_and_rolls_pods_when_the_model_changes(tmp_path):
@@ -111,7 +111,7 @@ def test_renderer_preserves_bases_and_rolls_pods_when_the_model_changes(tmp_path
     images = {s:'123456789012.dkr.ecr.eu-west-1.amazonaws.com/'+s+'@sha256:'+'a'*64 for s in ['inventory','workshop','vision','forecast','operations']}
     render(config(),images,'s3://test-models/release.tar.gz','f'*64,tmp_path)
     initial = build(tmp_path)
-    validate_apps(initial,'stocklane',configured=True)
+    validate_apps(initial,'stocklane-prod',configured=True)
     first = next(o for o in initial if o['kind']=='Deployment' and o['metadata']['name']=='vision')['spec']['template']['metadata']['annotations']['stocklane.io/config-sha256']
     render(config(),images,'s3://test-models/next.tar.gz','e'*64,tmp_path)
     updated = build(tmp_path)
@@ -138,10 +138,10 @@ def test_full_account_render_wires_platform_monitoring_and_bootstrap(tmp_path, m
     shutil.copytree(KUBERNETES,fixture)
     monkeypatch.setattr(renderer,'KUBERNETES',fixture)
     monkeypatch.setattr(validator,'KUBERNETES',fixture)
-    c=config();c.update({'name':'stocklane-test','github_repository':'bawantha395/workshop-stock-ai-ops','workload_namespace':'stocklane','cluster_name':'stocklane-test','vpc_id':'vpc-0123456789abcdef0','master_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:rds-master','grafana_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:grafana','operations_topic_arn':'arn:aws:sns:eu-west-1:123456789012:stocklane-operations','application_log_group':'/stocklane/test/containers'})
+    c=config();c.update({'name':'stocklane-prod','github_repository':'bawantha395/workshop-stock-ai-ops','workload_namespace':'stocklane-prod','cluster_name':'stocklane-prod','vpc_id':'vpc-0123456789abcdef0','master_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:rds-master','grafana_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:grafana','operations_topic_arn':'arn:aws:sns:eu-west-1:123456789012:stocklane-operations','application_log_group':'/stocklane/stocklane-prod/containers'})
     images={s:'123456789012.dkr.ecr.eu-west-1.amazonaws.com/'+s+'@sha256:'+'a'*64 for s in ['inventory','workshop','vision','forecast','operations']}
     renderer.render(c,images,'s3://test-models/release.tar.gz','f'*64,platform=True)
-    counts=validator.validate_environment('production',configured=True)
+    counts=validator.validate_environment('prod',configured=True)
     assert counts['platform']>20 and counts['monitoring']>10 and counts['bootstrap']==3
 
 

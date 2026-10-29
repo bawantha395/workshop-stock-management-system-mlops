@@ -22,7 +22,7 @@ def datasource_mount(objects):
     return pod, name, configmap
 
 
-@pytest.mark.parametrize('environment', ['dev', 'test', 'uat', 'production'])
+@pytest.mark.parametrize('environment', ['dev', 'staging', 'prod'])
 def test_every_overlay_provisions_the_datasource_referenced_by_its_panels(environment):
     objects = build(ROOT / 'deploy/kubernetes/monitoring/overlays' / environment)
     pod, name, configmap = datasource_mount(objects)

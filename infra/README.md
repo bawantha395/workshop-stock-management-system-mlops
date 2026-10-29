@@ -58,7 +58,8 @@ CodeBuild never start without internet access.
 
 ## Running it
 
-The pipeline runs Terraform (see [docs/PIPELINE_SETUP.md](../docs/PIPELINE_SETUP.md)).
+The **Deploy environment** and **Destroy environment** pipelines run Terraform
+(see [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)).
 Locally, for checks only:
 
 ```bash
@@ -69,6 +70,3 @@ terraform -chdir=infra/terraform/environments/dev validate
 
 A new environment needs its own foundation: run `scripts/bootstrap_pipeline.py`
 with `--environment staging --project-name stocklane-staging` (or `prod`).
-
-`bootstrap/` is an optional manual alternative for the state bucket only; the
-pipeline uses `ci/state.json`.

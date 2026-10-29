@@ -1,0 +1,113 @@
+# ONE-CLICK DESTROY: removes everything Deploy created so nothing keeps billing.
+# Kept: the state bucket, the CI identity stack and the Route 53 hosted zone.
+#
+#   confirm ─► platform teardown ─► before ─► sweep ─► destroy plan ─► destroy ─► sweep ─► check
+#
+#   platform teardown  inside the cluster: stop Argo CD, delete ingresses and
+#                      volume claims so AWS deletes the load balancers and disks
+#   before             delete Model Registry versions (groups must be empty)
+#   sweep              delete anything Kubernetes left in AWS (ALBs, SGs, EBS, DNS)
+#   destroy            terraform destroy from a saved, reviewed destroy plan
+#   check              fail if anything billable is still there
+#
+# prod has deletion_protection = true, so its database refuses to be deleted.
+name: Destroy environment
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to destroy
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+      confirm:
+        description: Type the environment name again to confirm
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+# One deploy/destroy at a time across all environments: a saved plan may only be
+# applied while main is still at the commit it was planned from.
+concurrency:
+  group: stocklane-aws
+  cancel-in-progress: false
+jobs:
+  confirm:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check the confirmation
+        env:
+          TARGET: ${{ inputs.environment }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "$TARGET" ]; then
+            echo "::error::Type '$TARGET' in the confirm box to destroy it."
+            exit 1
+          fi
+
+  platform-teardown:
+    needs: confirm
+    uses: ./.github/workflows/_platform.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: teardown
+    secrets: inherit
+
+  # Everything below also runs when the cluster is already gone or broken.
+  before:
+    needs: [confirm, platform-teardown]
+    if: always() && needs.confirm.result == 'success'
+    uses: ./.github/workflows/_cleanup.yml
+    with:
+      environment: ${{ inputs.environment }}
+      step: before
+    secrets: inherit
+
+  sweep:
+    needs: [confirm, before]
+    if: always() && needs.confirm.result == 'success'
+    uses: ./.github/workflows/_cleanup.yml
+    with:
+      environment: ${{ inputs.environment }}
+      step: sweep
+    secrets: inherit
+
+  destroy-plan:
+    needs: [confirm, sweep]
+    if: always() && needs.confirm.result == 'success'
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: destroy-plan
+    secrets: inherit
+
+  destroy:
+    needs: destroy-plan
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: ${{ inputs.environment }}
+      operation: apply
+      plan_id: ${{ needs.destroy-plan.outputs.plan_id }}
+      sha256: ${{ needs.destroy-plan.outputs.sha256 }}
+      allow_deletions: true
+    secrets: inherit
+
+  final-sweep:
+    needs: [confirm, destroy]
+    if: always() && needs.confirm.result == 'success'
+    uses: ./.github/workflows/_cleanup.yml
+    with:
+      environment: ${{ inputs.environment }}
+      step: sweep
+    secrets: inherit
+
+  check:
+    needs: [confirm, final-sweep]
+    if: always() && needs.confirm.result == 'success'
+    uses: ./.github/workflows/_cleanup.yml
+    with:
+      environment: ${{ inputs.environment }}
+      step: check
+    secrets: inherit

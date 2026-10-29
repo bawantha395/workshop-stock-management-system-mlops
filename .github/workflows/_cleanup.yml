@@ -1,0 +1,44 @@
+# Reusable: clean-up around terraform destroy (scripts/teardown_environment.py).
+#   before  delete Model Registry versions so the groups can be deleted
+#   sweep   delete load balancers, volumes and DNS aliases Kubernetes left behind
+#   check   fail if anything billable from this environment still exists
+name: _cleanup
+on:
+  workflow_call:
+    inputs:
+      environment: {type: string, required: true}
+      step: {type: string, required: true}
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_DEFAULT_REGION: ap-southeast-2
+  AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  PROJECT_NAME: stocklane-${{ inputs.environment }}
+  TF_ENVIRONMENT: ${{ inputs.environment }}
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: aws-infrastructure-apply
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r scripts/requirements.txt
+      - uses: ./.github/actions/aws-credentials
+        with:
+          role: ci-apply
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Clean up
+        env:
+          STEP: ${{ inputs.step }}
+          TFVARS_JSON: ${{ inputs.environment == 'prod' && secrets.TFVARS_JSON_PROD || inputs.environment == 'staging' && secrets.TFVARS_JSON_STAGING || secrets.TFVARS_JSON }}
+        run: |
+          domains=$(python -c 'import json,os;d=json.loads(os.environ["TFVARS_JSON"]);print(json.dumps([d.get(k,"") for k in ("api_domain","argocd_domain","grafana_domain")]))')
+          zone=$(python -c 'import json,os;print(json.loads(os.environ["TFVARS_JSON"])["route53_zone_id"])')
+          python scripts/teardown_environment.py "$STEP" --domains "$domains" --zone-id "$zone"

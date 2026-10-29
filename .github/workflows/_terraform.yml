@@ -1,0 +1,117 @@
+# Reusable: Terraform for one environment (infra/terraform/environments/<env>).
+#   plan          ensure the state backend, then save a reviewed plan to private S3
+#   destroy-plan  save a plan that removes every resource
+#   apply         apply exactly the saved plan identified by plan_id + sha256
+name: _terraform
+on:
+  workflow_call:
+    inputs:
+      environment: {type: string, required: true}
+      operation: {type: string, required: true}
+      plan_id: {type: string, default: ''}
+      sha256: {type: string, default: ''}
+      allow_deletions: {type: boolean, default: false}
+    outputs:
+      plan_id:
+        value: ${{ jobs.plan.outputs.plan_id }}
+      sha256:
+        value: ${{ jobs.plan.outputs.sha256 }}
+      changes:
+        value: ${{ jobs.plan.outputs.changes }}
+env:
+  AWS_REGION: ap-southeast-2
+  AWS_DEFAULT_REGION: ap-southeast-2
+  AWS_AUTH_MODE: ${{ vars.AWS_AUTH_MODE || 'oidc' }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  PROJECT_NAME: stocklane-${{ inputs.environment }}
+  TF_ENVIRONMENT: ${{ inputs.environment }}
+  OIDC_SUBJECT_STYLE: ${{ vars.OIDC_SUBJECT_STYLE || 'immutable' }}
+jobs:
+  backend:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: aws-bootstrap
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r scripts/requirements.txt
+      - uses: ./.github/actions/aws-credentials
+        with:
+          role: ci-bootstrap
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Make sure the private state bucket exists (idempotent)
+        run: python scripts/pipeline_terraform.py bootstrap
+
+  plan:
+    needs: backend
+    if: >-
+      !failure() && !cancelled() && github.ref == 'refs/heads/main' &&
+      (inputs.operation == 'plan' || inputs.operation == 'destroy-plan')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: aws-infrastructure-plan
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      plan_id: ${{ steps.plan.outputs.plan_id }}
+      sha256: ${{ steps.plan.outputs.sha256 }}
+      changes: ${{ steps.plan.outputs.changes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r scripts/requirements.txt
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with: {terraform_version: '1.13.5', terraform_wrapper: false}
+      - uses: ./.github/actions/aws-credentials
+        with:
+          role: ci-plan
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+      - id: plan
+        name: Save a reviewed plan to private S3
+        env:
+          TFVARS_JSON: ${{ inputs.environment == 'prod' && secrets.TFVARS_JSON_PROD || inputs.environment == 'staging' && secrets.TFVARS_JSON_STAGING || secrets.TFVARS_JSON }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          args=()
+          if [ "$OPERATION" = "destroy-plan" ]; then args+=(--destroy); fi
+          python scripts/pipeline_terraform.py plan "${args[@]}"
+
+  apply:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'apply'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: aws-infrastructure-apply
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.12'}
+      - run: pip install -r scripts/requirements.txt
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with: {terraform_version: '1.13.5', terraform_wrapper: false}
+      - uses: ./.github/actions/aws-credentials
+        with:
+          role: ci-apply
+          access-key-id: ${{ inputs.environment == 'prod' && secrets.AWS_ACCESS_KEY_ID_PROD || inputs.environment == 'staging' && secrets.AWS_ACCESS_KEY_ID_STAGING || secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ inputs.environment == 'prod' && secrets.AWS_SECRET_ACCESS_KEY_PROD || inputs.environment == 'staging' && secrets.AWS_SECRET_ACCESS_KEY_STAGING || secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Apply exactly the saved plan
+        env:
+          TFVARS_JSON: ${{ inputs.environment == 'prod' && secrets.TFVARS_JSON_PROD || inputs.environment == 'staging' && secrets.TFVARS_JSON_STAGING || secrets.TFVARS_JSON }}
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_SHA256: ${{ inputs.sha256 }}
+          ALLOW_DELETIONS: ${{ inputs.allow_deletions }}
+        run: |
+          args=()
+          if [ "$ALLOW_DELETIONS" = "true" ]; then args+=(--allow-deletions); fi
+          python scripts/pipeline_terraform.py apply --plan-id "$PLAN_ID" --sha256 "$PLAN_SHA256" "${args[@]}"

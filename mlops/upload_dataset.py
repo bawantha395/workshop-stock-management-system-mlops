@@ -16,7 +16,7 @@ def upload(directory,bucket,region,s3=None):
     marker=root/'dataset-metadata.json'
     metadata=json.loads(marker.read_text()) if marker.exists() else {}
     if metadata.get('synthetic') is True:
-        raise ValueError('Synthetic data belongs to the demo workflow, not the reviewed workshop dataset prefix')
+        raise ValueError('Synthetic data cannot be uploaded to the reviewed workshop dataset prefix')
     if metadata.get('benchmarkOnly') is True:
         raise ValueError('Public benchmark data belongs to the public-data workflow, not the workshop dataset prefix')
     manifest=(root/'manifest.csv').read_bytes()

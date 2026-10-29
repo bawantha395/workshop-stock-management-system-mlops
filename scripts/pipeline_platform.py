@@ -34,7 +34,7 @@ def source_archive(config, sha):
     return buffer.getvalue()
 
 
-def main():
+def main(operation="bootstrap"):
     c = settings()
     check_account(c)
     config = load_deployment(c)
@@ -45,9 +45,10 @@ def main():
         raise RuntimeError("Checked-out platform source does not match the reviewed commit")
     if os.environ.get("GITHUB_REF") != "refs/heads/main":
         raise RuntimeError("Platform bootstrap requires reviewed main source")
-    # Validate all configured controller and application patches without cluster access.
-    subprocess.run(["python", "scripts/validate_kustomize.py", "--environment", c["environment"],
-                    "--configured"], cwd=ROOT, check=True)
+    if operation == "bootstrap":
+        # Validate all configured controller and application patches without cluster access.
+        subprocess.run(["python", "scripts/validate_kustomize.py", "--environment", c["environment"],
+                        "--configured"], cwd=ROOT, check=True)
     payload = source_archive(config, sha)
     digest = hashlib.sha256(payload).hexdigest()
     key = f"sources/{c['environment']}/{sha}-{os.environ['GITHUB_RUN_ID']}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}-{digest}.zip"
@@ -60,7 +61,8 @@ def main():
     result = codebuild.start_build(projectName=deployment["platform_bootstrap_project"],
         sourceTypeOverride="S3", sourceLocationOverride=c["automation_bucket"] + "/" + key,
         sourceVersion=version,
-        environmentVariablesOverride=[{"name": "REVIEWED_SOURCE_SHA", "value": sha, "type": "PLAINTEXT"}])
+        environmentVariablesOverride=[{"name": "REVIEWED_SOURCE_SHA", "value": sha, "type": "PLAINTEXT"},
+                                      {"name": "STOCKLANE_OPERATION", "value": operation, "type": "PLAINTEXT"}])
     build_id = result["build"]["id"]
     print("Private VPC build:", build_id, flush=True)
     deadline = time.monotonic() + 55 * 60
@@ -72,7 +74,8 @@ def main():
             build = builds[0]
             status = build["buildStatus"]
             if status == "SUCCEEDED":
-                print("EKS platform is ready; API DNS is configured")
+                print("EKS platform is ready; API DNS is configured" if operation == "bootstrap"
+                      else "Kubernetes load balancers and volumes released")
                 return
             if status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
                 logs = build.get("logs", {}).get("deepLink", "")
@@ -85,5 +88,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--operation", choices=["bootstrap", "teardown"], default="bootstrap")
+    main(parser.parse_args().operation)
 

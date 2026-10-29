@@ -14,6 +14,56 @@ from bootstrap_eks import bootstrap
 from kustomize_utils import KUBERNETES, environment, load_yaml
 
 
+def teardown(c):
+    """Remove what Kubernetes created in AWS before Terraform deletes the cluster.
+
+    1. Stop Argo CD so it cannot recreate anything.
+    2. Switch every volume to reclaimPolicy Delete (the StorageClass keeps
+       volumes by default) so the EBS CSI driver deletes the disks.
+    3. Delete ingresses and LoadBalancer services: the load balancer controller
+       deletes its ALBs and target groups.
+    4. Delete the application and monitoring namespaces: their pods stop, the
+       volume claims go away and the disks are deleted.
+    Anything still left is removed by the AWS sweep (scripts/teardown_environment.py).
+    """
+    env = os.environ.copy()
+    env["KUBECONFIG"] = str(Path("deploy/generated/kubeconfig").resolve())
+    subprocess.run(["aws", "eks", "update-kubeconfig", "--region", c["region"], "--name", c["cluster_name"],
+                    "--kubeconfig", env["KUBECONFIG"]], env=env, check=True)
+
+    def kubectl(*command):
+        print("$ kubectl", " ".join(command), flush=True)
+        return subprocess.run(["kubectl", *command, "--request-timeout=60s"], env=env, check=False,
+                              capture_output=True, text=True, timeout=120)
+
+    def wait_until_gone(kind, minutes):
+        deadline = time.monotonic() + minutes * 60
+        while time.monotonic() < deadline:
+            listed = kubectl("get", kind, "-A", "-o", "name")
+            if listed.returncode == 0 and not listed.stdout.strip():
+                return True
+            time.sleep(10)
+        print("Some", kind, "still exist; the AWS sweep removes what is left", flush=True)
+        return False
+
+    kubectl("-n", "argocd", "scale", "statefulset/argocd-application-controller", "--replicas=0")
+    kubectl("-n", "argocd", "scale", "deployment/argocd-applicationset-controller", "--replicas=0")
+    volumes = kubectl("get", "pv", "-o", "name")
+    for name in volumes.stdout.split():
+        kubectl("patch", name, "--type=merge", "-p", '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}')
+    kubectl("delete", "ingress", "--all", "-A", "--wait=false")
+    services = kubectl("get", "svc", "-A", "-o", "json")
+    if services.returncode == 0:
+        for item in json.loads(services.stdout)["items"]:
+            if item["spec"].get("type") == "LoadBalancer":
+                kubectl("-n", item["metadata"]["namespace"], "delete", "svc", item["metadata"]["name"], "--wait=false")
+    wait_until_gone("ingress", 5)
+    _, namespace = environment(c)
+    kubectl("delete", "namespace", namespace, "monitoring", "--ignore-not-found", "--wait=false")
+    if wait_until_gone("pv", 10):
+        print("Load balancers and volumes released; the cluster can be destroyed", flush=True)
+
+
 def main(args):
     config = json.loads(Path(args.config).read_text())
     c = config.get("deployment", {}).get("value", config)
@@ -26,6 +76,9 @@ def main(args):
         raise RuntimeError("Source does not match the reviewed main commit")
     if boto3.client("sts").get_caller_identity()["Account"] != c["account_id"]:
         raise RuntimeError("AWS account mismatch")
+    if os.environ.get("STOCKLANE_OPERATION") == "teardown":
+        teardown(c)
+        return
     bootstrap(args)
     target, namespace = environment(c)
     env = os.environ.copy()

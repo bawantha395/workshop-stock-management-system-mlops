@@ -1,0 +1,38 @@
+name: AWS credentials
+description: >-
+  Assume one of this environment's delivery roles (arn:aws:iam::<account>:role/stocklane-<env>-<role>).
+  OIDC by default; access-key mode uses the restricted CI user to assume the same role.
+inputs:
+  role:
+    description: Role suffix, for example ci-plan, ci-apply, github-release, github-platform, github-training
+    required: true
+  access-key-id:
+    description: CI user key (access-key mode only)
+    required: false
+    default: ''
+  secret-access-key:
+    description: CI user secret (access-key mode only)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to AWS with GitHub OIDC
+      if: env.AWS_AUTH_MODE != 'access-key'
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.PROJECT_NAME }}-${{ inputs.role }}
+        aws-region: ap-southeast-2
+        allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+    - name: Assume the role with the restricted CI user
+      if: env.AWS_AUTH_MODE == 'access-key'
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.PROJECT_NAME }}-${{ inputs.role }}
+        aws-region: ap-southeast-2
+        allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+        aws-access-key-id: ${{ inputs.access-key-id }}
+        aws-secret-access-key: ${{ inputs.secret-access-key }}
+        force-skip-oidc: true
+        role-skip-session-tagging: true
+        role-session-name: stocklane-${{ github.run_id }}

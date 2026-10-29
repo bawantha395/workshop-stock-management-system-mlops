@@ -216,7 +216,7 @@ if __name__=='__main__':
     parser.add_argument('--project',required=True)
     parser.add_argument('--expected-account',required=True)
     parser.add_argument('--region',default='ap-southeast-2')
-    parser.add_argument('--environment',choices=['dev','test','uat','production'],default='dev')
+    parser.add_argument('--environment',choices=['dev','staging','prod'],default='dev')
     parser.add_argument('--kubernetes',action='store_true')
     parser.add_argument('--probe-bedrock',action='store_true')
     parser.add_argument('--report',default='artifacts/readiness-report.json')

@@ -1,9 +1,0 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: grafana
-spec:
-  template:
-    metadata:
-      annotations:
-        stocklane.io/provisioning-sha256: ae15aa959345a2dcdee8d6b8049234b94ef2bea951315987c69a5b69d935a1af

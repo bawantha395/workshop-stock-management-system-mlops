@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/bawantha395/workshop-stock-management-system-mlops.git
     targetRevision: main
-    path: deploy/kubernetes/monitoring-operator/overlays/production
+    path: deploy/kubernetes/monitoring-operator/overlays/prod
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

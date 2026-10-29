@@ -65,14 +65,10 @@ remains authoritative for available stock and access controls.
 
 ## Deployment
 
-1. Synchronise your repository main before copying changes. Upload the updated
-   apps/web files, tests, package.json, package-lock.json, CI workflow and docs.
-   Preserve any GitOps commits made after this package was prepared.
-2. Let Validate platform finish, including the new frontend npm test step.
-3. Run Prepare AWS release on the updated main. Review and merge its GitOps PR.
-4. Run your existing platform deployment/frontend publication workflow against
-   the merged main, then refresh the CloudFront website.
-5. Do not rerun trust bootstrap or delete database-bootstrap for this UI update.
+1. Push the change to main and let **Validate platform** pass (it includes the
+   frontend npm tests).
+2. Run **Deploy environment**. Its release and frontend stages rebuild the web
+   app and publish it to S3/CloudFront; refresh the website afterwards.
 
 ## Verification
 

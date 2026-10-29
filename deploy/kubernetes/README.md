@@ -13,7 +13,8 @@
 | `toolchain.lock.json` | Pinned tool downloads and checksums. |
 
 Shared resources belong in `base/`; per-environment patches belong in
-`overlays/dev`, `overlays/test`, `overlays/uat` or `overlays/production`.
+`overlays/dev`, `overlays/staging` or `overlays/prod` (same names as the
+Terraform environments).
 The Argo CD root Applications live in `argocd/root/`.
 
 Run `python scripts/validate_kustomize.py` from the repository root after
@@ -24,9 +25,18 @@ applying resources to a cluster. Configured releases also validate with
 images.
 
 The checked-in templates need account-specific release rendering before live
-deployment. Follow [docs/AWS_DEPLOYMENT.md](../../docs/AWS_DEPLOYMENT.md) for
-bootstrap order; applying individual folders out of order can fail because
-their CRDs or controllers are not ready.
+deployment. The **Deploy environment** pipeline does this and the bootstrap in
+the right order ([docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md)); applying
+individual folders out of order can fail because their CRDs or controllers are
+not ready.
+
+Third-party components (Argo CD, cert-manager, External Secrets, the AWS Load
+Balancer Controller, Prometheus Operator, metrics-server, kube-state-metrics)
+are **vendored, version-pinned YAML** rather than Helm charts. Every file's
+SHA256 is locked in `upstream.lock.json`, so a release can only ever deploy
+reviewed bytes, and the private CodeBuild runner needs no access to chart
+repositories. Upgrading one is a reviewed pull request that updates the
+vendored files and the lock.
 
 The metrics-server high-availability import declares an obsolete
 `policy/v1beta1` PodDisruptionBudget. A shared Kustomize patch in
@@ -36,5 +46,4 @@ environment, keeping the explicit pod selector and upstream checksums.
 Validation rejects obsolete budget APIs even without kubeconform. When
 kubeconform is installed, every ordinary built-in resource must have a schema;
 missing schemas fail. CRD definitions must match the pinned API/spec, and custom
-resources are validated separately against their served CRD schemas. See
-[the bootstrap recovery guide](../../docs/PLATFORM_BOOTSTRAP_FIX.md).
+resources are validated separately against their served CRD schemas.
