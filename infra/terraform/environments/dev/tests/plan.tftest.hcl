@@ -135,4 +135,12 @@ run "plan" {
     condition     = output.deployment.workload_namespace == "stocklane-${var.environment}"
     error_message = "namespace"
   }
+  assert {
+    condition     = length(module.auth.owner_user_names) == 1 && module.auth.owner_user_names[0] == "owner@example.com"
+    error_message = "the first OWNER user must default to the budget email"
+  }
+  assert {
+    condition     = output.deployment.demo_admin_credentials == var.demo_admin_credentials
+    error_message = "demo admin credentials flag must reach the deployment outputs"
+  }
 }

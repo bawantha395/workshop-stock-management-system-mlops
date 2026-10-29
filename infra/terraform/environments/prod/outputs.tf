@@ -26,6 +26,7 @@ output "deployment" {
     argocd_domain              = var.argocd_domain
     grafana_domain             = var.grafana_domain
     admin_allowed_cidrs        = var.admin_allowed_cidrs
+    demo_admin_credentials     = var.demo_admin_credentials
     admin_certificate_arn      = module.edge.admin_certificate_arn
 
     # data

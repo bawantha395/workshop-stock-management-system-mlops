@@ -23,3 +23,6 @@ cache_node_type  = "cache.t4g.micro"
 cache_node_count = 2
 
 monthly_budget_usd = 60
+
+# Argo CD and Grafana sign in with admin / admin (still limited to admin_allowed_cidrs).
+demo_admin_credentials = true

@@ -23,3 +23,6 @@ cache_node_type  = "cache.t4g.small"
 cache_node_count = 2
 
 monthly_budget_usd = 300
+
+# prod keeps generated admin passwords.
+demo_admin_credentials = false

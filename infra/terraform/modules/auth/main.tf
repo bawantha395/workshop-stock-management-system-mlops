@@ -28,6 +28,25 @@ resource "aws_cognito_user_group" "staff" {
   name         = each.key
 }
 
+# The first owner. Cognito emails a temporary password; MFA is set up at first sign-in.
+resource "aws_cognito_user" "owner" {
+  count                    = var.owner_email == "" ? 0 : 1
+  user_pool_id             = aws_cognito_user_pool.main.id
+  username                 = var.owner_email
+  desired_delivery_mediums = ["EMAIL"]
+  attributes = {
+    email          = var.owner_email
+    email_verified = "true"
+  }
+}
+
+resource "aws_cognito_user_in_group" "owner" {
+  count        = var.owner_email == "" ? 0 : 1
+  user_pool_id = aws_cognito_user_pool.main.id
+  group_name   = aws_cognito_user_group.staff["OWNER"].name
+  username     = aws_cognito_user.owner[0].username
+}
+
 resource "aws_cognito_user_pool_client" "web" {
   name                                 = "react-pwa"
   user_pool_id                         = aws_cognito_user_pool.main.id

@@ -28,6 +28,7 @@ module "data" {
   private_subnet_ids             = module.network.private_subnet_ids
   data_security_group_id         = module.network.data_security_group_id
   protect_data                   = var.deletion_protection
+  demo_admin_credentials         = var.demo_admin_credentials
   database_instance_class        = var.database_instance_class
   database_multi_az              = var.database_multi_az
   database_storage_type          = var.database_storage_type
@@ -127,10 +128,11 @@ module "edge" {
 }
 
 module "auth" {
-  source     = "../../modules/auth"
-  name       = var.name
-  account_id = local.account_id
-  app_urls   = distinct(["https://${module.edge.cloudfront_domain_name}", module.edge.web_url])
+  source      = "../../modules/auth"
+  name        = var.name
+  account_id  = local.account_id
+  app_urls    = distinct(["https://${module.edge.cloudfront_domain_name}", module.edge.web_url])
+  owner_email = coalesce(var.initial_owner_email, var.budget_email)
 }
 
 module "cicd" {

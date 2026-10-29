@@ -1088,3 +1088,16 @@ def test_release_installs_the_onnx_export_dependency_before_downloading_the_mode
     steps = workflow("_release.yml")["jobs"]["release"]["steps"]
     step = next(s for s in steps if "download_model.py" in s.get("run", ""))
     assert "pip install onnx==" in step["run"]
+
+
+def test_demo_admin_credentials_are_dev_and_staging_only():
+    import bcrypt
+    import bootstrap_eks
+    assert bcrypt.checkpw(b"admin", bootstrap_eks.DEMO_ADMIN_PASSWORD_HASH.encode())
+    patch = bootstrap_eks.demo_admin_patch("2026-01-01T00:00:00Z")
+    assert patch["stringData"]["admin.passwordMtime"] == "2026-01-01T00:00:00Z"
+    for env, expected in (("dev", "true"), ("staging", "true"), ("prod", "false")):
+        values = (ROOT / f"infra/terraform/environments/{env}/terraform.tfvars").read_text()
+        assert f"demo_admin_credentials = {expected}" in values, env
+    # The script also refuses to apply the demo password to prod when the flag is set by mistake.
+    assert "target != 'prod'" in (ROOT / "scripts/bootstrap_eks.py").read_text()

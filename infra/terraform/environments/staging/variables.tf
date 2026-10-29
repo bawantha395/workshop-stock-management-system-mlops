@@ -151,6 +151,18 @@ variable "budget_email" {
   description = "Receives alarms, root-cause reports and budget warnings."
 }
 
+variable "initial_owner_email" {
+  type        = string
+  default     = ""
+  description = "Email of the first OWNER user created in Cognito. Empty uses budget_email."
+}
+
+variable "demo_admin_credentials" {
+  type        = bool
+  default     = false
+  description = "Simple admin/admin logins for Argo CD and Grafana. dev and staging only; they stay behind admin_allowed_cidrs."
+}
+
 variable "monthly_budget_usd" {
   type    = number
   default = 25

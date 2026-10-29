@@ -11,6 +11,15 @@ from pathlib import Path
 import yaml
 from kustomize_utils import ROOT, KUBERNETES, build, environment
 
+# bcrypt hash of the password "admin" (a public value, not a secret). Used only when
+# the environment sets demo_admin_credentials (dev and staging), never for prod.
+DEMO_ADMIN_PASSWORD_HASH = '$2a$10$WUNS8hj1oO465/z9/ebc0.h4u8m1PKQTSkuOljKTnXhr1bnVR1ClK'
+
+def demo_admin_patch(now=None):
+    """Strategic-merge patch that sets the Argo CD admin password to "admin"."""
+    stamp = now or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    return {'stringData': {'admin.password': DEMO_ADMIN_PASSWORD_HASH, 'admin.passwordMtime': stamp}}
+
 def bootstrap(a):
     config = json.loads(Path(a.config).read_text())
     c = config.get('deployment', {}).get('value', config)
@@ -48,6 +57,11 @@ def bootstrap(a):
     argo = build(KUBERNETES / 'argocd/base')
     apply([d for d in argo if d['kind'] in {'Namespace', 'CustomResourceDefinition'}]); crds(argo)
     apply([d for d in argo if d['kind'] not in {'Namespace', 'CustomResourceDefinition'}]); rollout(argo)
+    if c.get('demo_admin_credentials') is True and target != 'prod':
+        # Argo CD reads this secret live; the first-start password in argocd-initial-admin-secret is replaced.
+        run(['kubectl', '-n', 'argocd', 'patch', 'secret', 'argocd-secret', '--type=merge', '-p', json.dumps(demo_admin_patch())])
+        subprocess.run(['kubectl', '-n', 'argocd', 'delete', 'secret', 'argocd-initial-admin-secret', '--ignore-not-found'], env=env, check=False)
+        print('Argo CD admin password set to the demo value (admin)')
     operator = build(KUBERNETES / 'monitoring-operator/overlays' / target)
     apply([d for d in operator if d['kind'] in {'Namespace', 'CustomResourceDefinition'}]); crds(operator)
     apply([d for d in operator if d['kind'] not in {'Namespace', 'CustomResourceDefinition'}]); rollout(operator)

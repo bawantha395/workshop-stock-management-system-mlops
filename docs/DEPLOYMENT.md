@@ -125,6 +125,18 @@ Every hostname must contain `stocklane` (the CI roles may only write DNS records
 matching `*stocklane*.<zone>`). Use different names per environment, for example
 `api.stocklane-staging.<your-domain>`.
 
+## Sign-in after a deploy
+
+- **App:** Terraform creates the first **OWNER** user from `initial_owner_email` in
+  `TFVARS_JSON` (it falls back to `budget_email`) and Cognito emails a temporary
+  password. Sign in, choose a new password (14+ characters) and set up an
+  authenticator app for MFA. Nothing needs creating by hand, so a destroy followed
+  by a deploy brings back a working login.
+- **Argo CD and Grafana:** `dev` and `staging` use **admin / admin**
+  (`demo_admin_credentials = true` in their `terraform.tfvars`). `prod` keeps
+  generated passwords. Both dashboards are reachable only from the addresses in
+  `admin_allowed_cidrs`, so keep that list to your own IP.
+
 ## Deploy
 
 **Actions → Deploy environment → Run workflow** on `main`:
@@ -142,6 +154,19 @@ differs and Argo CD rolls out the new release commit.
 
 Deploy and Destroy share one queue, so only one runs at a time (a saved plan is
 only applied while `main` is still at the commit it was planned from).
+
+## Try the AI features
+
+1. **Bedrock label suggestions:** in the app choose **Receive stock → register a new
+   item**, add a photo of a product label and use the AI suggestion. It calls
+   `amazon.nova-lite-v1:0` in `us-east-1` (`bedrock_region`) and is limited to 50
+   uncached requests per day. If it says suggestions are not enabled, check Bedrock
+   model access and quotas in us-east-1.
+2. **SageMaker models:** run **Train real-data ML models** (`train-public-data`) on
+   the environment, or tick `train` when you deploy. The jobs appear under
+   SageMaker → Processing jobs, and the results appear as *pending* versions in the
+   Model Registry (`stocklane-<env>-visual-sku`, `stocklane-<env>-stock-forecast`).
+   See [MLOPS.md](MLOPS.md) for why benchmark models are never released to the app.
 
 ## Destroy
 

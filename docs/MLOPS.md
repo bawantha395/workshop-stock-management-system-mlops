@@ -69,3 +69,17 @@ allowed to invoke only that one model in that region; no API key is used.
 These show the gates working: a trained model that is worse than a simple
 baseline is not released. Real workshop photos and stock history are needed for
 a production-quality model.
+
+## What to show in an interview
+
+| Step | Where | What it proves |
+| --- | --- | --- |
+| Label suggestion | App → register item → AI suggestion | Bedrock call from EKS with Pod Identity, no API key |
+| Train | Actions → *Train real-data ML models* | SageMaker jobs from CI, quality gates, nothing left running |
+| Registry | SageMaker → Model Registry | Versioned, reviewable models in `PendingManualApproval` |
+| Release gate | `mlops/review_model.py`, `promote.py` | Benchmark and synthetic models cannot reach production |
+| Photo matching | App → Find an item | MobileNetV2 baseline served from EKS |
+
+To serve a *trained* photo model you need real workshop photos: collect a reviewed
+dataset, upload it with `mlops/upload_dataset.py`, run **Train reviewed workshop
+model**, approve the version, then deploy with its `model_package` ARN.

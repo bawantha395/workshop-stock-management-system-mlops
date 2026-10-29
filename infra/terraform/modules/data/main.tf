@@ -151,7 +151,7 @@ resource "aws_secretsmanager_secret" "grafana" {
 
 resource "aws_secretsmanager_secret_version" "grafana" {
   secret_id     = aws_secretsmanager_secret.grafana.id
-  secret_string = jsonencode({ username = "admin", password = random_password.grafana.result })
+  secret_string = jsonencode({ username = "admin", password = var.demo_admin_credentials ? "admin" : random_password.grafana.result })
 }
 
 resource "aws_secretsmanager_secret" "database" {

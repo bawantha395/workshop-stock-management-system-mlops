@@ -23,6 +23,12 @@ variable "protect_data" {
   description = "Deletion protection and final snapshots for prod; false makes dev/staging easy to destroy."
 }
 
+variable "demo_admin_credentials" {
+  type        = bool
+  default     = false
+  description = "Use the simple password \"admin\" for Grafana (dev/staging demos only; keep false for prod)."
+}
+
 variable "database_instance_class" {
   type = string
 }
