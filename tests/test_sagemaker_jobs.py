@@ -202,3 +202,21 @@ def test_packed_entrypoint_runs_the_wrapper_exactly(monkeypatch, tmp_path):
     parts = sorted((k for k in request['Environment'] if k.startswith('STOCKLANE_WRAPPER_')), key=lambda k: int(k.rsplit('_', 1)[1]))
     packed = ''.join(request['Environment'][k] for k in parts)
     assert zlib.decompress(base64.b64decode(packed)).decode() == jobs.WRAPPER
+
+
+def test_github_training_role_can_read_the_inference_image_it_registers():
+    source = (ROOT / 'infra/terraform/modules/cicd/main.tf').read_text()
+    policy = source.split('resource "aws_iam_role_policy" "github_training"')[1].split('\nresource ')[0]
+    for action in ('ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability', 'ecr:DescribeImages'):
+        assert action in policy
+    assert 'repository/${var.name}/ml-training"' in policy
+    assert 'ecr:Put' not in policy and 'ecr:*' not in policy
+
+
+def test_training_report_keeps_a_short_masked_aws_error():
+    import sys
+    sys.path.insert(0, str(ROOT / 'mlops'))
+    from run_public_training import error_text
+    text = error_text('Image 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/x not\n accessible ' + 'x' * 400)
+    assert '721274598579' not in text and '<account>' in text
+    assert len(text) == 300 and text.endswith('...') and '\n' not in text

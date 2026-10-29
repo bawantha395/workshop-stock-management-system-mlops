@@ -90,6 +90,13 @@ def train_one(task,c,sm,s3,image,dataset,encoder,dataset_sha,source_sha,result):
     return result
 
 
+def error_text(message,limit=300):
+    """Short AWS error text for the report; account IDs are masked because CI logs are public."""
+    import re
+    text=re.sub(r'\b\d{12}\b','<account>',' '.join(str(message).split()))
+    return text if len(text)<=limit else text[:limit-3]+'...'
+
+
 def run(c,task='both'):
     session=boto3.Session(region_name=c['region'])
     config=Config(connect_timeout=5,read_timeout=20,retries={'total_max_attempts':1})
@@ -114,7 +121,8 @@ def run(c,task='both'):
             try:train_one(selected,c,sm,s3,image,dataset,encoder,dataset_sha,result['dataset']['sourceLockSha256'],item)
             except Exception as error:
                 code=error.response['Error']['Code'] if isinstance(error,ClientError) else type(error).__name__
-                item.update(status='failed',errorCode=code,
+                message=error.response['Error'].get('Message','') if isinstance(error,ClientError) else str(error)
+                item.update(status='failed',errorCode=code,errorMessage=error_text(message),
                     nextCheck='Check the named job and CloudWatch logs. If creation was rejected, check SageMaker permissions and the quota for '+sagemaker_jobs.instance_type()+' ('+sagemaker_jobs.job_type()+' job usage).')
     return result
 

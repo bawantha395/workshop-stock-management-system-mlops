@@ -121,6 +121,8 @@ resource "aws_iam_role_policy" "github_training" {
       var.vision_model_group.arn, "arn:${var.partition}:sagemaker:${var.region}:${var.account_id}:model-package/${var.vision_model_group.name}/*"
     ] },
     { Effect = "Allow", Action = "iam:PassRole", Resource = var.training_role_arn, Condition = { StringEquals = { "iam:PassedToService" = "sagemaker.amazonaws.com" } } },
+    # CreateModelPackage checks that the caller itself can read the inference image.
+    { Effect = "Allow", Action = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability", "ecr:DescribeImages"], Resource = "arn:${var.partition}:ecr:${var.region}:${var.account_id}:repository/${var.name}/ml-training" },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${var.models_bucket_arn}/*" },
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = var.models_bucket_arn },
     { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = var.kms_key_arn }
