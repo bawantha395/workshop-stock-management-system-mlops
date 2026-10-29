@@ -1,0 +1,20 @@
+{
+  "helm": {
+    "version": "3.18.4",
+    "assets": {
+      "helm-v3.18.4-linux-amd64.tar.gz": {
+        "url": "https://get.helm.sh/helm-v3.18.4-linux-amd64.tar.gz",
+        "sha256": "f8180838c23d7c7d797b208861fecb591d9ce1690d8704ed1e4cb8e2add966c1"
+      }
+    }
+  },
+  "kubeconform": {
+    "version": "0.8.0",
+    "assets": {
+      "kubeconform-linux-amd64.tar.gz": {
+        "url": "https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz",
+        "sha256": "9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883"
+      }
+    }
+  }
+}

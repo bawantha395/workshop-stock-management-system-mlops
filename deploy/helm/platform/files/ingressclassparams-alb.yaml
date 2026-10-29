@@ -1,0 +1,8 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: IngressClassParams
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: '-15'
+  labels:
+    app.kubernetes.io/name: aws-load-balancer-controller
+  name: alb

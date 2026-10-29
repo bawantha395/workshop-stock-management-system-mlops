@@ -1,8 +1,0 @@
-apiVersion: argoproj.io/v1alpha1
-kind: AppProject
-metadata:
-  name: stocklane-platform
-  namespace: argocd
-spec:
-  sourceRepos:
-  - https://github.com/bawantha395/workshop-stock-management-system-mlops.git

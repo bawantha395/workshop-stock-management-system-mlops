@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: stocklane-alertmanager
+  namespace: monitoring
+spec:
+  minAvailable: {{ .Values.monitoring.alertmanager.minAvailable }}
+  selector:
+    matchLabels:
+      alertmanager: stocklane

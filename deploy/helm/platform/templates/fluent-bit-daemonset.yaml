@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: amazon-cloudwatch
+spec:
+  selector:
+    matchLabels:
+      app: fluent-bit
+  template:
+    metadata:
+      labels:
+        app: fluent-bit
+    spec:
+      containers:
+      - args:
+        - -c
+        - /fluent-bit/etc/fluent-bit.conf
+        command:
+        - /fluent-bit/bin/fluent-bit
+        env:
+        - name: AWS_REGION
+          value: {{ .Values.platform.region | quote }}
+        - name: LOG_GROUP_NAME
+          value: {{ .Values.platform.logGroup | quote }}
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        image: public.ecr.aws/aws-observability/aws-for-fluent-bit:3.5.4
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 30
+        name: fluent-bit
+        ports:
+        - containerPort: 2020
+          name: http
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 100Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /var/log
+          name: logs
+          readOnly: true
+        - mountPath: /var/fluent-bit/state
+          name: state
+        - mountPath: /fluent-bit/etc
+          name: config
+          readOnly: true
+      serviceAccountName: fluent-bit
+      tolerations:
+      - operator: Exists
+      volumes:
+      - hostPath:
+          path: /var/log
+          type: Directory
+        name: logs
+      - hostPath:
+          path: /var/lib/stocklane-fluent-bit
+          type: DirectoryOrCreate
+        name: state
+      - configMap:
+          name: fluent-bit
+        name: config

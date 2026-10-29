@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'services/vision'))
 
 from render_cloud import render  # noqa: E402
+from helm_utils import build  # noqa: E402
 from app import bedrock  # noqa: E402
 from test_delivery_guards import config, images  # noqa: E402
 
@@ -45,17 +46,19 @@ def test_renderer_publishes_bedrock_region_without_changing_aws_region(tmp_path)
     c = config()
     c.update(bedrock_model_id='amazon.nova-lite-v1:0', bedrock_region='us-east-1')
     render(c, images(), 's3://test-models/release.tar.gz', 'f' * 64, tmp_path)
-    data = yaml.safe_load((tmp_path / 'patches/configmap.yaml').read_text())['data']
+    docs = build('stocklane', 'prod', values=tmp_path / 'prod.yaml')
+    data = next(d for d in docs if d['kind'] == 'ConfigMap' and d['metadata']['name'] == 'platform-config')['data']
     assert data['BEDROCK_REGION'] == 'us-east-1'
     assert data['AWS_REGION'] == 'eu-west-1'
-    job = yaml.safe_load((tmp_path / 'patches/model-index-job.yaml').read_text())
+    job = next(d for d in docs if d['kind'] == 'Job')
     env = {v['name']: v['value'] for v in job['spec']['template']['spec']['containers'][0]['env']}
     assert env['BEDROCK_REGION'] == 'us-east-1'
 
 
 def test_renderer_defaults_bedrock_region_to_empty(tmp_path):
     render(config(), images(), 's3://test-models/release.tar.gz', 'f' * 64, tmp_path)
-    data = yaml.safe_load((tmp_path / 'patches/configmap.yaml').read_text())['data']
+    docs = build('stocklane', 'prod', values=tmp_path / 'prod.yaml')
+    data = next(d for d in docs if d['kind'] == 'ConfigMap' and d['metadata']['name'] == 'platform-config')['data']
     assert data['BEDROCK_REGION'] == ''
 
 

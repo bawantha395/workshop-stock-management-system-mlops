@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    stocklane.io/monitoring: enabled
+  name: kube-state-metrics
+  namespace: monitoring
+spec:
+  endpoints:
+  - port: http-metrics
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics

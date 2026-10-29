@@ -1,0 +1,61 @@
+{{- $g := .Values.gitops }}
+{{- $env := .Values.environment }}
+{{- $namespace := default (printf "stocklane-%s" $env) $g.namespace }}
+# The platform project may install cluster-wide resources (controllers, CRDs).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: stocklane-platform-{{ $env }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+spec:
+  sourceRepos:
+  - {{ $g.repoURL }}
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: '*'
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+---
+# The application project may only create the namespaced kinds the services need.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: stocklane-app-{{ $env }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+spec:
+  sourceRepos:
+  - {{ $g.repoURL }}
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: {{ $namespace }}
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: apps
+    kind: Deployment
+  - group: autoscaling
+    kind: HorizontalPodAutoscaler
+  - group: policy
+    kind: PodDisruptionBudget
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: external-secrets.io
+    kind: ExternalSecret
+  - group: monitoring.coreos.com
+    kind: ServiceMonitor
+  - group: batch
+    kind: Job

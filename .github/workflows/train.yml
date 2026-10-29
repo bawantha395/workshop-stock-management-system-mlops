@@ -98,7 +98,7 @@ jobs:
           sys.path.insert(0,"mlops")
           from stage_encoder import stage
           c = json.load(open('artifacts/aws.json'))['deployment']['value']
-          overlay=Path('deploy/kubernetes/apps/overlays')/c['environment']
+          overlay=Path('deploy/helm/releases')/c['environment']
           encoder=os.environ['ENCODER_URI'] or stage(json.loads((overlay/'release.json').read_text()),c['model_bucket'],boto3.client('s3',region_name=c['region']))
           image=os.environ['TRAINING_IMAGE'] or json.loads((overlay/'images.json').read_text())['ml-training']
           subprocess.run(['python', 'mlops/run_training.py', '--region', c['region'],
@@ -139,5 +139,5 @@ jobs:
                   f.write('The new model did not pass the quality gate (or training failed); the served model stays. See the step log.\n');raise SystemExit
               r=json.load(open('artifacts/training-report.json'));d=json.load(open('artifacts/decision.json'))
               f.write('**'+d['decision']+'**: '+d['reason']+'\n\n`'+r['modelPackageArn']+'`\n\n```json\n'+json.dumps(r['metrics'],indent=2)+'\n```\n')
-              if d['decision']=='approved':f.write('Release started: **Release approved model** commits it to the GitOps overlay; Argo CD rolls it out.\n')
+              if d['decision']=='approved':f.write('Release started: **Release approved model** commits it to the GitOps values; Argo CD rolls it out.\n')
           PY

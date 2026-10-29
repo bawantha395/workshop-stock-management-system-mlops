@@ -47,7 +47,7 @@ def main(operation="bootstrap"):
         raise RuntimeError("Platform bootstrap requires reviewed main source")
     if operation == "bootstrap":
         # Validate all configured controller and application patches without cluster access.
-        subprocess.run(["python", "scripts/validate_kustomize.py", "--environment", c["environment"],
+        subprocess.run(["python", "scripts/validate_helm.py", "--environment", c["environment"],
                         "--configured"], cwd=ROOT, check=True)
     payload = source_archive(config, sha)
     digest = hashlib.sha256(payload).hexdigest()

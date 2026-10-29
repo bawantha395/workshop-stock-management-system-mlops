@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_fallback_is_enabled_in_the_shared_configuration():
-    data = yaml.safe_load((ROOT / "deploy/kubernetes/apps/base/shared/configmap.yaml").read_text())["data"]
+    data = yaml.safe_load((ROOT / "deploy/helm/stocklane/values.yaml").read_text())["config"]
     assert data["TEXTRACT_FALLBACK"] == "true"
 
 

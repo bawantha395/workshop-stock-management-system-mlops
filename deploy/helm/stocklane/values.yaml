@@ -1,0 +1,143 @@
+# Defaults. Everything that differs per environment (images, domains, ARNs, queue URLs, replicas)
+# is written to deploy/helm/values/<environment>.yaml by scripts/render_cloud.py at release time.
+environment: REPLACE_ENVIRONMENT
+
+# Digest-pinned image references: repository@sha256:...
+images:
+  inventory: stocklane/inventory:unreleased
+  workshop: stocklane/workshop:unreleased
+  vision: stocklane/vision:unreleased
+  forecast: stocklane/forecast:unreleased
+
+replicas:
+  min: 1
+  max: 2
+
+# Allowed egress to the Kubernetes Service range (the Workshop -> Inventory Service call is DNAT'd after policy evaluation)
+serviceCidr: 172.20.0.0/16
+# Traffic allowed from the VPC
+vpcCidr: 10.42.0.0/16
+
+ingress:
+  host: api.stocklane.invalid
+  certificateArn: REPLACE_API_CERTIFICATE_ARN
+
+secrets:
+  platform: REPLACE_PLATFORM_SECRET_ARN
+  database:
+    inventory: REPLACE_INVENTORY_DATABASE_SECRET_ARN
+    workshop: REPLACE_WORKSHOP_DATABASE_SECRET_ARN
+    vision: REPLACE_VISION_DATABASE_SECRET_ARN
+
+# The platform-config ConfigMap that every service reads
+config:
+  AUTH_MODE: cognito
+  ENVIRONMENT: cloud
+  SPRING_PROFILES_ACTIVE: cloud
+  AWS_REGION: REPLACE_AWS_REGION
+  COGNITO_ISSUER: https://REPLACE_COGNITO_ISSUER
+  COGNITO_CLIENT_IDS: REPLACE_WEB_CLIENT_ID
+  APP_WEB_ORIGIN: https://REPLACE_FRONTEND_HOST
+  WEB_ORIGIN: https://REPLACE_FRONTEND_HOST
+  INVENTORY_URL: http://inventory:8081
+  WORKSHOP_URL: http://workshop:8082
+  VISION_URL: http://vision:8083
+  STOCK_QUEUE_URL: https://REPLACE_STOCK_QUEUE
+  CATALOGUE_QUEUE_URL: https://REPLACE_CATALOGUE_QUEUE
+  EVENT_MODE: sqs
+  REDIS_HOST: REPLACE_CACHE_HOST
+  REDIS_TLS: "true"
+  MEDIA_BUCKET: REPLACE_MEDIA_BUCKET
+  MODEL_BUCKET: ""
+  MODEL_DIR: /models/current
+  MODEL_URI: s3://REPLACE_MODEL_BUCKET/REPLACE_MODEL_KEY
+  MODEL_ARCHIVE_SHA256: REPLACE_MODEL_ARCHIVE_SHA256
+  FILES_ROOT: /tmp/files
+  BEDROCK_MODEL_ID: ""
+  BEDROCK_REGION: ""
+  BEDROCK_DAILY_REQUEST_LIMIT: "50"
+  TEXTRACT_FALLBACK: "true"
+  TRAINING_EXPORT: "true"
+  DEPLOYMENT_ENVIRONMENT: REPLACE_ENVIRONMENT
+
+# One entry per service; templates/service.yaml renders the Deployment, Service, ServiceAccount,
+# PodDisruptionBudget, HorizontalPodAutoscaler, ServiceMonitor and ExternalSecret from it.
+services:
+  inventory:
+    port: 8081
+    livePath: /actuator/health/liveness
+    readyPath: /actuator/health/readiness
+    metricsPath: /actuator/prometheus
+    env:
+    - name: DATABASE_SCHEMA
+      value: inventory
+    resources:
+      requests: {cpu: 200m, memory: 384Mi}
+      limits: {cpu: 1000m, memory: 1Gi}
+    database: true
+    secretTemplate:
+      INVENTORY_READ_TOKEN: '{{ .INVENTORY_READ_TOKEN }}'
+      INVENTORY_CONTROL_TOKEN: '{{ .INVENTORY_CONTROL_TOKEN }}'
+      INTERNAL_TOKEN: '{{ .INTERNAL_TOKEN }}'
+      REDIS_PASSWORD: '{{ .REDIS_PASSWORD }}'
+      DATABASE_PASSWORD: '{{ .password }}'
+      DATABASE_USER: '{{ .username }}'
+      DATABASE_URL: jdbc:postgresql://{{ .host }}:5432/{{ .dbname }}?currentSchema=inventory&sslmode=verify-full&sslrootcert=/app/certs/rds-global-bundle.pem
+    platformKeys: [INTERNAL_TOKEN, REDIS_PASSWORD, INVENTORY_READ_TOKEN, INVENTORY_CONTROL_TOKEN]
+  workshop:
+    port: 8082
+    livePath: /actuator/health/liveness
+    readyPath: /actuator/health/readiness
+    metricsPath: /actuator/prometheus
+    env:
+    - name: DATABASE_SCHEMA
+      value: workshop
+    resources:
+      requests: {cpu: 200m, memory: 384Mi}
+      limits: {cpu: 1000m, memory: 1Gi}
+    database: true
+    secretTemplate:
+      INVENTORY_CONTROL_TOKEN: '{{ .INVENTORY_CONTROL_TOKEN }}'
+      INTERNAL_TOKEN: '{{ .INTERNAL_TOKEN }}'
+      REDIS_PASSWORD: '{{ .REDIS_PASSWORD }}'
+      DATABASE_PASSWORD: '{{ .password }}'
+      DATABASE_USER: '{{ .username }}'
+      DATABASE_URL: jdbc:postgresql://{{ .host }}:5432/{{ .dbname }}?currentSchema=workshop&sslmode=verify-full&sslrootcert=/app/certs/rds-global-bundle.pem
+    platformKeys: [INTERNAL_TOKEN, REDIS_PASSWORD, INVENTORY_CONTROL_TOKEN]
+  vision:
+    port: 8083
+    livePath: /health/live
+    readyPath: /health/ready
+    metricsPath: /metrics
+    env:
+    - name: DATABASE_SCHEMA
+      value: vision
+    - name: PYTHONPATH
+      value: /app
+    - name: REDIS_URL
+      value: rediss://:$(REDIS_PASSWORD)@$(REDIS_HOST):6379/0?ssl_cert_reqs=required&ssl_check_hostname=true
+    resources:
+      requests: {cpu: 200m, memory: 384Mi}
+      limits: {cpu: 1000m, memory: 1Gi}
+    model: true   # fetches the model bundle into /models before starting
+    database: true
+    secretTemplate:
+      INVENTORY_READ_TOKEN: '{{ .INVENTORY_READ_TOKEN }}'
+      INTERNAL_TOKEN: '{{ .INTERNAL_TOKEN }}'
+      REDIS_PASSWORD: '{{ .REDIS_PASSWORD }}'
+      DATABASE_URL: postgresql+psycopg://{{ .username }}:{{ .password }}@{{ .host }}:5432/{{ .dbname }}?sslmode=verify-full&sslrootcert=/app/certs/rds-global-bundle.pem
+    platformKeys: [INTERNAL_TOKEN, REDIS_PASSWORD, INVENTORY_READ_TOKEN]
+  forecast:
+    port: 8084
+    livePath: /health/live
+    readyPath: /health/ready
+    metricsPath: /metrics
+    env: []
+    resources:
+      requests: {cpu: 50m, memory: 96Mi}
+      limits: {cpu: 500m, memory: 256Mi}
+    database: false
+    secretTemplate:
+      INVENTORY_READ_TOKEN: '{{ .INVENTORY_READ_TOKEN }}'
+      INTERNAL_TOKEN: '{{ .INTERNAL_TOKEN }}'
+    platformKeys: [INVENTORY_READ_TOKEN, INTERNAL_TOKEN]

@@ -59,17 +59,17 @@ infra/
                           auth, ml, observability, cicd
   terraform/environments/ dev · staging · prod (same main.tf, different tfvars)
 deploy/
-  kubernetes/             Kustomize bases + dev/staging/prod overlays, Argo CD apps,
+  helm/                   Helm charts (apps, platform, Argo CD, monitoring), per-environment values,
                           monitoring, vendored pinned upstream YAML
   docker/                 service and training images
   codebuild/              private in-VPC runner for the cluster bootstrap
 scripts/                  pipeline steps (Python)
-tests/                    pipeline, Terraform, Kustomize and ML safeguards
+tests/                    pipeline, Terraform, Helm and ML safeguards
 .github/workflows/        deploy, destroy, ci + reusable stages (_*.yml) + ML jobs
 ```
 
 The same three names — `dev`, `staging`, `prod` — are used for the Terraform
-environment, the Kustomize overlay, the Kubernetes namespace (`stocklane-<env>`)
+environment, the Helm values file, the Kubernetes namespace (`stocklane-<env>`)
 and the pipeline input.
 
 | | dev | staging | prod |
@@ -86,7 +86,7 @@ and the pipeline input.
 flowchart LR
   subgraph deploy.yml [Deploy environment]
     direction LR
-    t[test] --> p[terraform init + plan] --> a[apply] --> r[build + push images<br/>commit overlay] --> k[Argo CD + monitoring] --> f[frontend]
+    t[test] --> p[terraform init + plan] --> a[apply] --> r[build + push images<br/>commit values] --> k[Argo CD + monitoring] --> f[frontend]
   end
   subgraph destroy.yml [Destroy environment]
     direction LR
@@ -100,10 +100,10 @@ reusable workflow (`_terraform`, `_release`, `_platform`, `_frontend`,
 
 | Stage | What happens |
 | --- | --- |
-| test | `ci.yml`: Java, frontend and Python tests; `terraform init -backend=false` + `validate` + a mocked plan for all three environments (checks the code only, touches no AWS); Kustomize build and schema checks; actionlint; Trivy |
+| test | `ci.yml`: Java, frontend and Python tests; `terraform init -backend=false` + `validate` + a mocked plan for all three environments (checks the code only, touches no AWS); Helm lint, render and schema checks; actionlint; Trivy |
 | init + plan | the real `terraform init` against the S3 state, then a plan saved privately with an ID and SHA256 |
 | apply | applies **exactly** that saved plan (the hash is checked). This creates the ECR repositories, so images can only be pushed after it |
-| build + push | builds the four service images, the web app and the photo-training image, pushes them to ECR by digest, renders the Kustomize overlay and commits it to `main` (GitOps) |
+| build + push | builds the four service images, the web app and the photo-training image, pushes them to ECR by digest, renders the Helm values and commits them to `main` (GitOps) |
 | Argo CD + monitoring | a private CodeBuild runner inside the VPC installs Argo CD; Argo CD syncs the release commit, including Prometheus, Alertmanager and Grafana; HTTPS probe |
 | frontend | publishes the React build to S3 and invalidates CloudFront |
 
@@ -154,10 +154,10 @@ of controllers and services.
 - **Private runner for the cluster.** The EKS API is restricted to the operator's
   IP, so cluster bootstrap runs on CodeBuild inside the VPC.
 - **GitOps.** The pipeline never runs `kubectl apply` for apps; it commits the
-  rendered overlay and Argo CD makes the cluster match Git.
-- **Vendored YAML instead of Helm** for third-party components: every file is
-  SHA-pinned, so a deploy can only apply reviewed bytes
-  ([docs/KUSTOMIZE.md](docs/KUSTOMIZE.md)).
+  rendered values and Argo CD makes the cluster match Git.
+- **Helm charts with vendored third-party manifests.** Our services are one chart with a values file
+  per environment; third-party components are committed as chart files with every file SHA-pinned, so a
+  deploy can only apply reviewed bytes ([docs/HELM.md](docs/HELM.md)).
 - **One switch for disposability.** `deletion_protection=false` turns off DB
   snapshots, bucket retention and secret recovery windows so dev/staging destroy
   cleanly; prod keeps all of them.
@@ -181,7 +181,7 @@ Argo CD and Grafana in dev and staging sign in with `admin` / `admin`.
 | --- | --- |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | One-time setup, deploy, destroy, troubleshooting |
 | [infra/README.md](infra/README.md) | Terraform modules and environments |
-| [docs/KUSTOMIZE.md](docs/KUSTOMIZE.md) | Kubernetes layout, overlays, Argo CD |
+| [docs/HELM.md](docs/HELM.md) | Helm charts, values, Argo CD |
 | [docs/MLOPS.md](docs/MLOPS.md) | Models, nightly forecast, weekly photo training, Bedrock |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Stock rules, alerts, recovery drills |
 | [docs/WAREHOUSE_UX.md](docs/WAREHOUSE_UX.md), [docs/STOCK_ANALYSIS.md](docs/STOCK_ANALYSIS.md), [docs/DEMAND_FORECASTING.md](docs/DEMAND_FORECASTING.md) | Application features |

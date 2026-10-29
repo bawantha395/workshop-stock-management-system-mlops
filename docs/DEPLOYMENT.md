@@ -14,7 +14,7 @@ Sunday, `release-model` after an approval) run by themselves and can also be run
 ```mermaid
 flowchart LR
   subgraph Deploy environment
-    T[test<br/>ci.yml] --> P[plan<br/>saved to S3] --> A[apply<br/>exact plan] --> R[release<br/>images + overlay commit] --> K[platform<br/>Argo CD sync] --> F[frontend<br/>S3 + CloudFront] --> M[train<br/>optional]
+    T[test<br/>ci.yml] --> P[plan<br/>saved to S3] --> A[apply<br/>exact plan] --> R[release<br/>images + values commit] --> K[platform<br/>Argo CD sync] --> F[frontend<br/>S3 + CloudFront] --> M[train<br/>optional]
   end
   subgraph Destroy environment
     C[confirm] --> PT[platform teardown] --> B[before] --> S[sweep] --> DP[destroy plan] --> D[destroy] --> S2[sweep] --> CH[check]
@@ -43,7 +43,7 @@ For each, set **Deployment branches → Selected branches** with one rule: `main
 Add a **required reviewer** to `aws-infrastructure-apply` if you want a human
 approval before every apply and destroy.
 
-The release stage pushes the rendered overlay to `main` as
+The release stage pushes the rendered Helm values to `main` as
 `release(<env>): <sha> [skip ci]`. If `main` has branch protection, allow
 GitHub Actions to push (or add it to the bypass list).
 

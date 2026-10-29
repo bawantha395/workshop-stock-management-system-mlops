@@ -1,0 +1,17 @@
+# Written per environment by scripts/render_cloud.py (deploy/helm/values/<environment>.yaml).
+platform:
+  name: REPLACE_PROJECT_NAME
+  clusterName: REPLACE_CLUSTER_NAME
+  region: REPLACE_AWS_REGION
+  vpcId: REPLACE_VPC_ID
+  logGroup: REPLACE_APPLICATION_LOG_GROUP
+  admin:
+    # The admin pages are published only when a host is set; they need a certificate and allowed CIDRs (/24 or narrower).
+    hosts:
+      argocd: ""
+      grafana: ""
+    certificateArn: ""
+    allowedCidrs: []
+    targets:
+      argocd: {namespace: argocd, service: argocd-server, port: 443, protocol: HTTPS, healthPath: /healthz}
+      grafana: {namespace: monitoring, service: grafana, port: 80, protocol: HTTP, healthPath: /api/health}

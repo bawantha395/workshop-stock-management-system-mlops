@@ -1,0 +1,83 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    stocklane.io/monitoring: enabled
+  name: stocklane
+  namespace: monitoring
+spec:
+  groups:
+  - name: stocklane-application
+    rules:
+    - alert: StocklaneScrapeUnavailable
+      annotations:
+        summary: Stocklane application metrics endpoint unavailable
+      expr: up{namespace=~"stocklane(-.*)?"} == 0
+      for: 5m
+      labels:
+        severity: critical
+    - alert: StocklaneVisionServerErrors
+      annotations:
+        summary: Vision server error ratio exceeds five percent
+      expr: sum(rate(stocklane_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(stocklane_http_requests_total[5m])), 0.001) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+    - alert: StocklaneJavaServerErrors
+      annotations:
+        summary: Spring Boot server error ratio exceeds five percent
+      expr: sum by (application) (rate(http_server_requests_seconds_count{namespace=~"stocklane(-.*)?",status=~"5.."}[5m])) / clamp_min(sum by (application) (rate(http_server_requests_seconds_count{namespace=~"stocklane(-.*)?"}[5m])), 0.001) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+  - name: stocklane-cluster
+    rules:
+    - alert: StocklaneNodeNotReady
+      annotations:
+        summary: A Kubernetes node has not been Ready for five minutes
+      expr: kube_node_status_condition{condition="Ready",status=~"false|unknown"} == 1
+      for: 5m
+      labels:
+        severity: critical
+    - alert: StocklaneContainerCannotStart
+      annotations:
+        summary: A container is stuck in CrashLoopBackOff or image pull failure
+      expr: sum by (namespace, pod, reason) (kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError"} == 1) > 0
+      for: 10m
+      labels:
+        severity: warning
+    - alert: StocklanePodsPending
+      annotations:
+        summary: Pods have stayed Pending for fifteen minutes; the cluster may be out of CPU, memory or pod slots
+      expr: sum(kube_pod_status_phase{phase="Pending"}) > 0
+      for: 15m
+      labels:
+        severity: warning
+    - alert: StocklaneDeploymentReplicasUnavailable
+      annotations:
+        summary: An application deployment has fewer available replicas than desired
+      expr: (kube_deployment_spec_replicas{namespace=~"stocklane(-.*)?"} - kube_deployment_status_replicas_available{namespace=~"stocklane(-.*)?"}) > 0
+      for: 15m
+      labels:
+        severity: warning
+    - alert: StocklaneNodeMemoryHigh
+      annotations:
+        summary: A node is using more than ninety percent of its memory
+      expr: sum by (instance) (container_memory_working_set_bytes{id="/"}) / on (instance) sum by (instance) (machine_memory_bytes) > 0.9
+      for: 10m
+      labels:
+        severity: warning
+    - alert: StocklaneNodeCpuHigh
+      annotations:
+        summary: A node has used more than ninety percent of its CPU for fifteen minutes
+      expr: sum by (instance) (rate(container_cpu_usage_seconds_total{id="/"}[5m])) / on (instance) sum by (instance) (machine_cpu_cores) > 0.9
+      for: 15m
+      labels:
+        severity: warning
+    - alert: StocklaneVolumeAlmostFull
+      annotations:
+        summary: A persistent volume is more than ninety percent full
+      expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9
+      for: 15m
+      labels:
+        severity: critical

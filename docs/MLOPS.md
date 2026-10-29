@@ -43,7 +43,7 @@ the forecast one by one as their history grows.
 | Every Sunday 01:00 (Asia/Colombo) | The vision service exports every photo a person confirmed (new items and parts identified at the storeroom counter) as a dataset. It starts once there are at least 60 photos, with 15 photos across 3 items in each split. |
 | Every Sunday 02:30 | `train.yml` trains the calibrator on that export, but only if the photos changed (`mlops/workshop_dataset.py`). It runs as a **SageMaker Processing job on `ml.t3.large`**, because new accounts usually have zero training-instance quota. |
 | After training | `mlops/auto_promote.py` approves the new version only if it passed the quality gate **and** beats the model being served (higher test F1, precision at least 98 %). Otherwise it is rejected with the reason. |
-| After approval | `release-model.yml` commits the model to the environment's overlay and Argo CD rolls it out (GitOps). |
+| After approval | `release-model.yml` commits the model to the environment's Helm values and Argo CD rolls it out (GitOps). |
 
 The quality gate picks its threshold on a validation split and judges on an independent test split:
 precision at least 98 %, recall at least 50 %. Until the first model passes, the pretrained MobileNetV2

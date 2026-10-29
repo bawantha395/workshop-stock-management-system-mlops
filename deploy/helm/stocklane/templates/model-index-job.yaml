@@ -1,0 +1,82 @@
+# Argo CD PreSync hook: index the encoder in the new model bundle before the new pods start.
+# The configuration is bound to this release directly (not read from the ConfigMap, which Argo CD
+# applies later) so the hook always sees the release's own model URI.
+{{- $vision := .Values.services.vision }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prepare-model-index
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "stocklane.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: vision-index
+    spec:
+      serviceAccountName: vision
+      securityContext:
+        {{- include "stocklane.podSecurityContext" . | nindent 8 }}
+      containers:
+      - name: vision
+        image: {{ .Values.images.vision }}
+        envFrom:
+        {{- include "stocklane.envFrom" "vision" | nindent 8 }}
+        env:
+        {{- range $key, $value := .Values.config }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        {{- range $vision.env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        resources:
+          {{- toYaml $vision.resources | nindent 10 }}
+        securityContext:
+          {{- include "stocklane.containerSecurityContext" . | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: model
+          mountPath: /models
+        command:
+        - python
+        - /app/tools/reindex.py
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: model
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: vision
+      initContainers:
+      - name: fetch-model
+        image: {{ .Values.images.vision }}
+        command:
+        - python
+        - /app/tools/fetch_model.py
+        envFrom:
+        {{- include "stocklane.envFrom" "vision" | nindent 8 }}
+        env:
+        {{- range $key, $value := .Values.config }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        volumeMounts:
+        - name: model
+          mountPath: /models
+        securityContext:
+          {{- include "stocklane.containerSecurityContext" . | nindent 10 }}
+      restartPolicy: Never

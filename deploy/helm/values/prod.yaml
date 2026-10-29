@@ -1,0 +1,6 @@
+# Placeholder. The release stage (scripts/render_cloud.py) replaces this file with the account-specific
+# values of the prod environment and commits it; Argo CD and the bootstrap read it from there.
+environment: prod
+replicas:
+  min: 3
+  max: 6

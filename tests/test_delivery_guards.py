@@ -8,7 +8,7 @@ import yaml
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 from render_cloud import render
-from kustomize_utils import build
+from helm_utils import build
 
 def config():
     return {'region':'eu-west-1','name':'stocklane-test','account_id':'123456789012','cognito_issuer':'https://cognito-idp.eu-west-1.amazonaws.com/test','cognito_web_client_id':'web-client','frontend_url':'https://test.cloudfront.net','stock_queue_url':'https://sqs.eu-west-1.amazonaws.com/123456789012/stock','catalogue_queue_url':'https://sqs.eu-west-1.amazonaws.com/123456789012/catalogue','cache_host':'cache.example.internal','media_bucket':'test-media','database_host':'db.example.internal','database_secrets':{s:'arn:aws:secretsmanager:eu-west-1:123456789012:secret:'+s for s in ['inventory','workshop','vision']},'platform_secret_arn':'arn:aws:secretsmanager:eu-west-1:123456789012:secret:platform','api_domain':'api.example.com','api_certificate_arn':'arn:aws:acm:eu-west-1:123456789012:certificate/test'}
@@ -21,7 +21,7 @@ def test_gitops_requires_digests(tmp_path):
 
 def test_gitops_has_tls_auth_and_versioned_model_hooks(tmp_path):
     render(config(),images(),'s3://models/release.tar.gz','f'*64,tmp_path)
-    docs=build(tmp_path)
+    docs=build('stocklane','prod',values=tmp_path/'prod.yaml')
     deployments=[d for d in docs if d['kind']=='Deployment'];assert len(deployments)==4
     assert all(d['spec']['replicas']==3 for d in deployments)
     for d in deployments:

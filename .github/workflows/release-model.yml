@@ -1,6 +1,6 @@
 name: Release approved model
 # Started by the training workflows after an automatic approval: commits the model to the
-# environment's GitOps overlay, and Argo CD rolls it out. It can also be run by hand.
+# environment's GitOps values, and Argo CD rolls it out. It can also be run by hand.
 on:
   workflow_dispatch:
     inputs:

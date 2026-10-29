@@ -1,0 +1,222 @@
+{{- /* One block per entry in .Values.services. */ -}}
+{{- $root := . }}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "stocklane.labels" $root | nindent 4 }}
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    {{- include "stocklane.labels" $root | nindent 4 }}
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: {{ $svc.readyPath }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+  - name: http
+    port: {{ $svc.port }}
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "stocklane.labels" $root | nindent 4 }}
+spec:
+  replicas: {{ $root.Values.replicas.min }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+      annotations:
+        stocklane.io/config-sha256: {{ include "stocklane.configChecksum" $root }}
+    spec:
+      serviceAccountName: {{ $name }}
+      securityContext:
+        {{- include "stocklane.podSecurityContext" $root | nindent 8 }}
+      containers:
+      - name: {{ $name }}
+        image: {{ index $root.Values.images $name }}
+        ports:
+        - name: http
+          containerPort: {{ $svc.port }}
+        envFrom:
+        {{- include "stocklane.envFrom" $name | nindent 8 }}
+        {{- with $svc.env }}
+        env:
+        {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml $svc.resources | nindent 10 }}
+        securityContext:
+          {{- include "stocklane.containerSecurityContext" $root | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        {{- if $svc.model }}
+        - name: model
+          mountPath: /models
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: {{ $svc.livePath }}
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: {{ $svc.readyPath }}
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: {{ $svc.livePath }}
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- if $svc.model }}
+      - name: model
+        emptyDir: {}
+      {{- end }}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: {{ $name }}
+      {{- if $svc.model }}
+      initContainers:
+      - name: fetch-model
+        image: {{ index $root.Values.images $name }}
+        command:
+        - python
+        - /app/tools/fetch_model.py
+        envFrom:
+        {{- include "stocklane.envFrom" $name | nindent 8 }}
+        volumeMounts:
+        - name: model
+          mountPath: /models
+        securityContext:
+          {{- include "stocklane.containerSecurityContext" $root | nindent 10 }}
+      {{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "stocklane.labels" $root | nindent 4 }}
+spec:
+  minAvailable: {{ max 0 (sub (int $root.Values.replicas.min) 1) }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "stocklane.labels" $root | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $root.Values.replicas.min }}
+  maxReplicas: {{ $root.Values.replicas.max }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    stocklane.io/monitoring: enabled
+    {{- include "stocklane.labels" $root | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  endpoints:
+  - port: http
+    path: {{ $svc.metricsPath }}
+    authorization:
+      type: Bearer
+      credentials:
+        name: {{ $name }}-secrets
+        key: INTERNAL_TOKEN
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $name }}-secrets
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "stocklane.labels" $root | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets
+    kind: ClusterSecretStore
+  target:
+    name: {{ $name }}-secrets
+    template:
+      engineVersion: v2
+      data:
+        {{- toYaml $svc.secretTemplate | nindent 8 }}
+  data:
+  {{- if $svc.database }}
+  {{- range $key := list "username" "password" "host" "dbname" }}
+  - secretKey: {{ $key }}
+    remoteRef:
+      key: {{ index $root.Values.secrets.database $name }}
+      property: {{ $key }}
+  {{- end }}
+  {{- end }}
+  {{- range $key := $svc.platformKeys }}
+  - secretKey: {{ $key }}
+    remoteRef:
+      key: {{ $root.Values.secrets.platform }}
+      property: {{ $key }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: stocklane-prometheus
+  namespace: monitoring
+spec:
+  minAvailable: {{ .Values.monitoring.prometheus.minAvailable }}
+  selector:
+    matchLabels:
+      prometheus: stocklane

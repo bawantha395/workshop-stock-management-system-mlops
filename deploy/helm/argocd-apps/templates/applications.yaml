@@ -1,0 +1,38 @@
+{{- $g := .Values.gitops }}
+{{- $env := .Values.environment }}
+{{- $namespace := default (printf "stocklane-%s" $env) $g.namespace }}
+{{- range $name, $app := $g.applications }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: stocklane-{{ $name }}-{{ $env }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $app.wave | quote }}
+spec:
+  project: stocklane-{{ $app.project }}-{{ $env }}
+  source:
+    repoURL: {{ $g.repoURL }}
+    targetRevision: {{ $g.targetRevision }}
+    path: deploy/helm/{{ $app.chart }}
+    helm:
+      valueFiles:
+      - ../values/{{ $env }}.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ default $namespace $app.namespace }}
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=true
+    - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+{{- end }}
