@@ -314,11 +314,12 @@ def create_app(settings=None):
         try:image=store.image(body.imageId)
         except (ValueError,FileNotFoundError):raise HTTPException(404,'Photo not found') from None
         key='stocklane:draft:'+s.bedrock_model_id+':'+PROMPT_VERSION+':'+body.imageId
-        fields=None;source='manual';suggestions={}
+        fields=None;source='manual';suggestions={};ai={'status':'not_configured'}
         try:
             hit=cache.get(key)
             if hit:
                 cached=json.loads(hit);fields,source=cached[0],cached[1];suggestions=cached[2] if len(cached)>2 else {}
+                ai=cached[3] if len(cached)>3 else {'status':'used' if suggestions else 'not_configured'}
                 draft_events.labels('cache_hit').inc()
         except (redis.RedisError,ValueError):pass
         if fields is None:
@@ -331,6 +332,7 @@ def create_app(settings=None):
                     source=textract.SOURCE;draft_events.labels(source).inc()
             # 2. Ask the LLM only for what the label text did not give. Its answers are suggestions.
             problem=None
+            if s.bedrock_model_id and not any(name not in fields for name in DRAFT_FIELDS):ai={'status':'not_needed'}
             if s.bedrock_model_id and any(name not in fields for name in DRAFT_FIELDS):
                 allowed=True
                 try:
@@ -340,19 +342,20 @@ def create_app(settings=None):
                     if used==1:cache.expire(limit_key,172800)
                     if used>s.bedrock_daily_request_limit:
                         if not fields:raise HTTPException(429,'Daily AI suggestion limit reached. Register manually or retry tomorrow UTC.')
-                        allowed=False
+                        allowed=False;ai={'status':'limit_reached'}
                 except redis.RedisError:
                     if not fields:raise HTTPException(503,'AI usage control is unavailable. Enter the details manually.') from None
-                    allowed=False
+                    allowed=False;ai={'status':'unavailable','message':'AI usage control is unavailable'}
                 if allowed:
                     try:
                         proposed,_=propose(s,image,fields)
                         suggestions={k:v for k,v in proposed.items() if k in DRAFT_FIELDS and k not in fields and v}
-                        draft_events.labels('bedrock').inc()
+                        draft_events.labels('bedrock').inc();ai={'status':'used'}
                         bedrock_observation.update(state='invocation_verified',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=None)
                         if not fields:source='bedrock'
                     except Exception as error:
                         problem=error if isinstance(error,BedrockUnavailable) else failure(error)
+                        ai={'status':'unavailable','code':problem.code,'message':problem.message.split('. ')[0]}
                         draft_events.labels(problem.code).inc()
                         bedrock_observation.update(state='unavailable',checkedAt=datetime.now(timezone.utc).isoformat(),errorCode=problem.code)
                         log.warning('AI suggestions unavailable code=%s',problem.code)
@@ -360,11 +363,11 @@ def create_app(settings=None):
                 return JSONResponse(status_code=problem.status,
                     content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
                     headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
-            try:cache.set(key,json.dumps([fields,source,suggestions]),ex=900)
+            try:cache.set(key,json.dumps([fields,source,suggestions,ai]),ex=900)
             except redis.RedisError:pass
         row={'id':str(uuid.uuid4()),'image_id':body.imageId,'fields':json.dumps(fields),'source':source,'status':'PENDING','created_at':datetime.now(timezone.utc).isoformat(),'actor':actor,'product_id':None}
         with store.engine.begin() as c:c.execute(insert(store.drafts).values(**row))
-        return dict(row,fields=fields,suggestions=suggestions)
+        return dict(row,fields=fields,suggestions=suggestions,ai=ai)
 
     @app.get('/api/vision/drafts')
     def drafts(request:Request):

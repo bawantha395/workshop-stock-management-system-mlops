@@ -73,6 +73,19 @@ type View =
   | "review"
   | "counter";
 const uid = () => crypto.randomUUID();
+function aiMessage(ai?: { status: string; code?: string; message?: string }) {
+  if (!ai || ai.status === "not_needed") return "";
+  if (ai.status === "used") return "AI suggestions are included (shown in blue). Check them before saving.";
+  if (ai.status === "not_configured") return "AI suggestions are switched off. Showing what the label says and similar items only.";
+  if (ai.status === "limit_reached") return "Today's AI suggestion limit is reached. Showing what the label says and similar items only.";
+  const why =
+    ai.code === "AI_PROVIDER_QUOTA"
+      ? " (the AWS Bedrock quota for this account is not approved yet)"
+      : ai.code === "AI_ACCESS_DENIED"
+        ? " (Bedrock model access is not enabled)"
+        : "";
+  return "AI suggestions are not available right now" + why + ". Showing what the label says and similar items only.";
+}
 const number = (n: number) =>
   new Intl.NumberFormat("en", { maximumFractionDigits: 3 }).format(Number(n));
 const when = (s: string) =>
@@ -193,6 +206,9 @@ function App() {
     [preview, setPreview] = useState(""),
     [capture, setCapture] = useState<CaptureEntry | null>(null),
     [saveReference, setSaveReference] = useState(false);
+  const [aiNote, setAiNote] = useState(""),
+    [counterPick, setCounterPick] = useState<Item | null>(null);
+  const fromCounter = useRef(false);
   const [newItem, setNewItem] = useState(false),
     [edit, setEdit] = useState<Item | null>(null),
     [labelItem, setLabelItem] = useState<Item | null>(null);
@@ -410,22 +426,31 @@ function App() {
       if (run === sequence.current) setBusy(false);
     }
   };
-  const readLabel = async () => {
+  const readLabel = async (id: string = imageId) => {
     setBusy(true);
     setError("");
     try {
-      setDraft(
-        await api<Draft>("/api/vision/drafts", {
-          method: "POST",
-          body: JSON.stringify({ imageId }),
-        }),
-      );
-      setNewItem(true);
+      const result = await api<Draft>("/api/vision/drafts", {
+        method: "POST",
+        body: JSON.stringify({ imageId: id }),
+      });
+      setDraft(result);
+      setAiNote(aiMessage(result.ai));
     } catch (e) {
-      setError((e as Error).message);
+      // Still open the form: the label could not be read, so the person types the details.
+      setDraft(null);
+      setAiNote(
+        "No suggestions are available for this photo. " + (e as Error).message,
+      );
     } finally {
+      setNewItem(true);
       setBusy(false);
     }
+  };
+  const newItemFromCounter = (id: string) => {
+    fromCounter.current = true;
+    setImageId(id);
+    void readLabel(id);
   };
   const addLine = () => {
     if (!active || !validQuantity(quantity, active.unit)) {
@@ -775,10 +800,24 @@ function App() {
             <div className="workspace-intro">
               <p className="eyebrow">YOUR STOCK. UNDER CONTROL.</p>
               <h1>What are we doing today?</h1>
-              <p>Choose a task. Scan an item. Keep stock accurate.</p>
+              <p>Every part in and out: scan it or take a photo.</p>
             </div>
             {owner && session && <ReorderCard />}
             <div className="counter-tiles">
+              <button
+                className="counter-tile receive"
+                disabled={!session || busy}
+                onClick={() => {
+                  setCounterMode("receive");
+                  navigate("counter");
+                }}
+              >
+                <ArrowDownLeft size={30} />
+                <span>
+                  <strong>Receive</strong>
+                  <small>Scan or photo what came in</small>
+                </span>
+              </button>
               <button
                 className="counter-tile give"
                 disabled={!session || busy}
@@ -801,9 +840,9 @@ function App() {
                   navigate("counter");
                 }}
               >
-                <ArrowDownLeft size={30} />
+                <RefreshCw size={28} />
                 <span>
-                  <strong>Take a part back</strong>
+                  <strong>Take back</strong>
                   <small>Unused parts return to the shelf</small>
                 </span>
               </button>
@@ -818,10 +857,10 @@ function App() {
                   <ArrowDownLeft />
                 </span>
                 <span className="tile-tag">ITEMS COMING IN</span>
-                <h2>Receive stock</h2>
-                <p>Add a delivery to your shelves.</p>
+                <h2>Big delivery</h2>
+                <p>Many lines at once, confirmed together.</p>
                 <span className="tile-bottom">
-                  Start receiving <ArrowRight size={20} />
+                  Start a delivery <ArrowRight size={20} />
                 </span>
               </button>
               <button
@@ -832,11 +871,11 @@ function App() {
                 <span className="tile-icon">
                   <ArrowUpRight />
                 </span>
-                <span className="tile-tag">ITEMS GOING OUT</span>
-                <h2>Take stock out</h2>
-                <p>Record parts leaving the storeroom.</p>
+                <span className="tile-tag">OTHER STOCK OUT</span>
+                <h2>Other stock-out</h2>
+                <p>Damaged, sold over the counter, or used up.</p>
                 <span className="tile-bottom">
-                  Start scanning <ArrowRight size={20} />
+                  Record it <ArrowRight size={20} />
                 </span>
               </button>
               <button
@@ -1698,6 +1737,8 @@ function App() {
             items={items}
             owner={owner}
             initialMode={counterMode}
+            picked={counterPick}
+            onNewItem={newItemFromCounter}
             onChanged={() => void refresh()}
           />
         )}
@@ -1843,13 +1884,15 @@ function App() {
         <ProductEditor
           item={edit}
           draft={draft}
+          aiNote={edit ? "" : aiNote}
           imageId={edit?.image_id || imageId}
           capture={null}
-          inTask={inTask && !edit}
+          inTask={(inTask || fromCounter.current) && !edit}
           products={items}
           onClose={() => {
             setNewItem(false);
             setEdit(null);
+            fromCounter.current = false;
           }}
           onSaved={async (p, message) => {
             const wasEdit = !!edit;
@@ -1858,6 +1901,11 @@ function App() {
             setDraft(null);
             tell(message);
             await refresh();
+            if (p && !wasEdit && fromCounter.current) {
+              fromCounter.current = false;
+              setCounterPick(p);
+              return;
+            }
             if (p && !wasEdit) {
               setLabelItem(p);
               if (inTask) {
@@ -1956,6 +2004,7 @@ function LabelDialog({ item, onClose }: { item: Item; onClose: () => void }) {
 function ProductEditor({
   item,
   draft,
+  aiNote = "",
   imageId,
   capture,
   inTask = false,
@@ -1965,6 +2014,7 @@ function ProductEditor({
 }: {
   item: Item | null;
   draft: Draft | null;
+  aiNote?: string;
   imageId: string;
   capture: CaptureEntry | null;
   inTask?: boolean;
@@ -2117,7 +2167,17 @@ function ProductEditor({
             : "Use the visible manufacturer and part number where available."}
         </p>
         {imageId && <Photo id={imageId} />}
+        {!item && aiNote && (
+          <p className={"ai-note" + (draft?.ai?.status === "used" ? " used" : "")} role="status">
+            {aiNote}
+          </p>
+        )}
         <form onSubmit={(e) => void save(e)}>
+          {!item && Object.keys(suggested).length === 0 && (
+            <p className="ai-note" role="status">
+              No suggestions are available for this photo. Type the details from the label.
+            </p>
+          )}
           {open.length > 0 && (
             <div className="suggestion-banner" role="status">
               <span>
@@ -2130,8 +2190,7 @@ function ProductEditor({
           )}
           {inTask && (
             <p className="stock-help">
-              Register the catalogue item here. Its received quantity is
-              confirmed in your receipt afterwards.
+              Save the item first, then confirm how many came in.
             </p>
           )}
           <div className="stock-form-grid">

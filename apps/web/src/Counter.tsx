@@ -8,7 +8,7 @@ const Scanner = React.lazy(() => import("./Scanner").then((m) => ({ default: m.S
 type Item = Product & { location?: string; archived?: boolean };
 type Person = { id: string; name: string };
 type Handover = { id: string; product_id: string; sku: string; name: string; unit: string; quantity: number; outstanding: number; created_at: string };
-export type Mode = "give" | "back";
+export type Mode = "receive" | "give" | "back";
 const PART_QR = /^stocklane:v1:([0-9a-f-]{36})$/;
 const PERSON_QR = /^stocklane:person:v1:([0-9a-f-]{36})$/;
 const key = () => crypto.randomUUID();
@@ -39,7 +39,7 @@ async function printCard(person: Person) {
   doc.body.append(img, name, hint, button);
 }
 
-export function Counter({ items, owner, initialMode = "give", onChanged }: { items: Item[]; owner: boolean; initialMode?: Mode; onChanged: () => void }) {
+export function Counter({ items, owner, initialMode = "give", picked = null, onNewItem, onChanged }: { items: Item[]; owner: boolean; initialMode?: Mode; picked?: Item | null; onNewItem?: (imageId: string) => void; onChanged: () => void }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [people, setPeople] = useState<Person[]>([]);
   const [part, setPart] = useState<Item | null>(null);
@@ -59,6 +59,8 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
   const loadPeople = () => api<Person[]>("/api/inventory/people").then(setPeople).catch((e) => setError((e as Error).message));
   useEffect(() => { void loadPeople(); }, []);
   useEffect(() => { setMode(initialMode); }, [initialMode]);
+  // A new item registered from this screen comes back selected, ready for its quantity.
+  useEffect(() => { if (picked) { setMode("receive"); setPart(picked); setCandidates([]); setPhotoId(""); setQuantity(1); setError(""); } }, [picked]);
 
   const reset = (message = "") => {
     setPart(null); setCandidates([]); setPhotoId(""); setPerson(null); setHandovers(null); setHandover(null);
@@ -91,7 +93,7 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
       const match = await api<Match>("/api/vision/match", { method: "POST", body: form });
       const known = match.candidates.map((c) => items.find((i) => i.id === c.product.id)).filter((i): i is Item => !!i).slice(0, 3);
       setPhotoId(match.imageId); setCandidates(known);
-      if (!known.length) setError("No match from the photo. Search for the part below.");
+      if (!known.length) setError(mode === "receive" ? "No match from the photo. Search below, or add it as a new item." : "No match from the photo. Search for the part below.");
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); if (photo.current) photo.current.value = ""; }
   };
@@ -107,6 +109,18 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
         try { await api("/api/vision/references", { method: "POST", body: JSON.stringify({ productId: part.id, imageId: photoId }) }); } catch { /* the movement is already recorded */ }
       }
       onChanged(); reset("Recorded: " + amount(quantity) + " × " + part.name + " given to " + person.name + ".");
+    } catch (e) { setError((e as Error).message); commandKey.current = key(); }
+    finally { setBusy(false); }
+  };
+  const receive = async () => {
+    if (!part) return;
+    setBusy(true); setError("");
+    try {
+      await api("/api/inventory/movements", { method: "POST", body: JSON.stringify({ kind: "RECEIPT", productId: part.id, quantity, note: "Received at the counter" }) }, commandKey.current);
+      if (photoId) {
+        try { await api("/api/vision/references", { method: "POST", body: JSON.stringify({ productId: part.id, imageId: photoId }) }); } catch { /* the receipt is already recorded */ }
+      }
+      onChanged(); reset("Recorded: " + amount(quantity) + " × " + part.name + " added to stock.");
     } catch (e) { setError((e as Error).message); commandKey.current = key(); }
     finally { setBusy(false); }
   };
@@ -143,21 +157,22 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
   );
 
   return (
-    <section className="counter" aria-label="Storeroom counter">
+    <section className="counter-screen" aria-label="Storeroom counter">
       <div className="counter-modes" role="tablist">
-        <button role="tab" aria-selected={mode === "give"} className={mode === "give" ? "chosen" : ""} onClick={() => switchMode("give")}>Give a part</button>
-        <button role="tab" aria-selected={mode === "back"} className={mode === "back" ? "chosen" : ""} onClick={() => switchMode("back")}>Take a part back</button>
+        {(([["receive", "Receive"], ["give", "Give a part"], ["back", "Take back"]]) as [Mode, string][]).map(([m, label]) => (
+          <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? "chosen " + m : m} onClick={() => switchMode(m)}>{label}</button>
+        ))}
       </div>
       {done && <p className="counter-done" role="status"><Check size={20} /> {done}</p>}
       {error && <p className="stock-error" role="alert">{error}</p>}
-      {!people.length && (
+      {mode !== "receive" && !people.length && (
         <p className="stock-help">{owner ? "Add the people who collect parts (below) to start using the counter." : "No people on the counter list yet. Ask the owner to add them."}</p>
       )}
 
-      {mode === "give" && (
+      {(mode === "give" || mode === "receive") && (
         <>
           <div className="counter-step">
-            <h2><span>1</span> Which part?</h2>
+            <h2><span>1</span> {mode === "receive" ? "Which part came in?" : "Which part?"}</h2>
             {part ? (
               <div className="counter-chosen"><strong>{part.name}</strong><small>{part.sku} · {amount(Number(part.quantity))} in stock{part.location ? " · " + part.location : ""}</small><button onClick={() => { setPart(null); setPhotoId(""); }}>Change</button></div>
             ) : (
@@ -172,6 +187,9 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
                     <p>Is it one of these?</p>
                     {candidates.map((c) => <button key={c.id} onClick={() => setPart(c)}><strong>{c.name}</strong><small>{c.sku}{c.location ? " · " + c.location : ""}</small></button>)}
                   </div>
+                )}
+                {mode === "receive" && photoId && onNewItem && (
+                  <button className="counter-new" onClick={() => onNewItem(photoId)}><Plus size={20} /> {candidates.length ? "None of these: add as a new item" : "Add as a new item (reads the label)"}</button>
                 )}
                 <label className="stock-field counter-search">Or search<input value={search} placeholder="Oil filter" onChange={(e) => setSearch(e.target.value)} /></label>
                 {matches.map((m) => <button key={m.id} className="counter-result" onClick={() => { setPart(m); setPhotoId(""); }}>{m.name} <small>{m.sku}</small></button>)}
@@ -189,13 +207,18 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
               </div>
             </div>
           )}
-          {part && (
+          {part && mode === "give" && (
             <div className="counter-step">
               <h2><span>3</span> Who is taking it?</h2>
               {peopleButtons}
             </div>
           )}
-          {part && person && (
+          {part && mode === "receive" && (
+            <button className="button primary counter-confirm" disabled={busy || !(quantity > 0)} onClick={() => void receive()}>
+              {busy ? "Saving…" : "Add " + amount(quantity) + " × " + part.name + " to stock"}
+            </button>
+          )}
+          {part && person && mode === "give" && (
             <button className="button primary counter-confirm" disabled={busy || !(quantity > 0)} onClick={() => void give()}>
               {busy ? "Saving…" : "Give " + amount(quantity) + " × " + part.name + " to " + person.name}
             </button>
@@ -268,7 +291,7 @@ export function Counter({ items, owner, initialMode = "give", onChanged }: { ite
           <Scanner onScan={onScan} onClose={() => setScanning(null)} />
         </React.Suspense>
       )}
-      {mode === "give" && part && <button className="counter-restart" onClick={() => reset()}><ArrowLeft size={16} /> Start again</button>}
+      {mode !== "back" && part && <button className="counter-restart" onClick={() => reset()}><ArrowLeft size={16} /> Start again</button>}
     </section>
   );
 }
