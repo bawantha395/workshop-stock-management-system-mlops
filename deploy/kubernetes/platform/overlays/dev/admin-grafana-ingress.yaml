@@ -8,7 +8,7 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/group.name: stocklane-dev-admin
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-2:721274598579:certificate/48fd9639-ceeb-4f74-ae28-915d6faeaea2
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-2:721274598579:certificate/28e2d118-577e-428d-87c4-c30763754172
     alb.ingress.kubernetes.io/inbound-cidrs: 112.135.67.224/32
     alb.ingress.kubernetes.io/backend-protocol: HTTP
     alb.ingress.kubernetes.io/healthcheck-protocol: HTTP

@@ -15,4 +15,4 @@ spec:
         - --enable-wafv2=false
         - --cluster-name=stocklane-dev
         - --aws-region=ap-southeast-2
-        - --aws-vpc-id=vpc-0bcc081a17c7550a5
+        - --aws-vpc-id=vpc-007c3ba9d9e71fd10

@@ -6,7 +6,7 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-2:721274598579:certificate/856de45e-0bc8-4299-ad10-4cc9400f980e
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-2:721274598579:certificate/5dd14cd4-90ce-4605-9e7d-9860ad9471c6
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health/readiness
     alb.ingress.kubernetes.io/success-codes: '200'
     alb.ingress.kubernetes.io/load-balancer-attributes: routing.http.drop_invalid_header_fields.enabled=true
