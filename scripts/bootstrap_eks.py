@@ -68,6 +68,11 @@ def bootstrap(a):
     monitoring = build(KUBERNETES / 'monitoring/overlays' / target); apply(monitoring)
     run(['kubectl', '-n', 'monitoring', 'wait', '--for=condition=Ready', 'externalsecret/grafana-admin', '--timeout=180s'])
     rollout([d for d in monitoring if d['kind'] == 'Deployment'])
+    if c.get('demo_admin_credentials') is True and target != 'prod':
+        # Grafana reads its admin password only when it first creates its database, so an
+        # existing Grafana keeps the old one; reset it explicitly (best effort, safe to repeat).
+        reset = subprocess.run(['kubectl', '-n', 'monitoring', 'exec', 'deploy/grafana', '--', 'grafana', 'cli', 'admin', 'reset-admin-password', 'admin'], env=env, capture_output=True, text=True)
+        print('Grafana admin password set to the demo value (admin)' if reset.returncode == 0 else 'Could not reset the Grafana admin password: ' + (reset.stderr or reset.stdout).strip()[-300:])
     # Admin namespaces exist only after Argo CD and monitoring bootstrap.
     apply([d for d in core if d['kind'] == 'Ingress'])
     resources = build(overlay)

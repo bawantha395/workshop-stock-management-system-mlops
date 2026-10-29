@@ -1101,3 +1101,11 @@ def test_demo_admin_credentials_are_dev_and_staging_only():
         assert f"demo_admin_credentials = {expected}" in values, env
     # The script also refuses to apply the demo password to prod when the flag is set by mistake.
     assert "target != 'prod'" in (ROOT / "scripts/bootstrap_eks.py").read_text()
+
+
+def test_grafana_demo_password_is_reset_for_existing_installations():
+    source = (ROOT / "scripts/bootstrap_eks.py").read_text()
+    reset = source.index("reset-admin-password")
+    guard = source.rindex("demo_admin_credentials", 0, reset)
+    assert "target != 'prod'" in source[guard:reset]
+    assert "'admin'" in source[reset - 80:reset + 80]
