@@ -1,15 +1,19 @@
 {
   "sourceBucket": "stocklane-dev-models-721274598579",
-  "sourcePrefix": "releases/frontend/8421962a093d-40847014459-1",
+  "sourcePrefix": "releases/frontend/c5b17ee9ee78-40937530187-1",
   "targetBucket": "stocklane-dev-web-721274598579",
-  "distributionId": "E3C3UE2T86RBZT",
+  "distributionId": "E2MV33HMIT7CRW",
   "region": "ap-southeast-2",
   "accountId": "721274598579",
-  "release": "8421962a093d-40847014459-1",
+  "release": "c5b17ee9ee78-40937530187-1",
   "files": [
     {
-      "path": "assets/Scanner-Ce1Yvn8t.js",
-      "sha256": "a54b025c8e9c7682f228fcec1deb7c69088749c8a2259f9478716c8c2f31a202"
+      "path": "assets/Camera-VgAWPcM6.js",
+      "sha256": "f98e476754af312581fe01f6936be5288ce7d4b2624e8e89b747f6b0d220404b"
+    },
+    {
+      "path": "assets/Scanner-C1oWVS6Y.js",
+      "sha256": "8fb8ead7160e9cefaf3f770ef6c99336e2edf523e88b0f66da9e61cac958461a"
     },
     {
       "path": "assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
@@ -20,12 +24,16 @@
       "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
     },
     {
-      "path": "assets/index-KYQSI3Wj.css",
-      "sha256": "7d37fe9963f2b0bb7e196d9b2fc6827e1e0991b30b97c69a33f0a91cd9bcc440"
+      "path": "assets/index-BkP3ZD4h.css",
+      "sha256": "2c95d291f09bc7f4dc9494488d98ef9c0a96fdf044c924e4c668c701bd82bc9f"
     },
     {
-      "path": "assets/index-dEXw8mLj.js",
-      "sha256": "30a11efb6c10320f2d52eb01313e2b19940c7f0fa27fac93ce12bcf3f43c0b61"
+      "path": "assets/index-CJdLQFPA.js",
+      "sha256": "9ce5a1c674344717029f23ab63f872bbc87b622644c069d992a04671e07a775f"
+    },
+    {
+      "path": "assets/jsQR-Dz9uFDTE.js",
+      "sha256": "d03c8cbc8280bbec29e491d0b890958d82e8e29613f5c8ab5537718cde516d7a"
     },
     {
       "path": "assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2",
@@ -49,11 +57,11 @@
     },
     {
       "path": "config.js",
-      "sha256": "0885695b400137bc4f62450aabc7cf43b2d7b9a9939b673779cf7691ff2cb6b2"
+      "sha256": "44e5f2c05a98893d09e4fa6a6171d4e4d8315dc94f0607ae23855643c7f8150b"
     },
     {
       "path": "index.html",
-      "sha256": "a859bcfb86a120109dcfbefdb8f4e834e9b485e21e496d879c37a2624944aba7"
+      "sha256": "cae0b6f82f7b1c0909468af104b09d42c1e3ba9c78a1240b1b77985d6af4f01f"
     }
   ]
 }

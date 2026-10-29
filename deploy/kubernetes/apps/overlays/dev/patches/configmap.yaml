@@ -7,8 +7,8 @@ data:
   ENVIRONMENT: cloud
   SPRING_PROFILES_ACTIVE: cloud
   AWS_REGION: ap-southeast-2
-  COGNITO_ISSUER: https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_flNc3H9kV
-  COGNITO_CLIENT_IDS: 5e3g95pok2v5n410s6h8t8dd89,3ju0vetvcb4ph78kq413p6jh18
+  COGNITO_ISSUER: https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_kESdbq2P6
+  COGNITO_CLIENT_IDS: 481sv2lo87bmbgjo9dg76conv2
   APP_WEB_ORIGIN: https://stocklane.bawantha-rathnayake.tech
   WEB_ORIGIN: https://stocklane.bawantha-rathnayake.tech
   INVENTORY_URL: http://inventory:8081
@@ -21,12 +21,13 @@ data:
   REDIS_TLS: 'true'
   MEDIA_BUCKET: stocklane-dev-media-721274598579
   MODEL_DIR: /models/current
-  MODEL_URI: s3://stocklane-dev-models-721274598579/releases/baseline/93852561615f32a7738b5820748c96a9183c32858b737fac4a63ea98610e90ec.tar.gz
-  MODEL_ARCHIVE_SHA256: 93852561615f32a7738b5820748c96a9183c32858b737fac4a63ea98610e90ec
+  MODEL_URI: s3://stocklane-dev-models-721274598579/releases/baseline/2ec0a9474ab90aa48f291602e3ab4a59aa76a272b9f3967e63d177a7329b44bb.tar.gz
+  MODEL_ARCHIVE_SHA256: 2ec0a9474ab90aa48f291602e3ab4a59aa76a272b9f3967e63d177a7329b44bb
   FILES_ROOT: /tmp/files
   BEDROCK_MODEL_ID: amazon.nova-lite-v1:0
   BEDROCK_REGION: us-east-1
   TEXTRACT_FALLBACK: 'true'
+  TRAINING_EXPORT: 'true'
   DEPLOYMENT_ENVIRONMENT: dev
   MODEL_BUCKET: stocklane-dev-models-721274598579
   BEDROCK_DAILY_REQUEST_LIMIT: '50'
