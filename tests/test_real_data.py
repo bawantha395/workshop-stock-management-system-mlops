@@ -123,7 +123,7 @@ def test_large_splits_sample_pairs_uniformly_and_small_splits_keep_every_pair():
 def test_owner_import_endpoint_is_wired_and_documented():
     controller=(ROOT/'services/inventory/src/main/java/com/stocklane/inventory/controller/InventoryController.java').read_text()
     assert '@PostMapping("/api/inventory/imports/sales-history") @PreAuthorize("hasRole(\'OWNER\')")' in controller
-    web=(ROOT/'apps/web/src/StockForecast.tsx').read_text()
+    web=(ROOT/'apps/web/src/StockReport.tsx').read_text()
     assert '/api/inventory/imports/sales-history' in web and 'the license allows this use' in web
     docs=(ROOT/'docs/REAL_DATA.md').read_text()
     for text in ('10.24432/C5CG6D','CC BY 4.0','whole weeks','opening balance','datasets/real-data/online-retail-ii','KAGGLE_KEY','Apache 2.0'):

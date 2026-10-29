@@ -36,12 +36,12 @@ missing history.
 
 ## Run forecasting once
 
-1. Sign in as OWNER. Open **Stock analysis → Stock demand forecast**.
+1. Sign in as OWNER. Open **Stock report** (the home page also shows **Reorder this week**). Forecast history is exported every night by itself; the steps below are only for doing it by hand.
 2. Expand **Prepare history for the forecast pipeline**.
 3. Set the first day on which all stock movements were reliably recorded.
    Confirm the checkbox only when this is true. Zero-filled missing days are valid
    only under this assumption; the software cannot discover unrecorded movements.
-4. Click **Prepare forecast history**. Inventory writes a content-addressed JSON
+4. (By hand only; the app does this every night) Inventory writes a content-addressed JSON
    snapshot and latest snapshot pointer in the private model bucket. All active
    catalogue items are included, not just the current report filter. No browser
    AWS credentials or manual S3 CSV upload is required.

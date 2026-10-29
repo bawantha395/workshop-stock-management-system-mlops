@@ -50,7 +50,7 @@ jobs:
       - run: python scripts/install_kustomize.py --directory "$RUNNER_TEMP/stocklane-tools"
       - run: python scripts/download_model.py
       - run: PYTHONPATH=services/vision pytest services/vision/tests tests/test_delivery_guards.py tests/test_forecast.py tests/test_operational_readiness.py tests/test_synthetic_guards.py tests/test_public_data.py tests/test_real_data.py tests/test_automation.py -q
-      - run: python -m compileall -q scripts mlops edge
+      - run: python -m compileall -q scripts mlops
   compose-integration:
     runs-on: ubuntu-latest
     steps:

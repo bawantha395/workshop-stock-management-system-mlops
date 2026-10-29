@@ -6,14 +6,12 @@ It uses the existing stock-first backend; no Terraform apply is required.
 
 ## Screens
 
-- Workspace: Receive stock, Take stock out, Find an item, Count stock.
+- Workspace: Receive, Give a part, Take back (the storeroom counter), Find an item, Count stock.
 - Receiving / stock-out: scan, verify item, set quantity, add a draft line,
   review the list and confirm. Draft lines do not change stock.
 - Find: searchable item cards, photos, manufacturer part numbers, available
   quantity, shelf and QR labels. No long product dropdown or similarity scores.
 - Catalogue: separate owner editing, archive/restore and printable QR labels.
-- Needs review: connected-camera evidence. Add a verified capture to the
-  appropriate draft and confirm it alongside the other lines.
 - Activity: confirmed ledger movements with actor and local date/time.
 - Count stock: physical-versus-recorded comparison only. It does not save a
   count session or automatically post an adjustment. Recheck discrepancies
@@ -97,10 +95,11 @@ A mechanic must not see owner edit/archive controls.
 
 ## Storeroom counter
 
-The counter screen is for the one moment that matters: a part leaving the storeroom.
+One screen with three big tabs: **Receive**, **Give a part** and **Take back**. It's built for a phone.
 
-- **Give a part.** Scan the part's QR label, or take a photo, or search. Set the quantity, then tap the name of the person taking it, or scan their QR card. The stock-out records who received it, who gave it and when.
-- **Take a part back.** Tap the person. The app lists what they still have out from the last 30 days. Tap the part and the quantity.
-- **People.** The owner adds the people who collect parts and prints each person a QR card.
-- **Self-learning.** When a part is identified by photo and confirmed, that photo becomes a reference image straight away, and it's included in the next weekly photo-model training.
-
+- **One camera.** **Open camera** starts the live camera. A Stocklane QR label in view is read by itself; otherwise the big **Take photo** button takes a photo, and the app suggests the part from it. There is no file upload (a device photo picker appears only if the camera can't start).
+- **Receive.** Pick the part, set the quantity, tap **Add to stock**. A photo that matches nothing offers **Add as a new item**: the label is read, suggestions fill the gaps, and the new item's **QR label** opens straight after saving, ready to print.
+- **Give a part.** Pick the part, the quantity, then tap a name. **Used up / damaged** records a stock-out without a person. The stock-out records who received it, who gave it and when.
+- **Take back.** Tap the name. The app lists what that person still has out from the last 30 days.
+- **People.** The owner types the names once. No cards to print.
+- **Self-learning.** A part identified or received by photo saves that photo as a reference, and it's included in the next weekly photo-model training.

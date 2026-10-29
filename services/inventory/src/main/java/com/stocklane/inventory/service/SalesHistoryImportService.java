@@ -20,10 +20,16 @@ import org.springframework.stereotype.Service;
 public class SalesHistoryImportService {
  static final ZoneId ZONE=ZoneId.of("Asia/Colombo");
  static final int MAX_PRODUCTS=200,MAX_DAYS=1096,MAX_ROWS=60000;
- private final ProductRepository products;private final MovementRepository movements;private final Commands commands;
- public SalesHistoryImportService(ProductRepository products,MovementRepository movements,Commands commands){this.products=products;this.movements=movements;this.commands=commands;}
+ private final ProductRepository products;private final MovementRepository movements;private final Commands commands;private final ForecastExportService forecastExport;
+ public SalesHistoryImportService(ProductRepository products,MovementRepository movements,Commands commands,ForecastExportService forecastExport){this.products=products;this.movements=movements;this.commands=commands;this.forecastExport=forecastExport;}
 
- public Map<String,Object> importHistory(String key,SalesHistoryImport body){return commands.execute(key,"import-sales-history",body,()->apply(body,LocalDate.now(ZONE)));}
+ /** Imports the history, then prepares the forecast history by itself (same rule as the nightly export). */
+ public Map<String,Object> importHistory(String key,SalesHistoryImport body){
+  Map<String,Object> result=commands.execute(key,"import-sales-history",body,()->apply(body,LocalDate.now(ZONE)));
+  String prepared=forecastExport.export(LocalDate.now(ZONE));
+  Map<String,Object> copy=new LinkedHashMap<>(result);copy.put("forecastPrepared",prepared!=null);
+  return copy;
+ }
 
  Map<String,Object> apply(SalesHistoryImport body,LocalDate today){
   if(body==null)throw new IllegalArgumentException("Upload a sales history file");
@@ -77,7 +83,7 @@ public class SalesHistoryImportService {
   Map<String,Object> result=new LinkedHashMap<>();
   result.put("products",items.size());result.put("movements",history.size());
   result.put("trackingFrom",first.plusDays(1).toString());result.put("lastSalesDay",last.toString());
-  result.put("message","Imported "+items.size()+" items and "+history.size()+" history rows. Prepare forecast history from "+first.plusDays(1)+".");
+  result.put("message","Imported "+items.size()+" items and "+history.size()+" history rows. The forecast history is prepared automatically.");
   return result;
  }
  private static String noon(LocalDate day){return day.atTime(12,0).atZone(ZONE).toInstant().toString();}

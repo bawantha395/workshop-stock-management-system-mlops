@@ -54,16 +54,11 @@ this data.
 
 1. **Get the file.** Download `datasets/real-data/online-retail-ii/sales-history-import.json`
    from GitHub or from the zip.
-2. **Import it.** In the app, sign in as OWNER and open **Stock analysis → Stock demand
-   forecast → Import past sales**. Choose the file, tick the license box and import. The
-   importer checks everything before it writes anything:
+2. **Import it.** In the app, sign in as OWNER, open **Stock report**, and at the bottom open **Bring in old sales records**. Choose the file, tick the license box and click **Bring in sales**. The importer checks everything before it writes anything:
    - SKUs must be new.
    - No sale can be dated today or later.
    - No item can sell more than its opening balance.
-3. **Prepare the history.** On the same page, open **Prepare forecast history**. The date
-   is already set to the start of the imported history. Confirm it and prepare. Do this
-   **on the same day** as the import, because every later day counts as a day with no
-   sales.
+3. **Nothing else to prepare.** The import prepares the forecast history by itself, with the correct dates.
 4. **Train.** In GitHub Actions, run **Train and publish stock forecast** for `dev`. The app
    then shows the forecasts, with **Trained ML** or **Weekday baseline** on each item.
 

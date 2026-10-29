@@ -48,7 +48,6 @@ flowchart LR
 apps/web/                 React frontend
 services/                 inventory, workshop (Spring Boot) · vision, forecast (FastAPI)
 mlops/                    SageMaker jobs, evaluation, promotion
-edge/                     optional fixed-camera capture agent
 infra/
   ci/                     foundation: CI roles + state bucket (CloudFormation, once)
   terraform/modules/      network, data, registry, eks, workload-identity, edge,

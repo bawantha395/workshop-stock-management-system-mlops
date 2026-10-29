@@ -40,7 +40,7 @@ import "./stock.css";
 const Scanner = React.lazy(() =>
   import("./Scanner").then((module) => ({ default: module.Scanner })),
 );
-import { StockAnalysis } from "./StockAnalysis";
+import { StockReport } from "./StockReport";
 import { ReorderCard } from "./ReorderCard";
 import { Counter, type Mode as CounterMode } from "./Counter";
 import { suggestFields, type Field, type Suggestion } from "./suggestions";
@@ -70,7 +70,6 @@ type View =
   | "count"
   | "analysis"
   | "activity"
-  | "review"
   | "counter";
 const uid = () => crypto.randomUUID();
 function aiMessage(ai?: { status: string; code?: string; message?: string }) {
@@ -179,12 +178,10 @@ function App() {
   const [view, setView] = useState<View>("home");
   const [counterMode, setCounterMode] = useState<CounterMode>("give");
   const [items, setItems] = useState<Item[]>([]),
-    [moves, setMoves] = useState<Movement[]>([]),
-    [captures, setCaptures] = useState<CaptureEntry[]>([]);
+    [moves, setMoves] = useState<Movement[]>([]);
   const [session, setSession] = useState<Session | null>(null),
     [status, setStatus] = useState<any>(null),
     [loading, setLoading] = useState(false);
-  const [cameraError, setCameraError] = useState("");
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
@@ -226,7 +223,6 @@ function App() {
   const task = tasks[direction],
     active = items.find((item) => item.id === selected),
     owner = !!session?.roles.includes("ROLE_OWNER");
-  const pending = captures.filter((c) => c.status === "PENDING");
   const tell = (message: string) => setNotice(message);
   const persist = (next: Record<Direction, StockTask>) => {
     // Persist before submitting: a reload retries with the same command identity.
@@ -250,20 +246,9 @@ function App() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, m, c, s, v] = await Promise.all([
+      const [p, m, s, v] = await Promise.all([
         api<Item[]>("/api/inventory/products"),
         api<Movement[]>("/api/inventory/movements"),
-        api<CaptureEntry[]>("/api/vision/captures")
-          .then((data) => {
-            setCameraError("");
-            return data;
-          })
-          .catch(() => {
-            setCameraError(
-              "Camera inbox is temporarily unavailable. Receiving and stock-out still work.",
-            );
-            return [];
-          }),
         api<Session>("/api/inventory/session"),
         api("/api/vision/status").catch(() => ({
           modelReady: false,
@@ -272,7 +257,6 @@ function App() {
       ]);
       setItems(p);
       setMoves(m);
-      setCaptures(c);
       setSession(s);
       setStatus(v);
       const key = "stocklane.tasks.v2." + s.name;
@@ -334,10 +318,6 @@ function App() {
     setView(next);
     setError("");
     setNotice("");
-  };
-  const start = (dir: Direction) => {
-    navigate(dir === "IN" ? "receive" : "issue");
-    setScanner(true);
   };
   const chooseQR = useCallback(
     (value: string) => {
@@ -656,13 +636,6 @@ function App() {
       setError((e as Error).message);
     }
   };
-  const review = (c: CaptureEntry) => {
-    navigate(c.direction === "IN" ? "receive" : "issue");
-    setCapture(c);
-    setSelected(c.result.identifiedProductId || "");
-    setMatch(c.result);
-    setImageId(c.image_id);
-  };
   const filtered = (source: Item[], text: string) =>
     source.filter((p) =>
       [p.name, p.brand, p.part_number, p.location, p.category, p.sku]
@@ -717,10 +690,9 @@ function App() {
             ["home", "Workspace", Home],
             ["counter", "Storeroom counter", ScanLine],
             ["stock", owner ? "Manage catalogue" : "Current stock", Package],
-            ["review", "Needs review", Camera],
             ["activity", "Activity", Activity],
             ...(owner
-              ? [["analysis", "Stock analysis", ClipboardCheck] as const]
+              ? [["analysis", "Stock report", ClipboardCheck] as const]
               : []),
           ] as const
         ).map(([key, label, Icon]) => (
@@ -732,9 +704,6 @@ function App() {
           >
             <Icon size={19} />
             {label}
-            {key === "review" && pending.length > 0 && (
-              <b className="counter">{pending.length}</b>
-            )}
           </button>
         ))}
         <div className="stock-sidebar-foot">
@@ -800,7 +769,7 @@ function App() {
             <div className="workspace-intro">
               <p className="eyebrow">YOUR STOCK. UNDER CONTROL.</p>
               <h1>What are we doing today?</h1>
-              <p>Every part in and out: scan it or take a photo.</p>
+              <p>Point the camera at a part. That is all.</p>
             </div>
             {owner && session && <ReorderCard />}
             <div className="counter-tiles">
@@ -848,36 +817,6 @@ function App() {
               </button>
             </div>
             <div className="task-tiles">
-              <button
-                className="task-tile receive-tile"
-                disabled={!session || busy}
-                onClick={() => start("IN")}
-              >
-                <span className="tile-icon">
-                  <ArrowDownLeft />
-                </span>
-                <span className="tile-tag">ITEMS COMING IN</span>
-                <h2>Big delivery</h2>
-                <p>Many lines at once, confirmed together.</p>
-                <span className="tile-bottom">
-                  Start a delivery <ArrowRight size={20} />
-                </span>
-              </button>
-              <button
-                className="task-tile issue-tile"
-                disabled={!session || busy}
-                onClick={() => start("OUT")}
-              >
-                <span className="tile-icon">
-                  <ArrowUpRight />
-                </span>
-                <span className="tile-tag">OTHER STOCK OUT</span>
-                <h2>Other stock-out</h2>
-                <p>Damaged, sold over the counter, or used up.</p>
-                <span className="tile-bottom">
-                  Record it <ArrowRight size={20} />
-                </span>
-              </button>
               <button
                 className="task-tile"
                 disabled={!session || busy}
@@ -946,13 +885,6 @@ function App() {
                 </b>{" "}
                 low-stock items
               </span>
-              <button onClick={() => navigate("review")}>
-                <b>{cameraError ? "—" : pending.length}</b>{" "}
-                {cameraError
-                  ? "camera inbox unavailable"
-                  : "camera captures to review"}{" "}
-                <ArrowRight size={16} />
-              </button>
             </div>
           </>
         )}
@@ -1279,8 +1211,9 @@ function App() {
                           <button
                             className="button primary"
                             onClick={() => {
-                              setView("receive");
-                              setQuantity(1);
+                              setCounterMode("receive");
+                              setCounterPick(active);
+                              navigate("counter");
                             }}
                           >
                             Receive this item
@@ -1288,11 +1221,12 @@ function App() {
                           <button
                             className="button secondary"
                             onClick={() => {
-                              setView("issue");
-                              setQuantity(1);
+                              setCounterMode("give");
+                              setCounterPick(active);
+                              navigate("counter");
                             }}
                           >
-                            Take this item out
+                            Give this item
                           </button>
                           <button
                             className="button secondary"
@@ -1731,7 +1665,7 @@ function App() {
             </section>
           </>
         )}
-        {view === "analysis" && owner && <StockAnalysis />}
+        {view === "analysis" && owner && <StockReport />}
         {view === "counter" && session && (
           <Counter
             items={items}
@@ -1762,7 +1696,7 @@ function App() {
                     <th>Item</th>
                     <th>Movement</th>
                     <th>Quantity</th>
-                    <th>Recorded by</th>
+                    <th>Who</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1782,88 +1716,32 @@ function App() {
                               : "in")
                           }
                         >
-                          {m.kind === "STOCK_OUT"
-                            ? "OUT"
-                            : m.kind === "RECEIPT"
-                              ? "IN"
-                              : m.kind}
+                          {m.kind === "STOCK_OUT" || m.kind === "ISSUE"
+                            ? "Taken out"
+                            : m.kind === "RECEIPT" || m.kind === "OPENING"
+                              ? "Received"
+                              : m.kind === "RETURN"
+                                ? "Taken back"
+                                : m.kind}
                         </span>
                       </td>
                       <td>{number(m.quantity)}</td>
-                      <td>{m.actor}</td>
+                      <td>
+                        {m.receiver_name ? (
+                          <>
+                            <strong>Given to {m.receiver_name}</strong>
+                            <small>by {m.actor}</small>
+                          </>
+                        ) : (
+                          m.actor
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {!moves.length && (
                 <div className="stock-empty">No recorded movements yet.</div>
-              )}
-            </section>
-          </>
-        )}
-        {view === "review" && (
-          <>
-            <div className="stock-title">
-              <div>
-                <p className="eyebrow">CAMERA INBOX</p>
-                <h1>
-                  Needs review{" "}
-                  <span className="heading-count">{pending.length}</span>
-                </h1>
-                <p>
-                  Check the item and quantity, then add it to a receipt or
-                  stock-out list.
-                </p>
-              </div>
-            </div>
-            <section className="stock-panel">
-              {cameraError ? (
-                <p className="stock-error" role="alert">
-                  {cameraError}
-                </p>
-              ) : pending.length === 0 ? (
-                <div className="stock-empty">
-                  <Check size={42} />
-                  <h3>You are all caught up</h3>
-                  <p>No camera captures need review.</p>
-                  <small>
-                    A connected tray camera submits captures here once
-                    configured.
-                  </small>
-                </div>
-              ) : (
-                pending.map((c) => {
-                  const queued = Object.values(tasks).some((t) =>
-                    t.lines.some((l) => l.captureId === c.id),
-                  );
-                  return (
-                    <article className="camera-review-row" key={c.id}>
-                      <Photo id={c.image_id} />
-                      <div>
-                        <span
-                          className={
-                            "movement-chip " +
-                            (c.direction === "IN" ? "in" : "out")
-                          }
-                        >
-                          {c.direction === "IN"
-                            ? "Incoming item"
-                            : "Outgoing item"}
-                        </span>
-                        <h3>{c.station_id}</h3>
-                        <small>{when(c.created_at)}</small>
-                      </div>
-                      <button
-                        className="button secondary"
-                        disabled={queued}
-                        onClick={() => review(c)}
-                      >
-                        {queued ? "Already in a draft" : "Review item"}{" "}
-                        <ArrowRight size={17} />
-                      </button>
-                    </article>
-                  );
-                })
               )}
             </section>
           </>
@@ -1904,6 +1782,7 @@ function App() {
             if (p && !wasEdit && fromCounter.current) {
               fromCounter.current = false;
               setCounterPick(p);
+              setLabelItem(p);
               return;
             }
             if (p && !wasEdit) {

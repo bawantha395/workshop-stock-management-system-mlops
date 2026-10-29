@@ -27,19 +27,20 @@ test("real UCI file aligns by whole weeks to yesterday, like the Python preparat
 });
 
 test("import page sends the aligned file once the license is confirmed", async () => {
-  const result = await build({ stdin: { contents: `import React from 'react';import {createRoot} from 'react-dom/client';import {StockForecast} from './src/StockForecast';const root=createRoot(document.getElementById('root'));window.cleanup=()=>root.unmount();root.render(<StockForecast/>);`, resolveDir: root, loader: "tsx" }, bundle: true, write: false, format: "iife", platform: "browser", define: { "process.env.NODE_ENV": '"production"' } });
+  const result = await build({ stdin: { contents: `import React from 'react';import {createRoot} from 'react-dom/client';import {StockReport} from './src/StockReport';const root=createRoot(document.getElementById('root'));window.cleanup=()=>root.unmount();root.render(<StockReport/>);`, resolveDir: root, loader: "tsx" }, bundle: true, write: false, format: "iife", platform: "browser", define: { "process.env.NODE_ENV": '"production"' } });
   const dom = new JSDOM('<div id="root"></div>', { url: "https://stock.test", runScripts: "dangerously" }), w = dom.window;
   w.Headers = Headers; w.STOCKLANE_CONFIG = { authMode: "local" }; const writes = [];
   w.fetch = async (url, options) => {
     if (options?.method === "POST") { writes.push({ url, key: new Headers(options.headers).get("Idempotency-Key"), body: JSON.parse(options.body) }); return new Response(JSON.stringify({ message: "Imported 1 items", trackingFrom: "2026-01-01" }), { status: 200 }); }
-    return new Response(JSON.stringify({ status: "not_trained", message: "Prepare history", products: [] }), { status: 200 });
+    if (String(url).includes("/api/forecast")) return new Response(JSON.stringify({ status: "not_trained", products: [] }), { status: 200 });
+    return new Response(JSON.stringify([]), { status: 200 });
   };
   w.eval(result.outputFiles[0].text); await new Promise((r) => setTimeout(r, 60));
   const small = JSON.stringify({ source: "UCI Online Retail II", license: "CC BY 4.0", dateAlignment: "whole-weeks-to-yesterday", products: [{ sku: "UCI-1", openingDate: "2011-11-20", openingQuantity: 100, sales: Array.from({ length: 10 }, (_, i) => ({ date: `2011-11-${21 + i}`, quantity: 2 })) }] });
   const input = w.document.querySelector('input[type="file"]');
   Object.defineProperty(input, "files", { value: [{ text: async () => small }] });
   input.dispatchEvent(new w.Event("change", { bubbles: true })); await new Promise((r) => setTimeout(r, 40));
-  const button = [...w.document.querySelectorAll("button")].find((b) => b.textContent === "Import sales history");
+  const button = [...w.document.querySelectorAll("button")].find((b) => b.textContent === "Bring in sales");
   assert.equal(button.disabled, true);
   [...w.document.querySelectorAll('input[type="checkbox"]')].find((c) => c.parentElement.textContent.includes("license")).click();
   await new Promise((r) => setTimeout(r, 20)); assert.equal(button.disabled, false);

@@ -1,42 +1,20 @@
-import React, { useEffect, useRef, useState } from "react";
-import QRCode from "qrcode";
-import { ArrowLeft, Camera, Check, Minus, Plus, Printer, ScanLine, Trash2, UserRound } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Camera as CameraIcon, Check, Minus, PackageX, Plus, Trash2, UserRound } from "lucide-react";
 import { api, type Match, type Product } from "./api";
 
-const Scanner = React.lazy(() => import("./Scanner").then((m) => ({ default: m.Scanner })));
+const Camera = React.lazy(() => import("./Camera").then((m) => ({ default: m.Camera })));
 
 type Item = Product & { location?: string; archived?: boolean };
 type Person = { id: string; name: string };
 type Handover = { id: string; product_id: string; sku: string; name: string; unit: string; quantity: number; outstanding: number; created_at: string };
 export type Mode = "receive" | "give" | "back";
 const PART_QR = /^stocklane:v1:([0-9a-f-]{36})$/;
-const PERSON_QR = /^stocklane:person:v1:([0-9a-f-]{36})$/;
 const key = () => crypto.randomUUID();
 const amount = (n: number) => new Intl.NumberFormat("en", { maximumFractionDigits: 3 }).format(n);
 
-export function personFromCard(value: string, people: Person[]) {
-  const id = PERSON_QR.exec(value.trim())?.[1];
-  return people.find((p) => p.id === id) || null;
-}
 export function partFromCode(value: string, items: Item[]) {
   const id = PART_QR.exec(value.trim())?.[1];
   return items.find((p) => p.id === id) || null;
-}
-
-async function printCard(person: Person) {
-  const popup = window.open("", "_blank");
-  if (!popup) throw new Error("Allow a new window to print the card.");
-  const data = await QRCode.toDataURL("stocklane:person:v1:" + person.id, { width: 300, margin: 2 });
-  const doc = popup.document;
-  doc.title = "Counter card — " + person.name;
-  const style = doc.createElement("style");
-  style.textContent = "body{font:16px sans-serif;text-align:center;margin:12mm}img{width:50mm;height:50mm}h1{font-size:22px;margin:8px}button{margin:20px;padding:12px}@media print{button{display:none}}";
-  doc.head.append(style);
-  const img = doc.createElement("img"); img.src = data; img.alt = "Counter card QR";
-  const name = doc.createElement("h1"); name.textContent = person.name;
-  const hint = doc.createElement("p"); hint.textContent = "Show this card at the storeroom counter";
-  const button = doc.createElement("button"); button.textContent = "Print / Save as PDF"; button.onclick = () => popup.print();
-  doc.body.append(img, name, hint, button);
 }
 
 export function Counter({ items, owner, initialMode = "give", picked = null, onNewItem, onChanged }: { items: Item[]; owner: boolean; initialMode?: Mode; picked?: Item | null; onNewItem?: (imageId: string) => void; onChanged: () => void }) {
@@ -50,65 +28,64 @@ export function Counter({ items, owner, initialMode = "give", picked = null, onN
   const [handover, setHandover] = useState<Handover | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [search, setSearch] = useState("");
-  const [scanning, setScanning] = useState<"part" | "person" | null>(null);
+  const [camera, setCamera] = useState(false);
+  const [unused, setUnused] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [done, setDone] = useState("");
   const [newName, setNewName] = useState("");
-  const photo = useRef<HTMLInputElement>(null);
   const commandKey = useRef(key());
 
   const loadPeople = () => api<Person[]>("/api/inventory/people").then(setPeople).catch((e) => setError((e as Error).message));
   useEffect(() => { void loadPeople(); }, []);
   useEffect(() => { setMode(initialMode); }, [initialMode]);
   // A new item registered from this screen comes back selected, ready for its quantity.
-  useEffect(() => { if (picked) { setMode("receive"); setPart(picked); setCandidates([]); setPhotoId(""); setQuantity(1); setError(""); } }, [picked]);
+  useEffect(() => { if (picked) { setPart(picked); setCandidates([]); setPhotoId(""); setQuantity(1); setError(""); } }, [picked]);
 
   const reset = (message = "") => {
-    setPart(null); setCandidates([]); setPhotoId(""); setPerson(null); setHandovers(null); setHandover(null);
+    setPart(null); setCandidates([]); setPhotoId(""); setPerson(null); setUnused(false); setHandovers(null); setHandover(null);
     setQuantity(1); setSearch(""); setError(""); setDone(message); commandKey.current = key();
   };
   const switchMode = (next: Mode) => { setMode(next); reset(); };
 
-  const choosePerson = async (p: Person | null) => {
-    if (!p) { setError("This card is not on the counter list. Ask the owner to add the person."); return; }
-    setPerson(p); setError(""); setDone("");
+  const choosePerson = async (p: Person) => {
+    setPerson(p); setUnused(false); setError(""); setDone("");
     if (mode === "back") {
       try { setHandovers(await api<Handover[]>("/api/inventory/people/" + p.id + "/handovers")); }
       catch (e) { setError((e as Error).message); }
     }
   };
-  const onScan = (value: string) => {
-    const target = scanning; setScanning(null);
-    if (target === "person") { void choosePerson(personFromCard(value, people)); return; }
+  const onQR = useCallback((value: string) => {
+    setCamera(false);
     const found = partFromCode(value, items);
     if (found) { setPart(found); setCandidates([]); setPhotoId(""); setError(""); }
-    else setError(PERSON_QR.test(value) ? "That is a person's card. Scan the part's QR label." : "This QR is not a stock item. Try a photo or search.");
-  };
+    else setError("This QR is not a stock item. Take a photo of the part instead.");
+  }, [items]);
   const identifyPhoto = async (file?: File) => {
     if (!file) return;
+    setCamera(false);
     setBusy(true); setError(""); setDone(""); setPart(null); setCandidates([]);
     try {
       const form = new FormData(); form.append("file", file);
       const qr = await api<{ value: string | null }>("/api/vision/qr", { method: "POST", body: form });
-      if (qr.value) { onScan(qr.value); return; }
+      if (qr.value) { onQR(qr.value); return; }
       const match = await api<Match>("/api/vision/match", { method: "POST", body: form });
       const known = match.candidates.map((c) => items.find((i) => i.id === c.product.id)).filter((i): i is Item => !!i).slice(0, 3);
       setPhotoId(match.imageId); setCandidates(known);
       if (!known.length) setError(mode === "receive" ? "No match from the photo. Search below, or add it as a new item." : "No match from the photo. Search for the part below.");
     } catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); if (photo.current) photo.current.value = ""; }
+    finally { setBusy(false); }
   };
   const step = (delta: number, max?: number) => setQuantity((q) => Math.max(1, Math.min(max ?? 9999, q + delta)));
 
   const give = async () => {
-    if (!part || !person) return;
+    if (!part || (!person && !unused)) return;
     setBusy(true); setError("");
     try {
-      await api("/api/inventory/movements", { method: "POST", body: JSON.stringify({ kind: "STOCK_OUT", productId: part.id, quantity, receiverId: person.id, note: "Given to " + person.name + " at the counter" }) }, commandKey.current);
+      await api("/api/inventory/movements", { method: "POST", body: JSON.stringify({ kind: "STOCK_OUT", productId: part.id, quantity, ...(person ? { receiverId: person.id } : {}), note: person ? "Given to " + person.name + " at the counter" : "Used up or damaged" }) }, commandKey.current);
       if (photoId) {
         // A confirmed photo becomes a reference and future training data for the photo model.
         try { await api("/api/vision/references", { method: "POST", body: JSON.stringify({ productId: part.id, imageId: photoId }) }); } catch { /* the movement is already recorded */ }
       }
-      onChanged(); reset("Recorded: " + amount(quantity) + " × " + part.name + " given to " + person.name + ".");
+      onChanged(); reset("Recorded: " + amount(quantity) + " × " + part.name + (person ? " given to " + person.name : " taken out as used up or damaged") + ".");
     } catch (e) { setError((e as Error).message); commandKey.current = key(); }
     finally { setBusy(false); }
   };
@@ -152,7 +129,11 @@ export function Counter({ items, owner, initialMode = "give", picked = null, onN
           <UserRound size={22} /> {p.name}
         </button>
       ))}
-      <button className="counter-person scan" onClick={() => setScanning("person")}><ScanLine size={22} /> Scan card</button>
+      {mode === "give" && (
+        <button className={"counter-person other" + (unused ? " chosen" : "")} onClick={() => { setUnused(true); setPerson(null); }}>
+          <PackageX size={22} /> Used up / damaged
+        </button>
+      )}
     </div>
   );
 
@@ -166,7 +147,7 @@ export function Counter({ items, owner, initialMode = "give", picked = null, onN
       {done && <p className="counter-done" role="status"><Check size={20} /> {done}</p>}
       {error && <p className="stock-error" role="alert">{error}</p>}
       {mode !== "receive" && !people.length && (
-        <p className="stock-help">{owner ? "Add the people who collect parts (below) to start using the counter." : "No people on the counter list yet. Ask the owner to add them."}</p>
+        <p className="stock-help">{owner ? "Add the names of the people who collect parts (below) to start." : "No names on the list yet. Ask the owner to add them."}</p>
       )}
 
       {(mode === "give" || mode === "receive") && (
@@ -177,11 +158,8 @@ export function Counter({ items, owner, initialMode = "give", picked = null, onN
               <div className="counter-chosen"><strong>{part.name}</strong><small>{part.sku} · {amount(Number(part.quantity))} in stock{part.location ? " · " + part.location : ""}</small><button onClick={() => { setPart(null); setPhotoId(""); }}>Change</button></div>
             ) : (
               <>
-                <div className="counter-actions">
-                  <button className="counter-big" onClick={() => setScanning("part")}><ScanLine size={28} /> Scan QR label</button>
-                  <button className="counter-big" disabled={busy} onClick={() => photo.current?.click()}><Camera size={28} /> {busy ? "Checking photo…" : "Take a photo"}</button>
-                  <input ref={photo} hidden type="file" accept="image/*" capture="environment" onChange={(e) => void identifyPhoto(e.target.files?.[0])} />
-                </div>
+                <button className="counter-big wide" disabled={busy} onClick={() => setCamera(true)}><CameraIcon size={30} /> {busy ? "Checking the photo…" : "Open camera"}</button>
+                <p className="stock-help">Point at the part. A QR label is read by itself; otherwise take a photo.</p>
                 {candidates.length > 0 && (
                   <div className="counter-candidates">
                     <p>Is it one of these?</p>
@@ -218,9 +196,9 @@ export function Counter({ items, owner, initialMode = "give", picked = null, onN
               {busy ? "Saving…" : "Add " + amount(quantity) + " × " + part.name + " to stock"}
             </button>
           )}
-          {part && person && mode === "give" && (
+          {part && (person || unused) && mode === "give" && (
             <button className="button primary counter-confirm" disabled={busy || !(quantity > 0)} onClick={() => void give()}>
-              {busy ? "Saving…" : "Give " + amount(quantity) + " × " + part.name + " to " + person.name}
+              {busy ? "Saving…" : "Give " + amount(quantity) + " × " + part.name + (person ? " to " + person.name : " (used up / damaged)")}
             </button>
           )}
         </>
@@ -265,30 +243,26 @@ export function Counter({ items, owner, initialMode = "give", picked = null, onN
       )}
 
       {owner && (
-        <details className="counter-admin">
-          <summary>People at the counter ({people.length})</summary>
-          <p className="stock-help">Everyone who collects parts gets a printed QR card, or taps their name.</p>
+        <details className="counter-admin" open={!people.length}>
+          <summary>People who collect parts ({people.length})</summary>
           <ul>
             {people.map((p) => (
               <li key={p.id}>
                 <span>{p.name}</span>
-                <span>
-                  <button className="button secondary" onClick={() => void printCard(p).catch((x) => setError((x as Error).message))}><Printer size={16} /> Print card</button>
-                  <button className="button secondary" aria-label={"Remove " + p.name} onClick={() => void removePerson(p)}><Trash2 size={16} /></button>
-                </span>
+                <button className="button secondary" aria-label={"Remove " + p.name} onClick={() => void removePerson(p)}><Trash2 size={16} /></button>
               </li>
             ))}
           </ul>
           <form className="analysis-filters" onSubmit={(e) => void addPerson(e)}>
-            <label className="stock-field">Name<input value={newName} maxLength={80} placeholder="Nimal" onChange={(e) => setNewName(e.target.value)} /></label>
-            <button className="button primary">Add person</button>
+            <label className="stock-field">Add a name<input value={newName} maxLength={80} placeholder="Nimal" onChange={(e) => setNewName(e.target.value)} /></label>
+            <button className="button primary">Add</button>
           </form>
         </details>
       )}
 
-      {scanning && (
+      {camera && (
         <React.Suspense fallback={null}>
-          <Scanner onScan={onScan} onClose={() => setScanning(null)} />
+          <Camera onQR={onQR} onPhoto={(f) => void identifyPhoto(f)} onClose={() => setCamera(false)} />
         </React.Suspense>
       )}
       {mode !== "back" && part && <button className="counter-restart" onClick={() => reset()}><ArrowLeft size={16} /> Start again</button>}

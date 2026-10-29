@@ -1,6 +1,6 @@
 # Owner stock analysis
 
-Stock analysis is visible only to owners; both report endpoints enforce OWNER
+The older Stock analysis page was replaced by the plain **Stock report**; these two report endpoints remain, and both enforce OWNER
 on the server. It is separate from the short recent-activity view.
 
 ## Reports

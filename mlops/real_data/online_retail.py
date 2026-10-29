@@ -184,6 +184,6 @@ def main():
         summary['preflight']=preflight(payload,today)|{'ranOn':today.isoformat()}
     (out/'preflight.json').write_text(json.dumps(summary,indent=2)+'\n')
     print(json.dumps({k:v for k,v in summary.items() if k!='preflight'}|({'preflight':{k:summary['preflight'][k] for k in ('qualityGatePassed','counts')}} if 'preflight' in summary else {}),indent=2))
-    print('\nUpload',out/'sales-history-import.json','in the app: Stock analysis -> Stock demand forecast -> Import past sales.')
+    print('\nUpload',out/'sales-history-import.json','in the app: Stock report -> Bring in old sales records.')
 
 if __name__=='__main__':main()

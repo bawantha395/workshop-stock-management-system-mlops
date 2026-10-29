@@ -51,14 +51,26 @@ test("taking a part back lists what the person still has out", async () => {
   w.cleanup(); dom.window.close();
 });
 
-test("cards and labels are recognised from their QR values", async () => {
-  const result = await build({ stdin: { contents: `export {personFromCard,partFromCode} from './src/Counter';`, resolveDir: root, loader: "ts" }, bundle: true, write: false, format: "iife", globalName: "C", platform: "browser", define: { "process.env.NODE_ENV": '"production"' } });
+test("a part's QR label is recognised, and a person's card no longer exists", async () => {
+  const result = await build({ stdin: { contents: `export {partFromCode} from './src/Counter';`, resolveDir: root, loader: "ts" }, bundle: true, write: false, format: "iife", globalName: "C", platform: "browser", define: { "process.env.NODE_ENV": '"production"' } });
   const dom = new JSDOM("", { runScripts: "dangerously" }); dom.window.STOCKLANE_CONFIG = { authMode: "local" }; dom.window.eval(result.outputFiles[0].text);
-  const { personFromCard, partFromCode } = dom.window.C;
-  assert.equal(personFromCard("stocklane:person:v1:" + P, [{ id: P, name: "Nimal" }]).name, "Nimal");
-  assert.equal(personFromCard("stocklane:v1:" + P, [{ id: P, name: "Nimal" }]), null);
+  const { partFromCode } = dom.window.C;
   assert.equal(partFromCode("stocklane:v1:" + PART, [{ id: PART, name: "Oil filter" }]).name, "Oil filter");
+  assert.equal(partFromCode("stocklane:person:v1:" + P, [{ id: P, name: "Nimal" }]), null);
   dom.window.close();
+});
+
+test("used up or damaged parts go out without naming a person", async () => {
+  const { w, dom, writes, button } = await mount("give");
+  const search = w.document.querySelector(".counter-search input");
+  const setter = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value").set;
+  setter.call(search, "oil"); search.dispatchEvent(new w.Event("input", { bubbles: true })); await tick();
+  button("Oil filter OF-112").click(); await tick();
+  button("Used up / damaged").click(); await tick();
+  button("Give 1 × Oil filter OF-112 (used up / damaged)").click(); await tick(60);
+  assert.equal(writes[0].body.kind, "STOCK_OUT"); assert.equal(writes[0].body.receiverId, undefined);
+  assert.equal(button("Print card"), undefined); assert.equal(button("Scan card"), undefined);
+  w.cleanup(); dom.window.close();
 });
 
 test("receiving needs only the part and a quantity, and an unknown photo becomes a new item", async () => {
@@ -70,9 +82,11 @@ test("receiving needs only the part and a quantity, and an unknown photo becomes
   assert.equal(button("Nimal"), undefined); // no person step when stock comes in
   button("Add 1 × Oil filter OF-112 to stock").click(); await tick(60);
   assert.equal(writes[0].body.kind, "RECEIPT"); assert.equal(writes[0].body.productId, PART);
+  button("Open camera").click(); await tick(600);
   const input = w.document.querySelector('input[type="file"]');
+  assert.ok(input); // no camera in the test browser: the device photo picker is the fallback
   Object.defineProperty(input, "files", { value: [new w.File(["x"], "photo.jpg", { type: "image/jpeg" })] });
-  input.dispatchEvent(new w.Event("change", { bubbles: true })); await tick(80);
+  input.dispatchEvent(new w.Event("change", { bubbles: true })); await tick(120);
   assert.match(w.document.body.textContent, /add it as a new item/);
   button("Add as a new item").click(); await tick();
   assert.equal(w.newItem, "img-1");

@@ -1945,3 +1945,359 @@ button {
 .counter-chosen strong {
   font-size: 18px;
 }
+.camera-shutter {
+  min-height: 64px;
+  font-size: 19px;
+  margin: 12px 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.report {
+  max-width: 1100px;
+}
+.report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 8px 0 18px;
+}
+.report-head h1 {
+  margin: 0;
+}
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.report-chip {
+  border: 1px solid var(--stock-line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 15px;
+}
+.report-chip b {
+  margin-right: 4px;
+}
+.report-chip.chosen {
+  background: var(--stock-ink);
+  color: #fff;
+}
+.report-search {
+  margin-left: auto;
+  min-width: 200px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--stock-line);
+  padding: 0 12px;
+}
+.status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+.status-pill.ok {
+  background: #e8f3ec;
+  color: var(--stock-green);
+}
+.status-pill.low {
+  background: #fbf0e0;
+  color: #8a5a12;
+}
+.status-pill.out {
+  background: #f9e4e0;
+  color: #a33a28;
+}
+.report-setup {
+  margin-top: 22px;
+  color: var(--stock-muted);
+}
+.report-setup summary {
+  cursor: pointer;
+}
+
+/* ===== Calm, Apple-style look: system font, soft surfaces, big touch targets ===== */
+:root {
+  --stock-ink: #1d1d1f;
+  --stock-muted: #6e6e73;
+  --stock-line: #e5e5ea;
+  --stock-green: #248a3d;
+  --stock-orange: #c4570c;
+  --apple-blue: #0071e3;
+  --apple-bg: #f5f5f7;
+  --apple-radius: 20px;
+}
+.stock-shell {
+  background: var(--apple-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+.stock-shell h1,
+.stock-shell h2,
+.stock-shell h3,
+.stock-brand {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  letter-spacing: -0.03em;
+}
+.stock-shell h1 {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--stock-ink);
+}
+.stock-brand {
+  font-weight: 700;
+  color: var(--stock-ink);
+  letter-spacing: -0.05em;
+}
+.stock-brand span {
+  color: var(--apple-blue);
+}
+.stock-sidebar {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+.stock-sidebar > p,
+.eyebrow {
+  letter-spacing: 0.08em;
+  color: var(--stock-muted);
+}
+.stock-sidebar > button {
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--stock-ink);
+  padding: 12px 14px;
+}
+.stock-sidebar > button.chosen {
+  background: rgba(0, 113, 227, 0.1);
+  color: var(--apple-blue);
+}
+.stock-header {
+  background: rgba(245, 245, 247, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.stock-panel,
+.counter-step,
+.reorder-card,
+.task-tile {
+  background: #fff;
+  border: 0;
+  border-radius: var(--apple-radius);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.05);
+}
+.task-tile.receive-tile,
+.task-tile.issue-tile {
+  box-shadow: none;
+}
+.button,
+.stock-shell .button {
+  border-radius: 999px;
+  font-weight: 500;
+  min-height: 44px;
+  padding: 0 22px;
+}
+.button.primary,
+.stock-shell .button.primary {
+  background: var(--apple-blue);
+  border-color: var(--apple-blue);
+  color: #fff;
+}
+.button.primary:hover {
+  background: #0077ed;
+}
+.button.secondary {
+  background: rgba(0, 113, 227, 0.08);
+  border-color: transparent;
+  color: var(--apple-blue);
+}
+.stock-field input,
+.stock-field select,
+.report-search {
+  border-radius: 12px;
+  border: 1px solid var(--stock-line);
+  background: #fff;
+  min-height: 46px;
+}
+.stock-field input:focus,
+.report-search:focus {
+  outline: 3px solid rgba(0, 113, 227, 0.35);
+  border-color: var(--apple-blue);
+}
+/* Counter: a segmented control, big rounded actions */
+.counter-modes {
+  background: rgba(118, 118, 128, 0.12);
+  border-radius: 14px;
+  padding: 3px;
+  gap: 0;
+}
+.counter-modes button {
+  border: 0;
+  background: transparent;
+  border-radius: 11px;
+  font-weight: 500;
+  color: var(--stock-ink);
+}
+.counter-modes button.chosen,
+.counter-modes button.chosen.receive,
+.counter-modes button.chosen.give,
+.counter-modes button.chosen.back {
+  background: #fff;
+  color: var(--stock-ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.counter-step h2 span {
+  background: var(--apple-blue);
+}
+.counter-big,
+.counter-person,
+.counter-candidates button,
+.counter-result,
+.counter-stepper button {
+  background: var(--apple-bg);
+  border: 0;
+  border-radius: 16px;
+}
+.counter-big.wide {
+  background: var(--apple-blue);
+  color: #fff;
+  min-height: 84px;
+  font-size: 20px;
+  font-weight: 600;
+  width: 100%;
+}
+.counter-person.chosen,
+.counter-candidates button.chosen {
+  background: var(--apple-blue);
+  color: #fff;
+}
+.counter-confirm {
+  border-radius: 18px;
+  min-height: 64px;
+}
+.counter-new {
+  border-radius: 16px;
+  border-color: var(--apple-blue);
+  background: rgba(0, 113, 227, 0.06);
+  color: var(--apple-blue);
+}
+.counter-done {
+  background: rgba(36, 138, 61, 0.1);
+  color: var(--stock-green);
+  border-radius: 16px;
+}
+/* Home tiles */
+.counter-tile {
+  border-radius: 24px;
+  min-height: 120px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+}
+.counter-tile.receive {
+  background: linear-gradient(160deg, #2f7bf5, #0a5bd3);
+}
+.counter-tile.give {
+  background: linear-gradient(160deg, #34c759, #248a3d);
+}
+.counter-tile.back {
+  background: linear-gradient(160deg, #ff9f0a, #d9760a);
+}
+.reorder-card h2 {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+.reorder-stats span {
+  background: var(--apple-bg);
+  border-radius: 14px;
+}
+.status-pill.ok {
+  background: rgba(52, 199, 89, 0.15);
+  color: #1d7a35;
+}
+.status-pill.low {
+  background: rgba(255, 159, 10, 0.18);
+  color: #9a5a00;
+}
+.status-pill.out {
+  background: rgba(255, 59, 48, 0.14);
+  color: #c4281c;
+}
+.report-chip {
+  border: 0;
+  background: rgba(118, 118, 128, 0.12);
+  color: var(--stock-ink);
+}
+.report-chip.chosen {
+  background: var(--apple-blue);
+  color: #fff;
+}
+.stock-table th {
+  font-weight: 500;
+  color: var(--stock-muted);
+  letter-spacing: 0.04em;
+}
+.suggestion-banner,
+.field-suggestion {
+  color: var(--apple-blue);
+}
+.suggestion-banner {
+  background: rgba(0, 113, 227, 0.08);
+  border-radius: 16px;
+}
+.field-suggestion button {
+  border-radius: 999px;
+  border-color: var(--apple-blue);
+  color: var(--apple-blue);
+}
+.stock-modal,
+.scanner-dialog {
+  border-radius: 28px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+.stock-modal-shade {
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.ai-note {
+  border-radius: 16px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .counter-big,
+  .counter-person,
+  .counter-tile,
+  .button {
+    transition: transform 0.15s ease, background-color 0.15s ease;
+  }
+  .counter-tile:active,
+  .counter-big:active,
+  .counter-person:active,
+  .button:active {
+    transform: scale(0.98);
+  }
+}
+.stock-table td,
+.stock-table td strong {
+  color: var(--stock-ink);
+}
+.stock-table td small {
+  color: var(--stock-muted);
+}
+.task-tile h2,
+.tile-bottom {
+  color: var(--stock-ink);
+}
+@media (max-width: 700px) {
+  .stock-sidebar > button {
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+}

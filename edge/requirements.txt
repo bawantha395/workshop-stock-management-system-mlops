@@ -1,4 +1,0 @@
-# Use full OpenCV on the workstation for the optional --show window.
-opencv-python==4.14.0.94
-numpy==2.5.4
-httpx==0.28.1
