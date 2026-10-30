@@ -1831,9 +1831,6 @@ button {
   color: #fff;
   background: var(--stock-green);
 }
-.counter-tile.back {
-  background: var(--stock-orange);
-}
 .counter-tile.receive {
   background: #2f5f7a;
 }
@@ -2035,9 +2032,6 @@ button {
 }
 .counter-modes button.chosen.give {
   background: var(--stock-green);
-}
-.counter-modes button.chosen.back {
-  background: var(--stock-orange);
 }
 .counter-new {
   display: flex;
@@ -2299,8 +2293,7 @@ button {
 }
 .counter-modes button.chosen,
 .counter-modes button.chosen.receive,
-.counter-modes button.chosen.give,
-.counter-modes button.chosen.back {
+.counter-modes button.chosen.give {
   background: #fff;
   color: var(--stock-ink);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
@@ -2356,9 +2349,6 @@ button {
 }
 .counter-tile.give {
   background: linear-gradient(160deg, #34c759, #248a3d);
-}
-.counter-tile.back {
-  background: linear-gradient(160deg, #ff9f0a, #d9760a);
 }
 .reorder-card h2 {
   font-size: 28px;

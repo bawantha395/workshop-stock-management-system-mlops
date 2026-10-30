@@ -322,16 +322,22 @@ function App() {
     setDraft(null);
     setSaveReference(false);
   };
-  const navigate = (next: View) => {
+  const navigate = (next: View, preserveCounterPick = false) => {
     if (submitting.current) return;
     setScanner(false);
     resetIdentification();
+    if (next !== "counter" || !preserveCounterPick) setCounterPick(null);
     setView(next);
     setError("");
     setNotice("");
     if (next === "counter") {
       setCounterKey((key) => key + 1);
     }
+  };
+  const openCounter = (mode: CounterMode, picked: Item | null = null) => {
+    setCounterMode(mode);
+    setCounterPick(picked);
+    navigate("counter", true);
   };
   const chooseQR = useCallback(
     (value: string) => {
@@ -783,10 +789,7 @@ function App() {
               <button
                 className="counter-tile receive"
                 disabled={!session || busy}
-                onClick={() => {
-                  setCounterMode("receive");
-                  navigate("counter");
-                }}
+                onClick={() => openCounter("receive")}
               >
                 <ArrowDownLeft size={30} />
                 <span>
@@ -797,29 +800,12 @@ function App() {
               <button
                 className="counter-tile give"
                 disabled={!session || busy}
-                onClick={() => {
-                  setCounterMode("give");
-                  navigate("counter");
-                }}
+                onClick={() => openCounter("give")}
               >
                 <ArrowUpRight size={30} />
                 <span>
                   <strong>Give a part</strong>
                   <small>Scan the part and confirm the quantity</small>
-                </span>
-              </button>
-              <button
-                className="counter-tile back"
-                disabled={!session || busy}
-                onClick={() => {
-                  setCounterMode("back");
-                  navigate("counter");
-                }}
-              >
-                <RefreshCw size={28} />
-                <span>
-                  <strong>Take back</strong>
-                  <small>Unused parts return to the shelf</small>
                 </span>
               </button>
             </div>
@@ -1219,9 +1205,7 @@ function App() {
                           <button
                             className="button primary"
                             onClick={() => {
-                              setCounterMode("receive");
-                              setCounterPick(active);
-                              navigate("counter");
+                              openCounter("receive", active);
                             }}
                           >
                             Receive this item
@@ -1229,9 +1213,7 @@ function App() {
                           <button
                             className="button secondary"
                             onClick={() => {
-                              setCounterMode("give");
-                              setCounterPick(active);
-                              navigate("counter");
+                              openCounter("give", active);
                             }}
                           >
                             Give this item

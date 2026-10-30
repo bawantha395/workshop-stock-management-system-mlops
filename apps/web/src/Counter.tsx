@@ -5,7 +5,7 @@ import { api, type Match, type Product, type BarcodeLookup } from "./api";
 const Camera = React.lazy(() => import("./Camera").then((m) => ({ default: m.Camera })));
 
 type Item = Product & { part_number?: string; location?: string; archived?: boolean };
-export type Mode = "receive" | "give" | "back";
+export type Mode = "receive" | "give";
 const PART_QR = /^stocklane:v1:([0-9a-f-]{36})$/;
 const key = () => crypto.randomUUID();
 const amount = (n: number) => new Intl.NumberFormat("en", { maximumFractionDigits: 3 }).format(n);
@@ -102,21 +102,12 @@ export function Counter({ items, initialMode = "give", picked = null, onNewItem,
     } catch (e) { setError((e as Error).message); commandKey.current = key(); }
     finally { setBusy(false); }
   };
-  const takeBack = async () => {
-    if (!part) return;
-    setBusy(true); setError("");
-    try {
-      await api("/api/inventory/movements", { method: "POST", body: JSON.stringify({ kind: "RETURN", productId: part.id, quantity, note: "Returned at the storeroom counter" }) }, commandKey.current);
-      onChanged(); reset("Recorded: " + amount(quantity) + " × " + part.name + " returned to stock.");
-    } catch (e) { setError((e as Error).message); commandKey.current = key(); }
-    finally { setBusy(false); }
-  };
   const matches = search.trim().length >= 2 ? items.filter((i) => (i.name + " " + i.sku + " " + i.brand).toLowerCase().includes(search.trim().toLowerCase())).slice(0, 6) : [];
   const choosePart = (item: Item) => { setPart(item); setCandidates([]); setPhotoId(""); setError(""); };
   return (
     <section className="counter-screen" aria-label="Storeroom counter">
       <div className="counter-modes" role="tablist">
-        {(([["receive", "Receive"], ["give", "Give a part"], ["back", "Take back"]]) as [Mode, string][]).map(([m, label]) => (
+        {(([["receive", "Receive"], ["give", "Give a part"]]) as [Mode, string][]).map(([m, label]) => (
           <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? "chosen " + m : m} onClick={() => switchMode(m)}>{label}</button>
         ))}
       </div>
@@ -128,10 +119,10 @@ export function Counter({ items, initialMode = "give", picked = null, onNewItem,
           <button className="toast-close" aria-label="Dismiss error" onClick={() => setError("")}>×</button>
         </div>
       )}
-      {(mode === "give" || mode === "receive" || mode === "back") && (
+      {(mode === "give" || mode === "receive") && (
         <>
           <div className="counter-step">
-            <h2><span>1</span> {mode === "receive" ? "Which part came in?" : mode === "back" ? "Which part is coming back?" : "Which part?"}</h2>
+            <h2><span>1</span> {mode === "receive" ? "Which part came in?" : "Which part?"}</h2>
             {part ? (
               <div className="counter-chosen"><strong>{part.name}</strong><small>Part no. {part.part_number || "Not set"} · System no. {part.sku} · {amount(Number(part.quantity))} in stock{part.location ? " · " + part.location : ""}</small><button onClick={() => { setPart(null); setPhotoId(""); }}>Change</button></div>
             ) : (
@@ -172,11 +163,6 @@ export function Counter({ items, initialMode = "give", picked = null, onNewItem,
           {part && mode === "give" && (
             <button className="button primary counter-confirm" disabled={busy || !(quantity > 0)} onClick={() => void give()}>
               {busy ? "Saving…" : "Record " + amount(quantity) + " × " + part.name + " leaving stock"}
-            </button>
-          )}
-          {part && mode === "back" && (
-            <button className="button primary counter-confirm" disabled={busy || !(quantity > 0)} onClick={() => void takeBack()}>
-              {busy ? "Saving…" : "Return " + amount(quantity) + " × " + part.name + " to stock"}
             </button>
           )}
         </>
