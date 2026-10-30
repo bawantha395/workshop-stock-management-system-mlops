@@ -225,7 +225,12 @@ function App() {
     owner = !!session?.roles.includes("ROLE_OWNER");
   const visibleMoves = moves.filter((movement) => {
     const query = activitySearch.trim().toLowerCase();
-    const matchesKind = activityKind === "ALL" || movement.kind === activityKind;
+    const incoming = ["OPENING", "RECEIPT", "RETURN"].includes(movement.kind);
+    const outgoing = ["ISSUE", "STOCK_OUT"].includes(movement.kind);
+    const matchesKind =
+      activityKind === "ALL" ||
+      (activityKind === "IN" && incoming) ||
+      (activityKind === "OUT" && outgoing);
     const matchesText =
       !query ||
       [movement.name, movement.sku, movement.actor, movement.receiver_name]
@@ -1688,10 +1693,8 @@ function App() {
                 Movement
                 <select value={activityKind} onChange={(event) => setActivityKind(event.target.value)}>
                   <option value="ALL">All movements</option>
-                  <option value="RECEIPT">Received</option>
-                  <option value="STOCK_OUT">Taken out</option>
-                  <option value="RETURN">Taken back</option>
-                  <option value="ISSUE">Workshop issue</option>
+                  <option value="IN">In</option>
+                  <option value="OUT">Out</option>
                 </select>
               </label>
               <button className="button secondary small" onClick={() => { setActivitySearch(""); setActivityKind("ALL"); }}>Clear filters</button>
@@ -1725,18 +1728,20 @@ function App() {
                           }
                         >
                           {m.kind === "STOCK_OUT" || m.kind === "ISSUE"
-                            ? "Taken out"
+                            ? m.kind === "ISSUE"
+                              ? "Issued to workshop"
+                              : "Given out"
                             : m.kind === "RECEIPT" || m.kind === "OPENING"
                               ? "Received"
                               : m.kind === "RETURN"
-                                ? "Taken back"
+                                ? "Returned from job"
                                 : m.kind}
                         </span>
                       </td>
                       <td>{number(m.quantity)}</td>
                       <td>
-                        <strong>{m.actor || "Email unavailable"}</strong>
-                        <small>Recorded by email</small>
+                        <strong>{m.actor || "User unavailable"}</strong>
+                        <small>{m.actor?.includes("@") ? "Recorded by email" : "Recorded by user"}</small>
                       </td>
                     </tr>
                   ))}
