@@ -85,7 +85,8 @@ def test_label_text_is_used_when_bedrock_is_unavailable(tmp_path, monkeypatch):
         assert body['source'] == 'textract' and body['fields'] == {} and body['status'] == 'PENDING'
         # The person sees clearly that AI suggestions were not available, and why.
         assert body['ai']['status'] == 'unavailable' and body['ai']['code'] == 'AI_PROVIDER_QUOTA'
-        assert body['suggestions'] == {'name': 'Toyota Oil Filter', 'brand': 'Toyota'}
+        assert body['suggestions'] == {}
+        assert body['labelSuggestions'] == {'name': 'Toyota Oil Filter', 'brand': 'Toyota'}
         # The status page still reports the real Bedrock problem.
         assert client.get('/api/vision/status').json()['bedrockAccess']['errorCode'] == 'AI_PROVIDER_QUOTA'
         metrics = client.get('/metrics', headers={'Authorization': 'Bearer ' + 'x' * 32}).text
@@ -123,7 +124,8 @@ def test_label_text_comes_first_and_the_llm_only_suggests_missing_fields(tmp_pat
         assert seen['known'] == {'brand': 'Castrol', 'grade': '10W-40'}
         assert body['source'] == 'textract' and body['fields'] == {}
         # Label text and model output are both reviewable suggestions.
-        assert body['suggestions'] == {'brand': 'Castrol', 'grade': '10W-40', 'name': 'Castrol GTX 10W-40 1L', 'category': 'Engine oil'}
+        assert body['suggestions'] == {'name': 'Castrol GTX 10W-40 1L', 'category': 'Engine oil'}
+        assert body['labelSuggestions'] == {'brand': 'Castrol', 'grade': '10W-40'}
         assert client.get('/api/vision/status').json()['bedrockAccess']['state'] == 'invocation_verified'
         assert body['ai'] == {'status': 'used'}
 
@@ -142,5 +144,5 @@ def test_label_text_still_works_when_the_daily_ai_limit_is_reached(tmp_path, mon
     with TestClient(create_app(settings)) as client:
         response = client.post('/api/vision/drafts', json={'imageId': photo_id(client)})
         assert response.status_code == 200 and response.json()['fields'] == {}
-        assert response.json()['suggestions'] == {'brand': 'Toyota'} and calls == []
+        assert response.json()['suggestions'] == {} and response.json()['labelSuggestions'] == {'brand': 'Toyota'} and calls == []
         assert response.json()['ai'] == {'status': 'limit_reached'}

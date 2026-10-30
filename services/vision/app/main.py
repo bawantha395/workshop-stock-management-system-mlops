@@ -269,11 +269,12 @@ def create_app(settings=None):
         try:image=store.image(body.imageId)
         except (ValueError,FileNotFoundError):raise HTTPException(404,'Photo not found') from None
         key='stocklane:draft:'+s.bedrock_model_id+':'+PROMPT_VERSION+':'+body.imageId
-        fields=None;source='manual';suggestions={};ai={'status':'not_configured'}
+        fields=None;source='manual';suggestions={};label_suggestions={};ai={'status':'not_configured'}
         try:
             hit=cache.get(key)
             if hit:
                 cached=json.loads(hit);fields,source=cached[0],cached[1];suggestions=cached[2] if len(cached)>2 else {}
+                label_suggestions=cached[4] if len(cached)>4 else {}
                 ai=cached[3] if len(cached)>3 else {'status':'used' if suggestions else 'not_configured'}
                 draft_events.labels('cache_hit').inc()
         except (redis.RedisError,ValueError):pass
@@ -320,13 +321,14 @@ def create_app(settings=None):
                     headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
             # OCR and model output are suggestions only. Keep the detected fields for
             # the Bedrock prompt, but never pre-populate the approval form.
+            label_suggestions = dict(fields)
             suggestions={**fields, **suggestions}
             fields={}
-            try:cache.set(key,json.dumps([fields,source,suggestions,ai]),ex=900)
+            try:cache.set(key,json.dumps([fields,source,suggestions,ai,label_suggestions]),ex=900)
             except redis.RedisError:pass
         row={'id':str(uuid.uuid4()),'image_id':body.imageId,'fields':json.dumps(fields),'source':source,'status':'PENDING','created_at':datetime.now(timezone.utc).isoformat(),'actor':actor,'product_id':None}
         with store.engine.begin() as c:c.execute(insert(store.drafts).values(**row))
-        return dict(row,fields=fields,suggestions=suggestions,ai=ai)
+        return dict(row,fields=fields,suggestions=suggestions,labelSuggestions=label_suggestions,ai=ai)
 
     @app.get('/api/vision/drafts')
     def drafts(request:Request):

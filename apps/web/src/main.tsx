@@ -177,6 +177,8 @@ function App() {
   const [counterMode, setCounterMode] = useState<CounterMode>("give");
   const [items, setItems] = useState<Item[]>([]),
     [moves, setMoves] = useState<Movement[]>([]);
+  const [activitySearch, setActivitySearch] = useState("");
+  const [activityKind, setActivityKind] = useState("ALL");
   const [session, setSession] = useState<Session | null>(null),
     [status, setStatus] = useState<any>(null),
     [loading, setLoading] = useState(false);
@@ -206,6 +208,7 @@ function App() {
   const [newItem, setNewItem] = useState(false),
     [edit, setEdit] = useState<Item | null>(null),
     [labelItem, setLabelItem] = useState<Item | null>(null);
+  const [counterKey, setCounterKey] = useState(0);
   const [archived, setArchived] = useState<Item[]>([]),
     [showArchived, setShowArchived] = useState(false),
     [query, setQuery] = useState("");
@@ -220,6 +223,18 @@ function App() {
   const task = tasks[direction],
     active = items.find((item) => item.id === selected),
     owner = !!session?.roles.includes("ROLE_OWNER");
+  const visibleMoves = moves.filter((movement) => {
+    const query = activitySearch.trim().toLowerCase();
+    const matchesKind = activityKind === "ALL" || movement.kind === activityKind;
+    const matchesText =
+      !query ||
+      [movement.name, movement.sku, movement.actor, movement.receiver_name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    return matchesKind && matchesText;
+  });
   const tell = (message: string) => setNotice(message);
   const persist = (next: Record<Direction, StockTask>) => {
     // Persist before submitting: a reload retries with the same command identity.
@@ -314,6 +329,9 @@ function App() {
     setView(next);
     setError("");
     setNotice("");
+    if (next === "counter") {
+      setCounterKey((key) => key + 1);
+    }
   };
   const chooseQR = useCallback(
     (value: string) => {
@@ -439,6 +457,7 @@ function App() {
         category: values.categories || "",
         capacity: values.quantity || "",
       },
+      labelSuggestions: {},
       source: "barcode",
       status: "PENDING",
       created_at: new Date().toISOString(),
@@ -738,8 +757,9 @@ function App() {
           </div>
         )}
         {error && (
-          <div className="stock-error" role="alert">
-            {error}
+          <div className="stock-error stock-error-toast" role="alert">
+            <strong>Something needs your attention</strong>
+            <span>{error}</span>
             {auth && !session && (
               <button
                 className="button secondary"
@@ -748,6 +768,7 @@ function App() {
                 Sign in
               </button>
             )}
+            <button className="toast-close" aria-label="Dismiss error" onClick={() => setError("")}>×</button>
           </div>
         )}
         {view === "home" && (
@@ -784,7 +805,7 @@ function App() {
                 <ArrowUpRight size={30} />
                 <span>
                   <strong>Give a part</strong>
-                  <small>Scan the part, tap who takes it</small>
+                  <small>Scan the part and confirm the quantity</small>
                 </span>
               </button>
               <button
@@ -1655,6 +1676,7 @@ function App() {
         {view === "analysis" && owner && <StockReport />}
         {view === "counter" && session && (
           <Counter
+            key={counterKey}
             items={items}
             initialMode={counterMode}
             picked={counterPick}
@@ -1675,6 +1697,23 @@ function App() {
                 </p>
               </div>
             </div>
+            <section className="activity-filters" aria-label="Activity filters">
+              <label className="stock-field">
+                Search activity
+                <input value={activitySearch} placeholder="Part, number or email" onChange={(event) => setActivitySearch(event.target.value)} />
+              </label>
+              <label className="stock-field">
+                Movement
+                <select value={activityKind} onChange={(event) => setActivityKind(event.target.value)}>
+                  <option value="ALL">All movements</option>
+                  <option value="RECEIPT">Received</option>
+                  <option value="STOCK_OUT">Taken out</option>
+                  <option value="RETURN">Taken back</option>
+                  <option value="ISSUE">Workshop issue</option>
+                </select>
+              </label>
+              <button className="button secondary small" onClick={() => { setActivitySearch(""); setActivityKind("ALL"); }}>Clear filters</button>
+            </section>
             <section className="stock-panel stock-table-wrap">
               <table className="stock-table">
                 <thead>
@@ -1687,7 +1726,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {moves.map((m) => (
+                  {visibleMoves.map((m) => (
                     <tr key={m.id}>
                       <td>{when(m.created_at)}</td>
                       <td>
@@ -1714,20 +1753,14 @@ function App() {
                       </td>
                       <td>{number(m.quantity)}</td>
                       <td>
-                        {m.receiver_name ? (
-                          <>
-                            <strong>Given to {m.receiver_name}</strong>
-                            <small>by {m.actor}</small>
-                          </>
-                        ) : (
-                          m.actor
-                        )}
+                        <strong>{m.actor || "Email unavailable"}</strong>
+                        <small>Recorded by email</small>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!moves.length && (
+              {!visibleMoves.length && (
                 <div className="stock-empty">No recorded movements yet.</div>
               )}
             </section>
@@ -1901,7 +1934,11 @@ function ProductEditor({
   const sku = useRef("ITEM-" + uid().slice(0, 8).toUpperCase());
   const command = useCommand();
   const [suggested] = useState(() =>
-    item ? {} : suggestFields(d as Partial<Record<Field, string>>, (draft?.suggestions || {}) as Partial<Record<Field, string>>, products),
+    item ? {} : suggestFields(
+      d as Partial<Record<Field, string>>,
+      { ...(draft?.suggestions || {}), ...(draft?.labelSuggestions || {}) } as Partial<Record<Field, string>>,
+      products,
+    ),
   );
   const fieldState: Record<Field, [string, (v: string) => void]> = {
     name: [name, setName], brand: [brand, setBrand], partNumber: [part, setPart], category: [category, setCategory],
@@ -1915,7 +1952,7 @@ function ProductEditor({
     const s = open.find(([f]) => f === field)?.[1];
     return s ? (
       <span className="field-suggestion">
-        Suggested: <b>{field === "unit" ? "Measured litres" : s.value}</b> · {s.why}{" "}
+        Suggested: <b>{field === "unit" ? "Measured litres" : s.value}</b> · {draft?.labelSuggestions?.[field] === s.value ? "Label suggestion" : s.why}{" "}
         <button type="button" onClick={() => fieldState[field][1](s.value)}>Use</button>
       </span>
     ) : null;
@@ -2009,7 +2046,7 @@ function ProductEditor({
         </h2>
         <p>
           {draft
-            ? "The label was analysed. Review each suggested value and choose Use; nothing is saved automatically."
+            ? "Label readings and AI suggestions are shown for review. Choose Use for each value; nothing is saved automatically."
             : "Use the visible manufacturer and part number where available."}
         </p>
         {imageId && <Photo id={imageId} />}

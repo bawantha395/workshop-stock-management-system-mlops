@@ -121,7 +121,13 @@ export function Counter({ items, initialMode = "give", picked = null, onNewItem,
         ))}
       </div>
       {done && <p className="counter-done" role="status"><Check size={20} /> {done}</p>}
-      {error && <p className="stock-error" role="alert">{error}</p>}
+      {error && (
+        <div className="stock-error stock-error-toast" role="alert">
+          <strong>Could not complete that action</strong>
+          <span>{error}</span>
+          <button className="toast-close" aria-label="Dismiss error" onClick={() => setError("")}>×</button>
+        </div>
+      )}
       {(mode === "give" || mode === "receive" || mode === "back") && (
         <>
           <div className="counter-step">
@@ -181,7 +187,7 @@ export function Counter({ items, initialMode = "give", picked = null, onNewItem,
           <Camera onQR={onQR} onBarcode={(value) => void onBarcode(value)} onPhoto={(f) => void identifyPhoto(f)} onClose={() => setCamera(false)} />
         </React.Suspense>
       )}
-      {part && <button className="counter-restart" onClick={() => reset()}><ArrowLeft size={16} /> Start again</button>}
+      {part && <button className="counter-restart" onClick={() => reset()}><ArrowLeft size={16} /> Scan another item</button>}
     </section>
   );
 }

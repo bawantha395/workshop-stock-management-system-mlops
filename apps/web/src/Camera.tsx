@@ -22,6 +22,7 @@ export function Camera({
   const picker = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
+  const [barcodeReady, setBarcodeReady] = useState(false);
   useEffect(() => {
     let disposed = false,
       stream: MediaStream | undefined,
@@ -30,6 +31,7 @@ export function Camera({
     const barcodeDetector = "BarcodeDetector" in window
       ? new (window as Window & { BarcodeDetector: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector({ formats: ["ean_8", "ean_13", "upc_a", "upc_e", "code_128"] })
       : null;
+    setBarcodeReady(!!barcodeDetector);
     const stop = () => stream?.getTracks().forEach((track) => track.stop());
     const read = () => {
       if (disposed) return;
@@ -121,6 +123,13 @@ export function Camera({
               <CameraIcon size={18} /> QR and product barcodes are detected automatically.
             </span>
           </div>
+        )}
+        {!error && (
+          <p className="camera-capability" role="status">
+            {barcodeReady
+              ? "Barcode reader ready. Point at an EAN, UPC or Code 128 barcode."
+              : "This browser does not support live barcodes. Use a QR label or take a photo."}
+          </p>
         )}
         {error && (
           <p className="stock-error" role="alert">

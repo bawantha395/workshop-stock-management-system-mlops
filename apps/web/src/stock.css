@@ -339,6 +339,20 @@ button {
   font-size: inherit;
   margin-left: auto;
 }
+.activity-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.activity-filters .stock-field {
+  margin: 0;
+  min-width: 190px;
+}
+.activity-filters .button {
+  margin-bottom: 12px;
+}
 .resume-section {
   margin-top: 28px;
 }
@@ -885,6 +899,59 @@ button {
   line-height: 1.7;
   margin: 15px 0;
   overflow-wrap: anywhere;
+}
+.stock-error-toast {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 60;
+  width: min(390px, calc(100vw - 28px));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+  align-items: start;
+  margin: 0;
+  padding: 16px 42px 16px 17px;
+  border-radius: 14px;
+  box-shadow: 0 14px 35px #512b1d2b;
+  animation: toast-in 0.2s ease-out;
+}
+.stock-error-toast strong,
+.stock-error-toast span {
+  grid-column: 1 / -1;
+}
+.stock-error-toast strong {
+  color: #854d38;
+  font-size: 13px;
+}
+.stock-error-toast span {
+  color: #9f6248;
+}
+.stock-error-toast .button {
+  grid-column: 1;
+  margin: 6px 0 0;
+  justify-self: start;
+}
+.toast-close {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  border: 0;
+  background: transparent;
+  color: #9f6248;
+  font-size: 24px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.camera-capability {
+  margin: 10px 0;
+  color: #6d806c;
+  font-size: 11px;
+  line-height: 1.5;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .stock-error .button {
   margin-left: 10px;
@@ -1528,6 +1595,40 @@ button {
   }
   .task-tiles {
     grid-template-columns: 1fr;
+  }
+  .counter-tiles {
+    grid-template-columns: 1fr;
+  }
+  .counter-tile {
+    min-height: 76px;
+    padding: 16px;
+  }
+  .counter-tile strong {
+    font-size: 15px;
+  }
+  .counter-tile small {
+    font-size: 11px;
+  }
+  .workspace-overview {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    font-size: 11px;
+  }
+  .workspace-overview button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+  .activity-filters {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .activity-filters .stock-field {
+    min-width: 0;
+  }
+  .activity-filters .button {
+    width: 100%;
+    margin: 0;
   }
   .task-tile {
     min-height: 0;
