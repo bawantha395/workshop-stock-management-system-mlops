@@ -240,6 +240,10 @@ function App() {
         .includes(query);
     return matchesKind && matchesText;
   });
+  const movementDirection = (kind: string) =>
+    ["OPENING", "RECEIPT", "RETURN"].includes(kind) ? "IN" : "OUT";
+  const actorEmail = (actor?: string) =>
+    actor?.includes("@") ? actor : "Email unavailable";
   const tell = (message: string) => setNotice(message);
   const persist = (next: Record<Direction, StockTask>) => {
     // Persist before submitting: a reload retries with the same command identity.
@@ -1705,9 +1709,10 @@ function App() {
                   <tr>
                     <th>Time</th>
                     <th>Item</th>
+                    <th>In / Out</th>
                     <th>Movement</th>
                     <th>Quantity</th>
-                    <th>Who</th>
+                    <th>Recorded by email</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1717,6 +1722,16 @@ function App() {
                       <td>
                         <strong>{m.name}</strong>
                         <small>{m.sku}</small>
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            "direction-badge " +
+                            (movementDirection(m.kind) === "OUT" ? "out" : "in")
+                          }
+                        >
+                          {movementDirection(m.kind)}
+                        </span>
                       </td>
                       <td>
                         <span
@@ -1740,8 +1755,12 @@ function App() {
                       </td>
                       <td>{number(m.quantity)}</td>
                       <td>
-                        <strong>{m.actor || "User unavailable"}</strong>
-                        <small>{m.actor?.includes("@") ? "Recorded by email" : "Recorded by user"}</small>
+                        <strong>{actorEmail(m.actor)}</strong>
+                        <small>
+                          {m.actor?.includes("@")
+                            ? "Authenticated operator"
+                            : "Email was not supplied by the identity provider"}
+                        </small>
                       </td>
                     </tr>
                   ))}
