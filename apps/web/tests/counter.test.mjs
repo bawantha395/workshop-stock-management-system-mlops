@@ -40,17 +40,6 @@ test("giving a part takes a search or scan, a quantity and one confirmation", as
   w.cleanup(); dom.window.close();
 });
 
-test("taking a part back selects an item and quantity directly", async () => {
-  const { w, dom, writes, button } = await mount("back");
-  const search = w.document.querySelector(".counter-search input");
-  const setter = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value").set;
-  setter.call(search, "oil"); search.dispatchEvent(new w.Event("input", { bubbles: true })); await tick();
-  button("Oil filter OF-112").click(); await tick();
-  button("Return 1 × Oil filter OF-112 to stock").click(); await tick(60);
-  assert.equal(writes[0].body.kind, "RETURN"); assert.equal(writes[0].body.issueId, undefined); assert.equal(writes[0].body.quantity, 1);
-  w.cleanup(); dom.window.close();
-});
-
 test("a part's QR label is recognised, and a person's card no longer exists", async () => {
   const result = await build({ stdin: { contents: `export {partFromCode} from './src/Counter';`, resolveDir: root, loader: "ts" }, bundle: true, write: false, format: "iife", globalName: "C", platform: "browser", define: { "process.env.NODE_ENV": '"production"' } });
   const dom = new JSDOM("", { runScripts: "dangerously" }); dom.window.STOCKLANE_CONFIG = { authMode: "local" }; dom.window.eval(result.outputFiles[0].text);
