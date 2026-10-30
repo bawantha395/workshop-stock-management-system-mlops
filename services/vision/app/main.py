@@ -268,7 +268,7 @@ def create_app(settings=None):
         actor=security.staff(request)
         try:image=store.image(body.imageId)
         except (ValueError,FileNotFoundError):raise HTTPException(404,'Photo not found') from None
-        key='stocklane:draft:'+s.bedrock_model_id+':'+PROMPT_VERSION+':'+body.imageId
+        key='stocklane:draft:v2:'+s.bedrock_model_id+':'+PROMPT_VERSION+':'+body.imageId
         fields=None;source='manual';suggestions={};label_suggestions={};ai={'status':'not_configured'}
         try:
             hit=cache.get(key)
@@ -322,7 +322,6 @@ def create_app(settings=None):
             # OCR and model output are suggestions only. Keep the detected fields for
             # the Bedrock prompt, but never pre-populate the approval form.
             label_suggestions = dict(fields)
-            suggestions={**fields, **suggestions}
             fields={}
             try:cache.set(key,json.dumps([fields,source,suggestions,ai,label_suggestions]),ex=900)
             except redis.RedisError:pass
