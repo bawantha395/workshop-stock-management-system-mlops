@@ -1,19 +1,19 @@
 {
   "sourceBucket": "stocklane-dev-models-721274598579",
-  "sourcePrefix": "releases/frontend/2ae91223d76b-41022307555-1",
+  "sourcePrefix": "releases/frontend/4052a9af1cc4-41028086005-1",
   "targetBucket": "stocklane-dev-web-721274598579",
   "distributionId": "E2MV33HMIT7CRW",
   "region": "ap-southeast-2",
   "accountId": "721274598579",
-  "release": "2ae91223d76b-41022307555-1",
+  "release": "4052a9af1cc4-41028086005-1",
   "files": [
     {
-      "path": "assets/Camera-vM8emtGX.js",
-      "sha256": "9560b5c761a6efa55485f9c92503de4ea2cf5a5e905edc3c4f6b40560e39afc3"
+      "path": "assets/Camera-Dox-MFqU.js",
+      "sha256": "d21652f4fbee7f821a147958447a1881fb63fedc20e4f66e02f8e4f7faeaee1e"
     },
     {
-      "path": "assets/Scanner-D7toTuOr.js",
-      "sha256": "4e168c6f0c71828e6995e9dcb7369d2fe4bbabd0f865143d472e0926db89790f"
+      "path": "assets/Scanner-CXQCK_Wk.js",
+      "sha256": "068f4fbd385bf26c9ebc51c5489b27c204c7730a4a6a000e93f777576a89bd78"
     },
     {
       "path": "assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
@@ -24,16 +24,16 @@
       "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
     },
     {
-      "path": "assets/index-Dwd5R2e2.css",
-      "sha256": "6792389359f861720f537508b06ddba649bf2aa062c17b76384f8daaef4df90c"
+      "path": "assets/index-3VZ60WQM.css",
+      "sha256": "40cd5c17e2c1baf043401aeff782259d4088be4d702e59abb8f41ac3dfd6e2de"
     },
     {
-      "path": "assets/index-xg_9GZUB.js",
-      "sha256": "a7a9d27d75a8770583840a8e4a81c48505bfc32f075e331556238a7134c9543e"
+      "path": "assets/index-c7-pd2k-.js",
+      "sha256": "28597b6fa88986c6f77f24b59e2875f8d4a914c6bb2a824c5ac48a19f8852dd6"
     },
     {
-      "path": "assets/jsQR-CqZ9Xacl.js",
-      "sha256": "51ea3104a4efa6d7918376af50e5570d202781c60095d317b05cc989f3abc4d7"
+      "path": "assets/jsQR-ThK4rTme.js",
+      "sha256": "2459be7d4e4bf145cc7ed8cdb5e30c6826a6b71f9215fa45a72ad2f7bc92bb06"
     },
     {
       "path": "assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2",
@@ -61,7 +61,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "0497ecceb762ca4acc14d21c987a61ae84abad9b2df8d6df910474584bddef0f"
+      "sha256": "22ef0455a4660e3b6ebb63afbf2d55ff4c7ffa267c253b51995960adf2ae70c5"
     }
   ]
 }
