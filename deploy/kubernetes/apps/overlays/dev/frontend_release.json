@@ -1,11 +1,11 @@
 {
   "sourceBucket": "stocklane-dev-models-721274598579",
-  "sourcePrefix": "releases/frontend/10fddf11b800-41040399119-1",
+  "sourcePrefix": "releases/frontend/c7d2c1b00173-41042988274-1",
   "targetBucket": "stocklane-dev-web-721274598579",
   "distributionId": "E2MV33HMIT7CRW",
   "region": "ap-southeast-2",
   "accountId": "721274598579",
-  "release": "10fddf11b800-41040399119-1",
+  "release": "c7d2c1b00173-41042988274-1",
   "files": [
     {
       "path": "assets/Camera-BBpUEfjj.js",
