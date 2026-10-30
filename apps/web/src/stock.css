@@ -1522,6 +1522,55 @@ button {
     padding: 12px 10px;
   }
 }
+@media (max-width: 480px) {
+  .stock-main {
+    padding: 0 12px 28px;
+  }
+  .task-tiles {
+    grid-template-columns: 1fr;
+  }
+  .task-tile {
+    min-height: 0;
+    padding: 18px;
+  }
+  .counter-screen {
+    margin: 18px 0;
+  }
+  .counter-modes {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    margin: -1px -12px 14px;
+    padding: 8px 12px;
+  }
+  .counter-modes button {
+    min-height: 48px;
+    font-size: 11px;
+  }
+  .counter-step {
+    padding: 17px 14px;
+  }
+  .counter-big.wide,
+  .counter-confirm {
+    min-height: 56px;
+  }
+  .counter-stepper input {
+    width: 90px;
+    min-height: 50px;
+  }
+  .stock-modal,
+  .scanner-dialog {
+    width: 100%;
+    max-height: 94dvh;
+    padding: 20px 15px;
+  }
+  .stock-form-actions {
+    position: sticky;
+    bottom: -20px;
+    background: #fff;
+    padding: 12px 0 2px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .task-tile {
     transition: none;

@@ -82,9 +82,10 @@ def test_label_text_is_used_when_bedrock_is_unavailable(tmp_path, monkeypatch):
         response = client.post('/api/vision/drafts', json={'imageId': photo_id(client)})
         assert response.status_code == 200
         body = response.json()
-        assert body['source'] == 'textract' and body['fields']['brand'] == 'Toyota' and body['status'] == 'PENDING'
+        assert body['source'] == 'textract' and body['fields'] == {} and body['status'] == 'PENDING'
         # The person sees clearly that AI suggestions were not available, and why.
-        assert body['ai']['status'] == 'unavailable' and body['ai']['code'] == 'AI_PROVIDER_QUOTA' and body['suggestions'] == {}
+        assert body['ai']['status'] == 'unavailable' and body['ai']['code'] == 'AI_PROVIDER_QUOTA'
+        assert body['suggestions'] == {'name': 'Toyota Oil Filter', 'brand': 'Toyota'}
         # The status page still reports the real Bedrock problem.
         assert client.get('/api/vision/status').json()['bedrockAccess']['errorCode'] == 'AI_PROVIDER_QUOTA'
         metrics = client.get('/metrics', headers={'Authorization': 'Bearer ' + 'x' * 32}).text
@@ -120,9 +121,9 @@ def test_label_text_comes_first_and_the_llm_only_suggests_missing_fields(tmp_pat
     with make_client(tmp_path, monkeypatch, True) as client:
         body = client.post('/api/vision/drafts', json={'imageId': photo_id(client)}).json()
         assert seen['known'] == {'brand': 'Castrol', 'grade': '10W-40'}
-        assert body['source'] == 'textract' and body['fields'] == {'brand': 'Castrol', 'grade': '10W-40'}
-        # Label text is never overwritten; the LLM only fills the gaps, as suggestions.
-        assert body['suggestions'] == {'name': 'Castrol GTX 10W-40 1L', 'category': 'Engine oil'}
+        assert body['source'] == 'textract' and body['fields'] == {}
+        # Label text and model output are both reviewable suggestions.
+        assert body['suggestions'] == {'brand': 'Castrol', 'grade': '10W-40', 'name': 'Castrol GTX 10W-40 1L', 'category': 'Engine oil'}
         assert client.get('/api/vision/status').json()['bedrockAccess']['state'] == 'invocation_verified'
         assert body['ai'] == {'status': 'used'}
 
@@ -140,6 +141,6 @@ def test_label_text_still_works_when_the_daily_ai_limit_is_reached(tmp_path, mon
         bedrock_daily_request_limit=0)
     with TestClient(create_app(settings)) as client:
         response = client.post('/api/vision/drafts', json={'imageId': photo_id(client)})
-        assert response.status_code == 200 and response.json()['fields'] == {'brand': 'Toyota'}
-        assert response.json()['suggestions'] == {} and calls == []
+        assert response.status_code == 200 and response.json()['fields'] == {}
+        assert response.json()['suggestions'] == {'brand': 'Toyota'} and calls == []
         assert response.json()['ai'] == {'status': 'limit_reached'}

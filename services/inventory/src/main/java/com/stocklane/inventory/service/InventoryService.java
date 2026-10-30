@@ -30,6 +30,7 @@ public class InventoryService {
  public List<Map<String,Object>> jobMovements(String jobId){return movementRepository.findByJob(jobId);}
  public Map<String,Object> product(String id,boolean lock){return productRepository.findById(id,lock).orElseThrow(()->new NotFoundException("Product not found"));}
  public Map<String,Object> create(String key,ProductInput p){
+     if(p.partNumber()==null||p.partNumber().isBlank())throw new IllegalArgumentException("Manufacturer part number is required");
   return commands.execute(key,"create-product",p,()->{
    required(p.sku(),"SKU");required(p.name(),"Name");required(p.category(),"Category");required(p.brand(),"Brand");
    if(p.unit()==null||!Set.of("UNIT","LITRE").contains(p.unit()))throw new IllegalArgumentException("Unit must be UNIT or LITRE");
@@ -58,12 +59,15 @@ public class InventoryService {
   if("UNIT".equals(product.get("unit"))&&m.quantity().stripTrailingZeros().scale()>0)throw new IllegalArgumentException("Sealed units require a whole number");
   BigDecimal price=(BigDecimal)product.get("selling_price");
   if("RETURN".equals(m.kind())){
+   if(counterReturn&&m.issueId()==null){price=BigDecimal.ZERO;}
+   else {
    var issues=counterReturn?movementRepository.findHandover(m.issueId(),m.productId()):movementRepository.findIssue(m.issueId(),m.jobId(),m.productId());
    if(issues.isEmpty())throw new ConflictException(counterReturn?"Select the part this person received":"Select the original issue for this return");
    if(counterReturn)receiver=Objects.toString(issues.get().get("receiver_id"),null);
    var issue=issues.get();BigDecimal returned=movementRepository.returnedQuantity(m.issueId());
    if(m.quantity().add(returned).compareTo((BigDecimal)issue.get("quantity"))>0)throw new ConflictException("Return exceeds the outstanding issued quantity");
    price=(BigDecimal)issue.get("unit_price");
+   }
   }
   BigDecimal delta=Set.of("ISSUE","STOCK_OUT").contains(m.kind())?m.quantity().negate():m.quantity();
   BigDecimal balance=((BigDecimal)product.get("quantity")).add(delta);
@@ -100,6 +104,7 @@ public class InventoryService {
  public List<Map<String,Object>> archivedProducts(){return productRepository.findArchived();}
  public Map<String,Object> edit(String key,String id,ProductEdit p){return commands.execute(key,"edit-product:"+id,p,()->{
   product(id,true);required(p.name(),"Name");required(p.category(),"Category");required(p.brand(),"Manufacturer");positiveOrZero(p.reorderLevel());
+  if(p.partNumber()==null||p.partNumber().isBlank())throw new IllegalArgumentException("Manufacturer part number is required");
   if(p.name().length()>180||p.brand().length()>100||p.category().length()>80||Objects.toString(p.grade(),"").length()>80||Objects.toString(p.capacity(),"").length()>60||Objects.toString(p.partNumber(),"").length()>180||Objects.toString(p.location(),"").length()>180)throw new IllegalArgumentException("One or more catalogue fields are too long");
   productRepository.updateCatalogue(id,p.name().trim(),p.category().trim(),p.brand().trim(),p.brand().trim().toUpperCase(Locale.ROOT),Objects.toString(p.grade(),""),Objects.toString(p.capacity(),""),part(p.partNumber()),Objects.toString(p.location(),""),p.reorderLevel());
   audit(id,"EDIT",p);Map<String,Object> result=product(id,false);event("CATALOGUE_APPROVED",result);return result;

@@ -24,30 +24,30 @@ async function mount(mode, extra = "") {
   return { w, dom, writes, button };
 }
 
-test("giving a part takes a search or scan, a quantity and one tap on a name", async () => {
+test("giving a part takes a search or scan, a quantity and one confirmation", async () => {
   const { w, dom, writes, button } = await mount("give");
   const search = w.document.querySelector(".counter-search input");
   const setter = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value").set;
   setter.call(search, "oil"); search.dispatchEvent(new w.Event("input", { bubbles: true })); await tick();
   button("Oil filter OF-112").click(); await tick();
   w.document.querySelector('[aria-label="One more"]').click(); await tick();
-  button("Nimal").click(); await tick();
-  const confirm = button("Give 2 × Oil filter OF-112 to Nimal");
+  const confirm = button("Record 2 × Oil filter OF-112 leaving stock");
   assert.ok(confirm); confirm.click(); await tick(60);
   assert.equal(writes.length, 1);
-  assert.deepEqual({ ...writes[0].body, note: undefined }, { kind: "STOCK_OUT", productId: PART, quantity: 2, receiverId: P, note: undefined });
+  assert.deepEqual(writes[0].body, { kind: "STOCK_OUT", productId: PART, quantity: 2, note: "Issued at the storeroom counter" });
   assert.ok(writes[0].key);
-  assert.match(w.document.body.textContent, /Recorded: 2 × Oil filter OF-112 given to Nimal/);
+  assert.match(w.document.body.textContent, /Recorded: 2 × Oil filter OF-112 taken out/);
   w.cleanup(); dom.window.close();
 });
 
-test("taking a part back lists what the person still has out", async () => {
+test("taking a part back selects an item and quantity directly", async () => {
   const { w, dom, writes, button } = await mount("back");
-  button("Nimal").click(); await tick(60);
-  assert.match(w.document.body.textContent, /2 still out/);
+  const search = w.document.querySelector(".counter-search input");
+  const setter = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value").set;
+  setter.call(search, "oil"); search.dispatchEvent(new w.Event("input", { bubbles: true })); await tick();
   button("Oil filter OF-112").click(); await tick();
-  button("Take back 1 × Oil filter OF-112").click(); await tick(60);
-  assert.equal(writes[0].body.kind, "RETURN"); assert.equal(writes[0].body.issueId, "h1"); assert.equal(writes[0].body.quantity, 1);
+  button("Return 1 × Oil filter OF-112 to stock").click(); await tick(60);
+  assert.equal(writes[0].body.kind, "RETURN"); assert.equal(writes[0].body.issueId, undefined); assert.equal(writes[0].body.quantity, 1);
   w.cleanup(); dom.window.close();
 });
 
@@ -60,14 +60,13 @@ test("a part's QR label is recognised, and a person's card no longer exists", as
   dom.window.close();
 });
 
-test("used up or damaged parts go out without naming a person", async () => {
+test("stock-outs do not require naming a person", async () => {
   const { w, dom, writes, button } = await mount("give");
   const search = w.document.querySelector(".counter-search input");
   const setter = Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, "value").set;
   setter.call(search, "oil"); search.dispatchEvent(new w.Event("input", { bubbles: true })); await tick();
   button("Oil filter OF-112").click(); await tick();
-  button("Used up / damaged").click(); await tick();
-  button("Give 1 × Oil filter OF-112 (used up / damaged)").click(); await tick(60);
+  button("Record 1 × Oil filter OF-112 leaving stock").click(); await tick(60);
   assert.equal(writes[0].body.kind, "STOCK_OUT"); assert.equal(writes[0].body.receiverId, undefined);
   assert.equal(button("Print card"), undefined); assert.equal(button("Scan card"), undefined);
   w.cleanup(); dom.window.close();

@@ -23,12 +23,16 @@ A task opens a live rear-camera QR scanner. Video is decoded on the device
 with jsQR and is not uploaded. It stops on the first decoded QR and releases
 camera tracks when closed. A scan selects an item; it never increments a
 quantity or posts stock automatically. Each deliberate scan requires its own
-quantity confirmation before adding a line.
+quantity confirmation before adding a line. Original product barcodes are also
+decoded when supported by the phone; a catalogue match is selected directly,
+otherwise external metadata is shown as a reviewable suggestion.
 
 HTTPS, camera permission and a compatible phone/browser are required. A QR
 photo upload and keyboard scanner/pasted QR input remain available. The optional
-photo-identification route uses the existing vision API. Bedrock suggestions
-appear only when the server reports that they are configured.
+photo-identification route uses the existing vision API. OCR, Bedrock and external
+barcode results are suggestions only: every field must be reviewed and manually
+accepted before registration. The actual manufacturer part number is required;
+the generated Stocklane system number is shown separately.
 
 ## Register without losing your receipt
 
@@ -99,7 +103,9 @@ One screen with three big tabs: **Receive**, **Give a part** and **Take back**. 
 
 - **One camera.** **Open camera** starts the live camera. A Stocklane QR label in view is read by itself; otherwise the big **Take photo** button takes a photo, and the app suggests the part from it. There is no file upload (a device photo picker appears only if the camera can't start).
 - **Receive.** Pick the part, set the quantity, tap **Add to stock**. A photo that matches nothing offers **Add as a new item**: the label is read, suggestions fill the gaps, and the new item's **QR label** opens straight after saving, ready to print.
-- **Give a part.** Pick the part, the quantity, then tap a name. **Used up / damaged** records a stock-out without a person. The stock-out records who received it, who gave it and when.
+- **Give a part.** Pick the part and quantity, then confirm the stock-out. Recipient
+  management is not part of the simple counter flow; the ledger records who performed
+  the movement and when.
 - **Take back.** Tap the name. The app lists what that person still has out from the last 30 days.
 - **People.** The owner types the names once. No cards to print.
 - **Self-learning.** A part identified or received by photo saves that photo as a reference, and it's included in the next weekly photo-model training.

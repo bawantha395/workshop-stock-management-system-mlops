@@ -7,6 +7,7 @@ import json
 import logging
 import threading
 import uuid
+from urllib.parse import quote
 from pathlib import Path
 import boto3
 import httpx
@@ -180,6 +181,32 @@ def create_app(settings=None):
         except (ValueError,OSError):raise HTTPException(422,'Use a clear photo with a valid Stocklane QR') from None
         return {'value':value}
 
+    @app.get('/api/vision/barcodes/{barcode}')
+    def barcode_lookup(barcode: str, request: Request):
+        """Return external barcode metadata as an optional, manually reviewed suggestion."""
+        security.staff(request)
+        value = barcode.strip()
+        if not value.isdigit() or not 8 <= len(value) <= 14:
+            raise HTTPException(422, 'Enter a valid product barcode')
+        try:
+            response = httpx.get(
+                'https://world.openfoodfacts.org/api/v2/product/' + quote(value) + '.json',
+                headers={'User-Agent': 'Stocklane/0.1 (barcode lookup)'},
+                timeout=5,
+                trust_env=False,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(503, 'External barcode information is unavailable; enter the item manually.') from None
+        product = payload.get('product') if payload.get('status') == 1 else None
+        if not product:
+            return {'barcode': value, 'found': False, 'suggestions': {}}
+        return {'barcode': value, 'found': True, 'suggestions': {
+            key: product[key] for key in ('product_name', 'brands', 'categories', 'quantity')
+            if product.get(key)
+        }}
+
     @app.post('/api/vision/match')
     async def match(request:Request,file:UploadFile=File(...)):
         security.staff(request)
@@ -291,6 +318,10 @@ def create_app(settings=None):
                 return JSONResponse(status_code=problem.status,
                     content={'detail':problem.message,'code':problem.code,'retryable':problem.retryable},
                     headers={'Retry-After':str(problem.retry_after)} if problem.retry_after else {})
+            # OCR and model output are suggestions only. Keep the detected fields for
+            # the Bedrock prompt, but never pre-populate the approval form.
+            suggestions={**fields, **suggestions}
+            fields={}
             try:cache.set(key,json.dumps([fields,source,suggestions,ai]),ex=900)
             except redis.RedisError:pass
         row={'id':str(uuid.uuid4()),'image_id':body.imageId,'fields':json.dumps(fields),'source':source,'status':'PENDING','created_at':datetime.now(timezone.utc).isoformat(),'actor':actor,'product_id':None}

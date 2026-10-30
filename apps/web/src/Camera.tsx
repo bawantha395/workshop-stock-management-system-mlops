@@ -9,10 +9,12 @@ import { Camera as CameraIcon, X } from "lucide-react";
  */
 export function Camera({
   onQR,
+  onBarcode,
   onPhoto,
   onClose,
 }: {
   onQR: (value: string) => void;
+  onBarcode?: (value: string) => void;
   onPhoto: (file: File) => void;
   onClose: () => void;
 }) {
@@ -25,6 +27,9 @@ export function Camera({
       stream: MediaStream | undefined,
       timer: ReturnType<typeof setTimeout>;
     const canvas = document.createElement("canvas");
+    const barcodeDetector = "BarcodeDetector" in window
+      ? new (window as Window & { BarcodeDetector: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector({ formats: ["ean_8", "ean_13", "upc_a", "upc_e", "code_128"] })
+      : null;
     const stop = () => stream?.getTracks().forEach((track) => track.stop());
     const read = () => {
       if (disposed) return;
@@ -43,6 +48,16 @@ export function Camera({
             onQR(code.data);
             return;
           }
+        }
+        if (barcodeDetector && onBarcode) {
+          void barcodeDetector.detect(v).then((codes) => {
+            const value = codes[0]?.rawValue;
+            if (value && !disposed) {
+              disposed = true;
+              stop();
+              onBarcode(value);
+            }
+          }).catch(() => {});
         }
       }
       timer = setTimeout(read, 200);
@@ -68,7 +83,7 @@ export function Camera({
       clearTimeout(timer);
       stop();
     };
-  }, [onQR]);
+  }, [onQR, onBarcode]);
   const shoot = () => {
     const v = video.current;
     if (!v || !v.videoWidth) return;
@@ -92,7 +107,7 @@ export function Camera({
         <div className="section-heading">
           <div>
             <p className="eyebrow">CAMERA</p>
-            <h2 id="camera-title">Show the part or its QR label</h2>
+            <h2 id="camera-title">Scan a QR or product barcode</h2>
           </div>
           <button className="icon-button" aria-label="Close camera" onClick={onClose}>
             <X />
@@ -103,7 +118,7 @@ export function Camera({
             <video ref={video} muted playsInline />
             <div className="scan-frame" />
             <span>
-              <CameraIcon size={18} /> A QR label is read by itself. Otherwise press the button.
+              <CameraIcon size={18} /> QR and product barcodes are detected automatically.
             </span>
           </div>
         )}

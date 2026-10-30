@@ -25,6 +25,7 @@ export type Movement={id:string;product_id:string;sku:string;name:string;unit:st
 export type Draft={id:string;image_id:string;fields:Record<string,string>;suggestions?:Record<string,string>;ai?:{status:string;code?:string;message?:string};source:string;status:string;created_at:string;product_id:string|null;captureId?:string};
 export type Invoice={id:string;job_id:string;invoice_number:string;labour:number;total:number;created_at:string};
 export type Match={identifiedProductId?:string;qrValue?:string;imageId:string;state:string;modelVersion:string;candidates:{product:Product;imageId:string;similarity:number;sameSkuEstimate?:number|null}[];message:string};
+export type BarcodeLookup={barcode:string;found:boolean;suggestions:Record<string,string>};
 export function csv(name:string,rows:Record<string,unknown>[]){if(!rows.length)return;const keys=Object.keys(rows[0]);const escape=(x:unknown)=>'"'+String(x??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const blob=new Blob([[keys.map(escape).join(','),...rows.map(r=>keys.map(k=>escape(r[k])).join(','))].join('\r\n')],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
 
 

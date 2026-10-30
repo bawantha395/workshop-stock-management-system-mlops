@@ -426,6 +426,27 @@ function App() {
     setImageId(id);
     void readLabel(id);
   };
+  const newItemFromBarcode = (barcode: string, values: Record<string, string>) => {
+    fromCounter.current = true;
+    setImageId("");
+    setDraft({
+      id: "barcode-" + barcode,
+      image_id: "",
+      fields: {},
+      suggestions: {
+        name: values.product_name || "",
+        brand: values.brands || "",
+        category: values.categories || "",
+        capacity: values.quantity || "",
+      },
+      source: "barcode",
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+      product_id: null,
+    });
+    setAiNote("Barcode information is a suggestion only. Review and manually accept each field.");
+    setNewItem(true);
+  };
   const addLine = () => {
     if (!active || !validQuantity(quantity, active.unit)) {
       setError(
@@ -626,7 +647,7 @@ function App() {
         <span>
           <strong>{p.name}</strong>
           <small>
-            {p.brand} · {p.part_number || p.sku}
+            {p.brand} · Part no. {p.part_number || "Not set"} · System no. {p.sku}
           </small>
           <small>{p.location || "Shelf not set"}</small>
         </span>
@@ -996,7 +1017,7 @@ function App() {
                               <span>
                                 <strong>{p.name}</strong>
                                 <small>
-                                  {p.brand} · {p.part_number || p.sku}
+                                  {p.brand} · Part no. {p.part_number || "Not set"} · System no. {p.sku}
                                 </small>
                               </span>
                               <ArrowRight size={18} />
@@ -1068,7 +1089,8 @@ function App() {
                         <h2>{active.name}</h2>
                         <p>
                           {active.brand} ·{" "}
-                          <strong>{active.part_number || active.sku}</strong>
+                          <strong>Part no. {active.part_number || "Not set"}</strong>
+                          <small>System no. {active.sku}</small>
                         </p>
                         <p>
                           {active.grade} {active.capacity}
@@ -1437,7 +1459,7 @@ function App() {
                     <div className="catalogue-description">
                       <strong>{p.name}</strong>
                       <small>
-                        {p.brand} · {p.part_number || p.sku}
+                        {p.brand} · Part no. {p.part_number || "Not set"} · System no. {p.sku}
                       </small>
                       <span>
                         {p.category} · {p.location || "Shelf not set"}
@@ -1548,7 +1570,7 @@ function App() {
                         <ItemPhoto item={p} />
                         <span>
                           <strong>{p.name}</strong>
-                          <small>{p.part_number || p.sku}</small>
+                          <small>Part no. {p.part_number || "Not set"} · System no. {p.sku}</small>
                         </span>
                       </button>
                     ))}
@@ -1634,10 +1656,10 @@ function App() {
         {view === "counter" && session && (
           <Counter
             items={items}
-            owner={owner}
             initialMode={counterMode}
             picked={counterPick}
             onNewItem={newItemFromCounter}
+            onBarcodeSuggestion={newItemFromBarcode}
             onChanged={() => void refresh()}
           />
         )}
@@ -1817,7 +1839,7 @@ function LabelDialog({ item, onClose }: { item: Item; onClose: () => void }) {
         )}
         <h3>{item.name}</h3>
         <p>
-          {item.brand} · {item.part_number || item.sku}
+          {item.brand} · Part no. {item.part_number || "Not set"} · System no. {item.sku}
           <br />
           {item.location}
         </p>
@@ -1864,12 +1886,12 @@ function ProductEditor({
   onSaved: (p: Item | null, message: string) => void;
 }) {
   const d = draft?.fields || {};
-  const [name, setName] = useState(item?.name || d.name || ""),
-    [brand, setBrand] = useState(item?.brand || d.brand || ""),
-    [part, setPart] = useState(item?.part_number || d.partNumber || ""),
-    [category, setCategory] = useState(item?.category || d.category || ""),
-    [spec, setSpec] = useState(item?.grade || d.grade || ""),
-    [size, setSize] = useState(item?.capacity || d.capacity || ""),
+  const [name, setName] = useState(item?.name || ""),
+    [brand, setBrand] = useState(item?.brand || ""),
+    [part, setPart] = useState(item?.part_number || ""),
+    [category, setCategory] = useState(item?.category || ""),
+    [spec, setSpec] = useState(item?.grade || ""),
+    [size, setSize] = useState(item?.capacity || ""),
     [location, setLocation] = useState(item?.location || ""),
     [quantity, setQuantity] = useState(0),
     [unit, setUnit] = useState(item?.unit || "UNIT"),
@@ -1948,7 +1970,7 @@ function ProductEditor({
         : inTask
           ? "Item registered with zero stock. Add its quantity to your receipt."
           : "Item registered. Print its QR label to start scanning.";
-      if (!item && draft) {
+      if (!item && draft && draft.source !== "barcode") {
         try {
           await api("/api/vision/drafts/" + draft.id, {
             method: "PATCH",
@@ -1987,7 +2009,7 @@ function ProductEditor({
         </h2>
         <p>
           {draft
-            ? "Details read from the label are filled in. Suggestions for the rest are shown under each field."
+            ? "The label was analysed. Review each suggested value and choose Use; nothing is saved automatically."
             : "Use the visible manufacturer and part number where available."}
         </p>
         {imageId && <Photo id={imageId} />}
@@ -2022,7 +2044,7 @@ function ProductEditor({
               [
                 ["Item name", name, setName, true, "name"],
                 ["Manufacturer / brand", brand, setBrand, true, "brand"],
-                ["Manufacturer part number", part, setPart, false, "partNumber"],
+                ["Actual manufacturer part number", part, setPart, true, "partNumber"],
                 ["Category", category, setCategory, true, "category"],
                 ["Shelf / location", location, setLocation, false, "location"],
               ] as const
