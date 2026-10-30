@@ -7,4 +7,4 @@ resources:
 images:
 - name: stocklane/operations
   newName: 721274598579.dkr.ecr.ap-southeast-2.amazonaws.com/stocklane-dev/operations
-  digest: sha256:0e1b6999ff9965a9a637f3cc1c3a4b7865e4b01ead5fef24e68068147f72cc23
+  digest: sha256:6e1f4e3a175a709172e6ee6246c50858c35d9a086d7c0caca470f9cbdd5ced0e
