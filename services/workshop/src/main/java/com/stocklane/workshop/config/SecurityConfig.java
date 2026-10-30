@@ -75,10 +75,9 @@ public class SecurityConfig {
       ?OAuth2TokenValidatorResult.success():OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token","Invalid token use or client",null));
     decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(issuer),claims));
     JwtAuthenticationConverter converter=new JwtAuthenticationConverter();
-    // Store a human-readable actor in the movement audit trail when Cognito
-    // provides the user's verified email. The JWT subject remains the stable
-    // identity used by Cognito, but should not be shown to operators.
-    converter.setPrincipalClaimName("email");
+    // Cognito access tokens reliably provide username; email may only be
+    // present in the ID token, so do not select it as the principal claim.
+    converter.setPrincipalClaimName("username");
     converter.setJwtGrantedAuthoritiesConverter(jwt->{
       List<org.springframework.security.core.GrantedAuthority> a=new ArrayList<>(new JwtGrantedAuthoritiesConverter().convert(jwt));
       List<String> groups=jwt.getClaimAsStringList("cognito:groups");
